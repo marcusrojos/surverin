@@ -22,46 +22,19 @@ export default function Setup() {
     setLoading(true);
 
     try {
-      // Check if admin already exists
-      const { data: existingRoles } = await supabase
-        .from('user_roles')
-        .select('id')
-        .eq('role', 'admin')
-        .limit(1);
-
-      if (existingRoles && existingRoles.length > 0) {
-        toast.error('Un administrateur existe déjà');
-        navigate('/login');
-        return;
-      }
-
-      // Create admin user
-      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-        email: email.trim(),
-        password: password.trim(),
+      const { data, error } = await supabase.functions.invoke('setup-admin', {
+        body: {
+          email: email.trim(),
+          password: password.trim(),
+          fullName: fullName.trim(),
+        },
       });
 
-      if (signUpError || !signUpData.user) {
-        toast.error(signUpError?.message || 'Erreur lors de la création');
+      if (error || data?.error) {
+        toast.error(data?.error || error?.message || 'Erreur lors de la création');
         setLoading(false);
         return;
       }
-
-      const userId = signUpData.user.id;
-
-      // Create profile
-      await supabase.from('profiles').insert({
-        user_id: userId,
-        email: email.trim(),
-        full_name: fullName.trim(),
-        plain_password: password.trim(),
-      });
-
-      // Create admin role
-      await supabase.from('user_roles').insert({
-        user_id: userId,
-        role: 'admin',
-      });
 
       toast.success('Compte administrateur créé avec succès !');
       navigate('/login');

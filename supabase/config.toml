@@ -8,3 +8,6 @@ verify_jwt = false
 
 [functions.update-password]
 verify_jwt = false
+
+[functions.setup-admin]
+verify_jwt = false
