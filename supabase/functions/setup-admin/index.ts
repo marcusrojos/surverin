@@ -38,21 +38,38 @@ Deno.serve(async (req) => {
       )
     }
 
-    // Create auth user with email auto-confirmed
+    let userId: string
+
+    // Try to create auth user with email auto-confirmed
     const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
       email,
       password,
       email_confirm: true,
     })
 
-    if (createError || !newUser.user) {
-      return new Response(
-        JSON.stringify({ error: createError?.message || 'Erreur création utilisateur' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
+    if (createError) {
+      // If user already exists, find them and update password
+      if (createError.message?.includes('already been registered')) {
+        const { data: { users } } = await supabaseAdmin.auth.admin.listUsers()
+        const existing = users?.find(u => u.email === email)
+        if (!existing) {
+          return new Response(
+            JSON.stringify({ error: 'Utilisateur introuvable' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
+        userId = existing.id
+        // Update password and confirm email
+        await supabaseAdmin.auth.admin.updateUserById(userId, { password, email_confirm: true })
+      } else {
+        return new Response(
+          JSON.stringify({ error: createError.message }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+    } else {
+      userId = newUser.user!.id
     }
-
-    const userId = newUser.user.id
 
     // Create profile
     await supabaseAdmin.from('profiles').insert({
