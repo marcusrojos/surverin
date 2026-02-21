@@ -1,208 +1,528 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { supabase } from '@/integrations/supabase/client';
-import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
+import { Plus, Pencil, Trash2, Search, Users, Loader2, Shield, Truck, Eye, EyeOff } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { Plus, Search, Trash2, Key, Loader2 } from 'lucide-react';
+import { z } from 'zod';
 
-interface UserProfile {
+interface UserWithRole {
+  id: string;
   user_id: string;
   full_name: string;
   email: string;
   username: string | null;
-  role: string;
+  role: 'admin' | 'livreur' | 'pharmacie';
+  created_at: string;
 }
 
-export default function AdminUsers() {
-  const [users, setUsers] = useState<UserProfile[]>([]);
-  const [pharmacies, setPharmacies] = useState<{ id: string; name: string }[]>([]);
+const userSchema = z.object({
+  full_name: z.string().min(2, 'Le nom doit contenir au moins 2 caractères'),
+  email: z.string().email('Email invalide'),
+  password: z.string().min(6, 'Le mot de passe doit contenir au moins 6 caractères'),
+  role: z.enum(['admin', 'livreur']),
+  username: z.string().optional(),
+});
+
+export default function UsersPage() {
+  const [users, setUsers] = useState<UserWithRole[]>([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
-  const [createOpen, setCreateOpen] = useState(false);
-  const [passwordOpen, setPasswordOpen] = useState(false);
-  const [selectedUserId, setSelectedUserId] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<UserWithRole | null>(null);
+  const [formData, setFormData] = useState({
+    full_name: '',
+    email: '',
+    password: '',
+    role: 'livreur' as 'admin' | 'livreur',
+    username: '',
+  });
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [isSaving, setIsSaving] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [newPassword, setNewPassword] = useState('');
-  const [saving, setSaving] = useState(false);
 
-  const [form, setForm] = useState({ fullName: '', email: '', password: '', username: '', role: 'livreur' as string, pharmacyId: '' });
-
-  const fetchData = useCallback(async () => {
-    const [profilesRes, rolesRes, pharRes] = await Promise.all([
-      supabase.from('profiles').select('user_id, full_name, email, username'),
-      supabase.from('user_roles').select('user_id, role'),
-      supabase.from('pharmacies').select('id, name').order('name'),
-    ]);
-
-    const roleMap = new Map((rolesRes.data || []).map(r => [r.user_id, r.role]));
-    setUsers((profilesRes.data || []).map(p => ({
-      ...p,
-      role: roleMap.get(p.user_id) || 'unknown',
-    })));
-    setPharmacies(pharRes.data || []);
-    setLoading(false);
+  useEffect(() => {
+    fetchUsers();
   }, []);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  const fetchUsers = async () => {
+    try {
+      const { data: profiles, error: profilesError } = await supabase
+        .from('profiles')
+        .select('*')
+        .order('full_name');
 
-  const handleCreate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!form.fullName.trim() || !form.email.trim() || !form.password.trim()) return;
-    setSaving(true);
+      if (profilesError) throw profilesError;
+
+      const { data: roles, error: rolesError } = await supabase
+        .from('user_roles')
+        .select('*');
+
+      if (rolesError) throw rolesError;
+
+      const usersWithRoles: UserWithRole[] = (profiles || [])
+        .map((profile) => {
+          const userRole = roles?.find((r) => r.user_id === profile.user_id);
+          return {
+            id: profile.id,
+            user_id: profile.user_id,
+            full_name: profile.full_name,
+            email: profile.email,
+            username: profile.username || null,
+            role: (userRole?.role as 'admin' | 'livreur' | 'pharmacie') || 'livreur',
+            created_at: profile.created_at,
+          };
+        })
+        // Filter out pharmacy users - they are managed in the Pharmacies page
+        .filter(u => u.role !== 'pharmacie');
+
+      setUsers(usersWithRoles);
+    } catch (error) {
+      toast.error('Erreur lors du chargement des utilisateurs');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleOpenDialog = (user?: UserWithRole) => {
+    setErrors({});
+    setNewPassword('');
+    setShowPassword(false);
+    if (user) {
+      setSelectedUser(user);
+      setFormData({
+        full_name: user.full_name,
+        email: user.email,
+        password: '',
+        role: user.role as 'admin' | 'livreur',
+        username: user.username || '',
+      });
+    } else {
+      setSelectedUser(null);
+      setFormData({ full_name: '', email: '', password: '', role: 'livreur', username: '' });
+    }
+    setIsDialogOpen(true);
+  };
+
+  const handleSave = async () => {
+    setErrors({});
+
+    const validation = selectedUser
+      ? userSchema.omit({ password: true }).safeParse(formData)
+      : userSchema.safeParse(formData);
+
+    if (!validation.success) {
+      const fieldErrors: Record<string, string> = {};
+      validation.error.errors.forEach((err) => {
+        fieldErrors[err.path[0] as string] = err.message;
+      });
+      setErrors(fieldErrors);
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      if (selectedUser) {
+        const updateData: any = {
+          full_name: formData.full_name.trim(),
+          email: formData.email.trim(),
+          username: formData.username.trim() || null,
+        };
+
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .update(updateData)
+          .eq('id', selectedUser.id);
+
+        if (profileError) throw profileError;
+
+        const { error: roleError } = await supabase
+          .from('user_roles')
+          .update({ role: formData.role })
+          .eq('user_id', selectedUser.user_id);
+
+        if (roleError) throw roleError;
+
+        // Update password if provided
+        if (newPassword) {
+          if (newPassword.length < 6) {
+            toast.error('Le mot de passe doit contenir au moins 6 caractères');
+            setIsSaving(false);
+            return;
+          }
+          const { data: pwData, error: pwError } = await supabase.functions.invoke('update-password', {
+            body: { user_id: selectedUser.user_id, password: newPassword },
+          });
+          if (pwError || pwData?.error) {
+            toast.error(pwData?.error || 'Erreur lors de la mise à jour du mot de passe');
+            setIsSaving(false);
+            return;
+          }
+        }
+
+        toast.success('Utilisateur modifié avec succès');
+      } else {
+        const response = await supabase.functions.invoke('create-user', {
+          body: {
+            email: formData.email.trim(),
+            password: formData.password,
+            full_name: formData.full_name.trim(),
+            role: formData.role,
+            username: formData.username.trim() || undefined,
+          },
+        });
+
+        if (response.error) {
+          throw new Error(response.error.message || 'Erreur lors de la création');
+        }
+
+        if (response.data?.error) {
+          throw new Error(response.data.error);
+        }
+
+        toast.success('Utilisateur créé avec succès');
+      }
+
+      setIsDialogOpen(false);
+      fetchUsers();
+    } catch (error: any) {
+      console.error('Save error:', error);
+      if (error.message?.includes('already registered') || error.message?.includes('already been registered')) {
+        toast.error('Cet email est déjà utilisé');
+      } else {
+        toast.error(error.message || "Erreur lors de l'enregistrement");
+      }
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!selectedUser) return;
 
     try {
-      const { data, error } = await supabase.functions.invoke('create-user', {
-        body: {
-          email: form.email.trim(),
-          password: form.password.trim(),
-          fullName: form.fullName.trim(),
-          username: form.username.trim() || null,
-          role: form.role,
-          pharmacyId: form.role === 'pharmacie' ? form.pharmacyId : null,
-        },
+      const { data, error } = await supabase.functions.invoke('delete-user', {
+        body: { user_id: selectedUser.user_id },
       });
 
-      if (error || data?.error) {
-        toast.error(data?.error || 'Erreur lors de la création');
-      } else {
-        toast.success('Utilisateur créé');
-        setCreateOpen(false);
-        setForm({ fullName: '', email: '', password: '', username: '', role: 'livreur', pharmacyId: '' });
-        fetchData();
-      }
-    } catch {
-      toast.error('Erreur réseau');
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      
+      toast.success('Utilisateur supprimé');
+      setIsDeleteDialogOpen(false);
+      fetchUsers();
+    } catch (error: any) {
+      toast.error(error?.message || 'Erreur lors de la suppression');
     }
-    setSaving(false);
   };
 
-  const handleDelete = async (userId: string) => {
-    if (!confirm('Supprimer cet utilisateur ?')) return;
-    const { data, error } = await supabase.functions.invoke('delete-user', { body: { userId } });
-    if (error || data?.error) toast.error(data?.error || 'Erreur');
-    else { toast.success('Supprimé'); fetchData(); }
-  };
-
-  const handlePasswordUpdate = async () => {
-    if (!newPassword.trim()) return;
-    setSaving(true);
-    const { data, error } = await supabase.functions.invoke('update-password', {
-      body: { userId: selectedUserId, newPassword: newPassword.trim() },
-    });
-    if (error || data?.error) toast.error(data?.error || 'Erreur');
-    else { toast.success('Mot de passe mis à jour'); setPasswordOpen(false); setNewPassword(''); }
-    setSaving(false);
-  };
-
-  const roleLabel = (r: string) => r === 'admin' ? 'Admin' : r === 'livreur' ? 'Livreur' : r === 'pharmacie' ? 'Pharmacie' : r;
-  const roleColor = (r: string) => r === 'admin' ? 'destructive' : r === 'livreur' ? 'default' : 'secondary';
-
-  const filtered = users.filter(u =>
-    u.full_name.toLowerCase().includes(search.toLowerCase()) ||
-    u.email.toLowerCase().includes(search.toLowerCase())
+  const filteredUsers = users.filter(
+    (u) =>
+      u.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      u.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (u.username && u.username.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
   return (
     <DashboardLayout requiredRole="admin">
-      <div className="space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <h1 className="text-2xl font-bold">Utilisateurs</h1>
-          <Button onClick={() => setCreateOpen(true)}><Plus className="w-4 h-4 mr-2" />Ajouter</Button>
+      <div className="space-y-6 animate-fade-in">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Utilisateurs</h1>
+            <p className="text-muted-foreground mt-1">
+              Gérez les administrateurs et les chauffeurs
+            </p>
+          </div>
+          <Button onClick={() => handleOpenDialog()} className="shadow-primary">
+            <Plus className="w-4 h-4 mr-2" />
+            Nouvel Utilisateur
+          </Button>
         </div>
 
-        <div className="relative">
+        {/* Search */}
+        <div className="relative max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input className="pl-10" placeholder="Rechercher…" value={search} onChange={(e) => setSearch(e.target.value)} />
+          <Input
+            placeholder="Rechercher un utilisateur..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-10"
+          />
         </div>
 
-        <Card>
-          <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Nom</TableHead>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Rôle</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {loading ? (
-                    <TableRow><TableCell colSpan={4} className="text-center py-8"><Loader2 className="w-6 h-6 animate-spin mx-auto" /></TableCell></TableRow>
-                  ) : filtered.length === 0 ? (
-                    <TableRow><TableCell colSpan={4} className="text-center py-8 text-muted-foreground">Aucun utilisateur</TableCell></TableRow>
-                  ) : filtered.map((u) => (
-                    <TableRow key={u.user_id}>
-                      <TableCell className="font-medium">{u.full_name}</TableCell>
-                      <TableCell className="text-sm">{u.email}</TableCell>
-                      <TableCell><Badge variant={roleColor(u.role) as any}>{roleLabel(u.role)}</Badge></TableCell>
-                      <TableCell className="text-right space-x-1">
-                        <Button variant="ghost" size="icon" onClick={() => { setSelectedUserId(u.user_id); setPasswordOpen(true); }} title="Changer le mot de passe">
-                          <Key className="w-4 h-4" />
+        {/* Table */}
+        <div className="bg-card rounded-xl border shadow-sm overflow-x-auto">
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-8 h-8 animate-spin text-primary" />
+            </div>
+          ) : filteredUsers.length === 0 ? (
+            <div className="text-center py-12 text-muted-foreground">
+              <Users className="w-12 h-12 mx-auto mb-3 opacity-50" />
+              <p>Aucun utilisateur trouvé</p>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Nom</TableHead>
+                  <TableHead className="hidden md:table-cell">Identifiant</TableHead>
+                  <TableHead className="hidden md:table-cell">Email</TableHead>
+                  <TableHead>Rôle</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredUsers.map((user) => (
+                  <TableRow key={user.id}>
+                    <TableCell className="font-medium">{user.full_name}</TableCell>
+                    <TableCell className="hidden md:table-cell font-mono text-sm text-primary">
+                      {user.username || '-'}
+                    </TableCell>
+                    <TableCell className="hidden md:table-cell text-muted-foreground">
+                      {user.email}
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        variant={user.role === 'admin' ? 'default' : 'secondary'}
+                        className="gap-1"
+                      >
+                        {user.role === 'admin' ? (
+                          <Shield className="w-3 h-3" />
+                        ) : (
+                          <Truck className="w-3 h-3" />
+                        )}
+                        {user.role === 'admin' ? 'Admin' : 'Livreur'}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleOpenDialog(user)}
+                        >
+                          <Pencil className="w-4 h-4" />
                         </Button>
-                        <Button variant="ghost" size="icon" onClick={() => handleDelete(u.user_id)} className="text-destructive hover:text-destructive">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="text-destructive hover:text-destructive"
+                          onClick={() => {
+                            setSelectedUser(user);
+                            setIsDeleteDialogOpen(true);
+                          }}
+                        >
                           <Trash2 className="w-4 h-4" />
                         </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          </CardContent>
-        </Card>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </div>
 
-        {/* Create user dialog */}
-        <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        {/* Create/Edit Dialog */}
+        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogContent>
-            <DialogHeader><DialogTitle>Nouvel utilisateur</DialogTitle></DialogHeader>
-            <form onSubmit={handleCreate} className="space-y-4">
-              <div className="space-y-2"><Label>Nom complet</Label><Input value={form.fullName} onChange={(e) => setForm({ ...form, fullName: e.target.value })} required /></div>
-              <div className="space-y-2"><Label>Email</Label><Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required /></div>
-              <div className="space-y-2"><Label>Nom d'utilisateur (optionnel)</Label><Input value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} /></div>
-              <div className="space-y-2"><Label>Mot de passe</Label><Input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required /></div>
+            <DialogHeader>
+              <DialogTitle>
+                {selectedUser ? "Modifier l'utilisateur" : 'Nouvel utilisateur'}
+              </DialogTitle>
+              <DialogDescription>
+                {selectedUser
+                  ? "Modifiez les informations de l'utilisateur"
+                  : 'Créez un nouveau compte utilisateur'}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
               <div className="space-y-2">
-                <Label>Rôle</Label>
-                <Select value={form.role} onValueChange={(v) => setForm({ ...form, role: v })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                <Label htmlFor="full_name">Nom complet *</Label>
+                <Input
+                  id="full_name"
+                  value={formData.full_name}
+                  onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
+                  placeholder="Jean Dupont"
+                  className={errors.full_name ? 'border-destructive' : ''}
+                />
+                {errors.full_name && (
+                  <p className="text-sm text-destructive">{errors.full_name}</p>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="email">Email *</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  value={formData.email}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  placeholder="jean@exemple.com"
+                  disabled={!!selectedUser}
+                  className={errors.email ? 'border-destructive' : ''}
+                />
+                {errors.email && <p className="text-sm text-destructive">{errors.email}</p>}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="username">Nom d'utilisateur</Label>
+                <p className="text-xs text-muted-foreground">
+                  L'utilisateur pourra se connecter avec ce nom au lieu de l'email
+                </p>
+                <Input
+                  id="username"
+                  value={formData.username}
+                  onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                  placeholder="jean.dupont"
+                  className="font-mono"
+                />
+              </div>
+              {!selectedUser ? (
+                <div className="space-y-2">
+                  <Label htmlFor="password">Mot de passe *</Label>
+                  <Input
+                    id="password"
+                    type="password"
+                    value={formData.password}
+                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                    placeholder="••••••••"
+                    className={errors.password ? 'border-destructive' : ''}
+                  />
+                  {errors.password && (
+                    <p className="text-sm text-destructive">{errors.password}</p>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-2 pt-2 border-t">
+                  <Label htmlFor="new_password">Nouveau mot de passe</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Laisser vide pour ne pas modifier le mot de passe
+                  </p>
+                  <div className="relative">
+                    <Input
+                      id="new_password"
+                      type={showPassword ? 'text' : 'password'}
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      placeholder="••••••••"
+                      className="pr-10"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+                      onClick={() => setShowPassword(!showPassword)}
+                    >
+                      {showPassword ? (
+                        <EyeOff className="w-4 h-4 text-muted-foreground" />
+                      ) : (
+                        <Eye className="w-4 h-4 text-muted-foreground" />
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              )}
+              <div className="space-y-2">
+                <Label htmlFor="role">Rôle *</Label>
+                <Select
+                  value={formData.role}
+                  onValueChange={(value: 'admin' | 'livreur') =>
+                    setFormData({ ...formData, role: value })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="admin">Administrateur</SelectItem>
-                    <SelectItem value="livreur">Livreur</SelectItem>
-                    <SelectItem value="pharmacie">Pharmacie</SelectItem>
+                    <SelectItem value="admin">
+                      <div className="flex items-center gap-2">
+                        <Shield className="w-4 h-4" />
+                        Administrateur
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="livreur">
+                      <div className="flex items-center gap-2">
+                        <Truck className="w-4 h-4" />
+                        Livreur
+                      </div>
+                    </SelectItem>
                   </SelectContent>
                 </Select>
               </div>
-              {form.role === 'pharmacie' && (
-                <div className="space-y-2">
-                  <Label>Pharmacie à associer</Label>
-                  <Select value={form.pharmacyId} onValueChange={(v) => setForm({ ...form, pharmacyId: v })}>
-                    <SelectTrigger><SelectValue placeholder="Sélectionner" /></SelectTrigger>
-                    <SelectContent>{pharmacies.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>
-                  </Select>
-                </div>
-              )}
-              <Button type="submit" className="w-full" disabled={saving}>{saving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}Créer</Button>
-            </form>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
+                Annuler
+              </Button>
+              <Button onClick={handleSave} disabled={isSaving}>
+                {isSaving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                {selectedUser ? 'Enregistrer' : 'Créer'}
+              </Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
 
-        {/* Password dialog */}
-        <Dialog open={passwordOpen} onOpenChange={setPasswordOpen}>
-          <DialogContent>
-            <DialogHeader><DialogTitle>Changer le mot de passe</DialogTitle></DialogHeader>
-            <div className="space-y-4">
-              <div className="space-y-2"><Label>Nouveau mot de passe</Label><Input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} /></div>
-              <Button onClick={handlePasswordUpdate} className="w-full" disabled={saving}>{saving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}Mettre à jour</Button>
-            </div>
-          </DialogContent>
-        </Dialog>
+        {/* Delete Confirmation */}
+        <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Confirmer la suppression</AlertDialogTitle>
+              <AlertDialogDescription>
+                Êtes-vous sûr de vouloir supprimer l'utilisateur "{selectedUser?.full_name}" ?
+                Cette action est irréversible.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Annuler</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleDelete}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                Supprimer
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </DashboardLayout>
   );
