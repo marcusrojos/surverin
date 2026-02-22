@@ -116,8 +116,8 @@ export default function DriverDashboard() {
   return (
     <DashboardLayout requiredRole="livreur">
       <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold">Mes livraisons</h1>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <h1 className="text-xl sm:text-2xl font-bold">Mes livraisons</h1>
           {!isOnline && (
             <div className="flex items-center gap-2 text-warning text-sm">
               <WifiOff className="w-4 h-4" />
@@ -184,12 +184,12 @@ export default function DriverDashboard() {
         )}
 
         <Dialog open={!!deliverDialog} onOpenChange={(open) => { if (!open) setDeliverDialog(null); }}>
-          <DialogContent className="max-w-md">
+          <DialogContent className="max-w-md w-[calc(100%-2rem)] mx-auto">
             <DialogHeader><DialogTitle>Confirmer la livraison</DialogTitle></DialogHeader>
             <div className="space-y-4">
               <p className="text-sm text-muted-foreground">Réf: <span className="font-mono font-medium text-foreground">{deliverDialog?.reference}</span></p>
               <div className="space-y-2"><Label>Nom du réceptionnaire</Label><Input value={recipientName} onChange={(e) => setRecipientName(e.target.value)} placeholder="Nom et prénom" /></div>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-3 gap-2 sm:gap-3">
                 <div className="space-y-1"><Label className="text-xs">Cartons reçus</Label><Input type="number" min={0} value={cartonsReceived} onChange={(e) => setCartonsReceived(Number(e.target.value))} /></div>
                 <div className="space-y-1"><Label className="text-xs">Sachets reçus</Label><Input type="number" min={0} value={sachetsReceived} onChange={(e) => setSachetsReceived(Number(e.target.value))} /></div>
                 <div className="space-y-1"><Label className="text-xs">Barques reçues</Label><Input type="number" min={0} value={barquesReceived} onChange={(e) => setBarquesReceived(Number(e.target.value))} /></div>
