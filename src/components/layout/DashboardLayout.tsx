@@ -34,8 +34,8 @@ export function DashboardLayout({ children, requiredRole }: DashboardLayoutProps
     <div className="min-h-screen bg-background">
       <div className="hidden lg:block"><Sidebar /></div>
       <div className="lg:hidden"><MobileNav /></div>
-      <main className="lg:ml-64 pt-16 lg:pt-0">
-        <div className="p-3 sm:p-4 lg:p-8">{children}</div>
+      <main className="lg:ml-64 pt-16 lg:pt-0 min-h-screen">
+        <div className="p-3 sm:p-4 lg:p-8 pb-8">{children}</div>
       </main>
     </div>
   );

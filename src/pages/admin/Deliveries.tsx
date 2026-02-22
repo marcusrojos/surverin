@@ -136,7 +136,7 @@ export default function AdminDeliveries() {
             <DialogTrigger asChild>
               <Button><Plus className="w-4 h-4 mr-2" />Nouvelle livraison</Button>
             </DialogTrigger>
-            <DialogContent className="max-w-md">
+            <DialogContent className="max-w-md w-[calc(100%-2rem)] mx-auto">
               <DialogHeader><DialogTitle>Nouvelle livraison</DialogTitle></DialogHeader>
               <form onSubmit={handleCreate} className="space-y-4">
                 <div className="space-y-2"><Label>Référence</Label><Input value={newRef} onChange={(e) => setNewRef(e.target.value)} required /></div>
