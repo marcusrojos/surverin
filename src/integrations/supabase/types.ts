@@ -82,6 +82,8 @@ export type Database = {
           created_at: string
           delivered_at: string | null
           driver_id: string | null
+          driver_latitude: number | null
+          driver_longitude: number | null
           id: string
           nb_barques: number
           nb_barques_received: number | null
@@ -102,6 +104,8 @@ export type Database = {
           created_at?: string
           delivered_at?: string | null
           driver_id?: string | null
+          driver_latitude?: number | null
+          driver_longitude?: number | null
           id?: string
           nb_barques?: number
           nb_barques_received?: number | null
@@ -122,6 +126,8 @@ export type Database = {
           created_at?: string
           delivered_at?: string | null
           driver_id?: string | null
+          driver_latitude?: number | null
+          driver_longitude?: number | null
           id?: string
           nb_barques?: number
           nb_barques_received?: number | null
@@ -155,6 +161,9 @@ export type Database = {
           created_at: string
           email: string | null
           id: string
+          latitude: number | null
+          location_source: string | null
+          longitude: number | null
           name: string
           phone: string | null
           updated_at: string
@@ -166,6 +175,9 @@ export type Database = {
           created_at?: string
           email?: string | null
           id?: string
+          latitude?: number | null
+          location_source?: string | null
+          longitude?: number | null
           name: string
           phone?: string | null
           updated_at?: string
@@ -177,6 +189,9 @@ export type Database = {
           created_at?: string
           email?: string | null
           id?: string
+          latitude?: number | null
+          location_source?: string | null
+          longitude?: number | null
           name?: string
           phone?: string | null
           updated_at?: string

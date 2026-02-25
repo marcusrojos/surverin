@@ -4,6 +4,8 @@ import { useAuth } from '@/lib/auth';
 import { supabase } from '@/integrations/supabase/client';
 import { useOfflineSync } from '@/hooks/use-offline-sync';
 import { useRealtimeDeliveries } from '@/hooks/use-realtime-deliveries';
+import { useGeolocation } from '@/hooks/use-geolocation';
+import { calculateDistance, GEOFENCE_RADIUS } from '@/lib/geolocation';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,7 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { StatusBadge } from '@/components/ui/status-badge';
 import { SignaturePad } from '@/components/ui/signature-pad';
 import { toast } from 'sonner';
-import { Package, CheckCircle, WifiOff, Loader2, Truck, Filter, CalendarDays } from 'lucide-react';
+import { Package, CheckCircle, WifiOff, Loader2, Truck, Filter, CalendarDays, MapPin, Navigation, AlertTriangle } from 'lucide-react';
 import { Database } from '@/integrations/supabase/types';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -26,7 +28,7 @@ export default function DriverDashboard() {
   const { isOnline, pendingDeliveries, queueDelivery, syncPending } = useOfflineSync();
   const [deliveries, setDeliveries] = useState<(Delivery & { pharmacy?: Pharmacy })[]>([]);
   const [loading, setLoading] = useState(true);
-  const [deliverDialog, setDeliverDialog] = useState<Delivery | null>(null);
+  const [deliverDialog, setDeliverDialog] = useState<(Delivery & { pharmacy?: Pharmacy }) | null>(null);
   const [recipientName, setRecipientName] = useState('');
   const [signature, setSignature] = useState<string | null>(null);
   const [cartonsReceived, setCartonsReceived] = useState(0);
@@ -41,6 +43,17 @@ export default function DriverDashboard() {
   // Pharmacy order from axes
   const [pharmacyOrder, setPharmacyOrder] = useState<Map<string, number>>(new Map());
 
+  // Geolocation for delivery confirmation
+  const pharmacyLat = (deliverDialog?.pharmacy as any)?.latitude ?? null;
+  const pharmacyLng = (deliverDialog?.pharmacy as any)?.longitude ?? null;
+  const hasPharmacyLocation = pharmacyLat !== null && pharmacyLng !== null;
+
+  const { driverPosition, distance, isWithinZone, error: geoError, loading: geoLoading } = useGeolocation({
+    pharmacyLat,
+    pharmacyLng,
+    enabled: !!deliverDialog && hasPharmacyLocation,
+  });
+
   const fetchDeliveries = useCallback(async () => {
     if (!user) return;
     const [delRes, pharRes, axisRes] = await Promise.all([
@@ -50,7 +63,6 @@ export default function DriverDashboard() {
     ]);
     const pharMap = new Map((pharRes.data || []).map(p => [p.id, p]));
 
-    // Build pharmacy order map (lowest position wins across all axes)
     const orderMap = new Map<string, number>();
     (axisRes.data || []).forEach(ap => {
       const existing = orderMap.get(ap.pharmacy_id);
@@ -73,28 +85,21 @@ export default function DriverDashboard() {
     onDeliveryDelete: () => fetchDeliveries(),
   });
 
-  // Filtered + grouped deliveries
   const groupedByDate = useMemo(() => {
     let filtered = deliveries;
-
     if (statusFilter !== 'all') {
       filtered = filtered.filter(d => d.status === statusFilter);
     }
     if (dateFilter) {
-      filtered = filtered.filter(d => {
-        const dDate = format(new Date(d.created_at), 'yyyy-MM-dd');
-        return dDate === dateFilter;
-      });
+      filtered = filtered.filter(d => format(new Date(d.created_at), 'yyyy-MM-dd') === dateFilter);
     }
 
-    // Sort by pharmacy order within each group
     const sorted = [...filtered].sort((a, b) => {
       const posA = pharmacyOrder.get(a.pharmacy_id) ?? 9999;
       const posB = pharmacyOrder.get(b.pharmacy_id) ?? 9999;
       return posA - posB;
     });
 
-    // Group by date
     const groups = new Map<string, typeof sorted>();
     sorted.forEach(d => {
       const key = format(new Date(d.created_at), 'yyyy-MM-dd');
@@ -102,11 +107,10 @@ export default function DriverDashboard() {
       groups.get(key)!.push(d);
     });
 
-    // Sort groups by date descending
     return Array.from(groups.entries()).sort((a, b) => b[0].localeCompare(a[0]));
   }, [deliveries, statusFilter, dateFilter, pharmacyOrder]);
 
-  const openDeliver = (d: Delivery) => {
+  const openDeliver = (d: Delivery & { pharmacy?: Pharmacy }) => {
     setDeliverDialog(d);
     setRecipientName('');
     setSignature(null);
@@ -117,19 +121,34 @@ export default function DriverDashboard() {
 
   const handleDeliver = async () => {
     if (!deliverDialog || !recipientName.trim()) return;
+
+    // Geolocation check
+    if (hasPharmacyLocation && !isWithinZone) {
+      toast.error('Vous devez être dans un rayon de 100 m de la pharmacie pour confirmer la réception');
+      return;
+    }
+
     setSubmitting(true);
     const now = new Date().toISOString();
 
+    const updatePayload: any = {
+      status: 'livre' as const,
+      recipient_name: recipientName.trim(),
+      recipient_signature: signature,
+      delivered_at: now,
+      nb_cartons_received: cartonsReceived,
+      nb_sachets_received: sachetsReceived,
+      nb_barques_received: barquesReceived,
+    };
+
+    // Save driver position if available
+    if (driverPosition) {
+      updatePayload.driver_latitude = driverPosition.latitude;
+      updatePayload.driver_longitude = driverPosition.longitude;
+    }
+
     if (isOnline) {
-      const { error } = await supabase.from('deliveries').update({
-        status: 'livre' as const,
-        recipient_name: recipientName.trim(),
-        recipient_signature: signature,
-        delivered_at: now,
-        nb_cartons_received: cartonsReceived,
-        nb_sachets_received: sachetsReceived,
-        nb_barques_received: barquesReceived,
-      }).eq('id', deliverDialog.id);
+      const { error } = await supabase.from('deliveries').update(updatePayload).eq('id', deliverDialog.id);
 
       if (error) {
         toast.error('Erreur — sauvegarde hors-ligne');
@@ -157,6 +176,16 @@ export default function DriverDashboard() {
 
   const pending = deliveries.filter(d => d.status === 'en_attente');
   const delivered = deliveries.filter(d => d.status === 'livre');
+
+  // Format distance display
+  const formatDistance = (d: number | null) => {
+    if (d === null) return '';
+    if (d < 1000) return `${Math.round(d)} m`;
+    return `${(d / 1000).toFixed(1)} km`;
+  };
+
+  // Can confirm: either no pharmacy location set, or within zone
+  const canConfirm = !hasPharmacyLocation || isWithinZone;
 
   return (
     <DashboardLayout requiredRole="livreur">
@@ -199,9 +228,7 @@ export default function DriverDashboard() {
               <div className="space-y-1">
                 <Label className="text-xs">Statut</Label>
                 <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as any)}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">Tous</SelectItem>
                     <SelectItem value="en_attente">En attente</SelectItem>
@@ -237,40 +264,91 @@ export default function DriverDashboard() {
                   </h2>
                   <span className="text-xs text-muted-foreground">({items.length})</span>
                 </div>
-                {items.map(d => (
-                  <Card key={d.id} className={d.status === 'livre' ? 'opacity-70' : 'card-hover'}>
-                    <CardContent className="pt-4">
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <p className="font-mono font-medium text-sm">{d.reference}</p>
-                            <StatusBadge status={d.status} />
+                {items.map(d => {
+                  const pharm = d.pharmacy as any;
+                  const hasLoc = pharm?.latitude && pharm?.longitude;
+                  return (
+                    <Card key={d.id} className={d.status === 'livre' ? 'opacity-70' : 'card-hover'}>
+                      <CardContent className="pt-4">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <p className="font-mono font-medium text-sm">{d.reference}</p>
+                              <StatusBadge status={d.status} />
+                            </div>
+                            <p className="text-sm text-muted-foreground truncate">{d.pharmacy?.name || '—'}</p>
+                            <p className="text-xs text-muted-foreground mt-1">{d.nb_cartons}C · {d.nb_sachets}S · {d.nb_barques}B</p>
+                            {d.verification_code && d.status === 'en_attente' && (
+                              <p className="text-xs font-mono mt-1">Code: {d.verification_code}</p>
+                            )}
+                            {hasLoc && d.status === 'en_attente' && (
+                              <div className="flex items-center gap-1 mt-1">
+                                <MapPin className="w-3 h-3 text-muted-foreground" />
+                                <span className="text-xs text-muted-foreground">GPS requis</span>
+                              </div>
+                            )}
                           </div>
-                          <p className="text-sm text-muted-foreground truncate">{d.pharmacy?.name || '—'}</p>
-                          <p className="text-xs text-muted-foreground mt-1">{d.nb_cartons}C · {d.nb_sachets}S · {d.nb_barques}B</p>
-                          {d.verification_code && d.status === 'en_attente' && (
-                            <p className="text-xs font-mono mt-1">Code: {d.verification_code}</p>
+                          {d.status === 'en_attente' && (
+                            <Button size="sm" onClick={() => openDeliver(d)} className="shrink-0">
+                              <Truck className="w-4 h-4 mr-1" />Livrer
+                            </Button>
                           )}
                         </div>
-                        {d.status === 'en_attente' && (
-                          <Button size="sm" onClick={() => openDeliver(d)} className="shrink-0">
-                            <Truck className="w-4 h-4 mr-1" />Livrer
-                          </Button>
-                        )}
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
+                      </CardContent>
+                    </Card>
+                  );
+                })}
               </div>
             ))}
           </div>
         )}
 
+        {/* Delivery Confirmation Dialog */}
         <Dialog open={!!deliverDialog} onOpenChange={(open) => { if (!open) setDeliverDialog(null); }}>
           <DialogContent className="max-w-md w-[calc(100%-2rem)] mx-auto max-h-[90vh] overflow-y-auto">
             <DialogHeader><DialogTitle>Confirmer la livraison</DialogTitle></DialogHeader>
             <div className="space-y-4">
               <p className="text-sm text-muted-foreground">Réf: <span className="font-mono font-medium text-foreground">{deliverDialog?.reference}</span></p>
+
+              {/* Geolocation status */}
+              {hasPharmacyLocation && (
+                <Card className={`border-2 ${isWithinZone ? 'border-green-500 bg-green-500/5' : 'border-destructive bg-destructive/5'}`}>
+                  <CardContent className="pt-3 pb-3">
+                    {geoLoading ? (
+                      <div className="flex items-center gap-2 text-sm">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Recherche de votre position GPS...</span>
+                      </div>
+                    ) : geoError ? (
+                      <div className="flex items-center gap-2 text-sm text-destructive">
+                        <AlertTriangle className="w-4 h-4" />
+                        <span>{geoError}</span>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <div className={`w-3 h-3 rounded-full ${isWithinZone ? 'bg-green-500' : 'bg-destructive'} animate-pulse`} />
+                          <span className="text-sm font-medium">
+                            {isWithinZone ? 'Dans la zone autorisée' : 'Hors zone'}
+                          </span>
+                        </div>
+                        {distance !== null && (
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <Navigation className="w-3 h-3" />
+                            <span>Distance: {formatDistance(distance)} / {GEOFENCE_RADIUS} m max</span>
+                          </div>
+                        )}
+                        {!isWithinZone && (
+                          <p className="text-xs text-destructive">
+                            Vous devez être dans un rayon de {GEOFENCE_RADIUS} m de la pharmacie pour confirmer la réception.
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+
               <div className="space-y-2"><Label>Nom du réceptionnaire</Label><Input value={recipientName} onChange={(e) => setRecipientName(e.target.value)} placeholder="Nom et prénom" /></div>
               <div className="grid grid-cols-3 gap-2 sm:gap-3">
                 <div className="space-y-1"><Label className="text-xs">Cartons reçus</Label><Input type="number" min={0} value={cartonsReceived} onChange={(e) => setCartonsReceived(Number(e.target.value))} /></div>
@@ -281,7 +359,11 @@ export default function DriverDashboard() {
                 <Label>Signature</Label>
                 <SignaturePad onSignatureChange={setSignature} />
               </div>
-              <Button onClick={handleDeliver} className="w-full" disabled={submitting || !recipientName.trim()}>
+              <Button
+                onClick={handleDeliver}
+                className="w-full"
+                disabled={submitting || !recipientName.trim() || (hasPharmacyLocation && !canConfirm) || (hasPharmacyLocation && geoLoading)}
+              >
                 {submitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <CheckCircle className="w-4 h-4 mr-2" />}
                 Confirmer la livraison
               </Button>
