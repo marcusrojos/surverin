@@ -29,9 +29,10 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Plus, Pencil, Trash2, Search, Building2, Loader2, User, Eye, EyeOff } from 'lucide-react';
+import { Plus, Pencil, Trash2, Search, Building2, Loader2, User, Eye, EyeOff, MapPin } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { PharmacyLocationPicker } from '@/components/PharmacyLocationPicker';
 
 interface Pharmacy {
   id: string;
@@ -42,6 +43,9 @@ interface Pharmacy {
   user_id: string | null;
   client_code: string;
   created_at: string;
+  latitude: number | null;
+  longitude: number | null;
+  location_source: string | null;
 }
 
 export default function PharmaciesPage() {
@@ -58,6 +62,9 @@ export default function PharmaciesPage() {
     email: '',
     password: '',
     client_code: '',
+    latitude: null as number | null,
+    longitude: null as number | null,
+    location_source: null as string | null,
   });
   const [showPassword, setShowPassword] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -92,10 +99,13 @@ export default function PharmaciesPage() {
         email: pharmacy.email || '',
         password: '',
         client_code: pharmacy.client_code || '',
+        latitude: pharmacy.latitude,
+        longitude: pharmacy.longitude,
+        location_source: pharmacy.location_source,
       });
     } else {
       setSelectedPharmacy(null);
-      setFormData({ name: '', address: '', phone: '', email: '', password: '', client_code: '' });
+      setFormData({ name: '', address: '', phone: '', email: '', password: '', client_code: '', latitude: null, longitude: null, location_source: null });
     }
     setShowPassword(false);
     setIsDialogOpen(true);
@@ -133,6 +143,9 @@ export default function PharmaciesPage() {
           address: formData.address.trim() || null,
           phone: formData.phone.trim() || null,
           email: formData.email.trim() || null,
+          latitude: formData.latitude,
+          longitude: formData.longitude,
+          location_source: formData.location_source,
         };
         if (formData.client_code.trim()) {
           updateData.client_code = formData.client_code.trim();
@@ -191,7 +204,10 @@ export default function PharmaciesPage() {
             phone: formData.phone.trim() || null,
             email: formData.email.trim() || null,
             client_code: formData.client_code.trim(),
-          })
+            latitude: formData.latitude,
+            longitude: formData.longitude,
+            location_source: formData.location_source,
+          } as any)
           .select()
           .single();
 
@@ -315,6 +331,7 @@ export default function PharmaciesPage() {
                   <TableHead className="hidden lg:table-cell">Téléphone</TableHead>
                   <TableHead className="hidden lg:table-cell">Email</TableHead>
                   <TableHead className="hidden md:table-cell">Compte</TableHead>
+                  <TableHead className="hidden md:table-cell">GPS</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -337,6 +354,16 @@ export default function PharmaciesPage() {
                         <span className="inline-flex items-center gap-1 text-xs font-medium text-green-600 bg-green-500/10 px-2 py-1 rounded-full">
                           <User className="w-3 h-3" />
                           Actif
+                        </span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">-</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="hidden md:table-cell">
+                      {pharmacy.latitude && pharmacy.longitude ? (
+                        <span className="inline-flex items-center gap-1 text-xs font-medium text-primary bg-primary/10 px-2 py-1 rounded-full">
+                          <MapPin className="w-3 h-3" />
+                          Oui
                         </span>
                       ) : (
                         <span className="text-xs text-muted-foreground">-</span>
@@ -403,8 +430,23 @@ export default function PharmaciesPage() {
                   placeholder="Ex: PH-00001 ou code personnalisé"
                 />
               </div>
+              {/* Location Picker */}
+              <PharmacyLocationPicker
+                initialLat={formData.latitude}
+                initialLng={formData.longitude}
+                initialAddress={formData.address}
+                onLocationSelect={(loc) => {
+                  setFormData({
+                    ...formData,
+                    address: loc.address,
+                    latitude: loc.latitude,
+                    longitude: loc.longitude,
+                    location_source: loc.source,
+                  });
+                }}
+              />
               <div className="space-y-2">
-                <Label htmlFor="address">Adresse</Label>
+                <Label htmlFor="address">Adresse (auto-remplie ou manuelle)</Label>
                 <Input
                   id="address"
                   value={formData.address}
