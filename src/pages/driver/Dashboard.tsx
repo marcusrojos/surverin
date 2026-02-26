@@ -34,6 +34,7 @@ export default function DriverDashboard() {
   const [cartonsReceived, setCartonsReceived] = useState(0);
   const [sachetsReceived, setSachetsReceived] = useState(0);
   const [barquesReceived, setBarquesReceived] = useState(0);
+  const [verificationCode, setVerificationCode] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   // Filters
@@ -113,6 +114,7 @@ export default function DriverDashboard() {
   const openDeliver = (d: Delivery & { pharmacy?: Pharmacy }) => {
     setDeliverDialog(d);
     setRecipientName('');
+    setVerificationCode('');
     setSignature(null);
     setCartonsReceived(d.nb_cartons);
     setSachetsReceived(d.nb_sachets);
@@ -121,6 +123,12 @@ export default function DriverDashboard() {
 
   const handleDeliver = async () => {
     if (!deliverDialog || !recipientName.trim()) return;
+
+    // Verification code check
+    if (deliverDialog.verification_code && verificationCode.trim() !== deliverDialog.verification_code) {
+      toast.error('Code de vérification incorrect');
+      return;
+    }
 
     // Geolocation check
     if (hasPharmacyLocation && !isWithinZone) {
@@ -278,9 +286,6 @@ export default function DriverDashboard() {
                             </div>
                             <p className="text-sm text-muted-foreground truncate">{d.pharmacy?.name || '—'}</p>
                             <p className="text-xs text-muted-foreground mt-1">{d.nb_cartons}C · {d.nb_sachets}S · {d.nb_barques}B</p>
-                            {d.verification_code && d.status === 'en_attente' && (
-                              <p className="text-xs font-mono mt-1">Code: {d.verification_code}</p>
-                            )}
                             {hasLoc && d.status === 'en_attente' && (
                               <div className="flex items-center gap-1 mt-1">
                                 <MapPin className="w-3 h-3 text-muted-foreground" />
@@ -349,6 +354,17 @@ export default function DriverDashboard() {
                 </Card>
               )}
 
+              <div className="space-y-2">
+                <Label>Code de vérification</Label>
+                <Input
+                  value={verificationCode}
+                  onChange={(e) => setVerificationCode(e.target.value)}
+                  placeholder="Entrez le code à 6 chiffres"
+                  maxLength={6}
+                  className="font-mono tracking-widest text-center text-lg"
+                />
+                <p className="text-xs text-muted-foreground">Demandez le code de vérification au réceptionnaire de la pharmacie</p>
+              </div>
               <div className="space-y-2"><Label>Nom du réceptionnaire</Label><Input value={recipientName} onChange={(e) => setRecipientName(e.target.value)} placeholder="Nom et prénom" /></div>
               <div className="grid grid-cols-3 gap-2 sm:gap-3">
                 <div className="space-y-1"><Label className="text-xs">Cartons reçus</Label><Input type="number" min={0} value={cartonsReceived} onChange={(e) => setCartonsReceived(Number(e.target.value))} /></div>
@@ -362,7 +378,7 @@ export default function DriverDashboard() {
               <Button
                 onClick={handleDeliver}
                 className="w-full"
-                disabled={submitting || !recipientName.trim() || (hasPharmacyLocation && !canConfirm) || (hasPharmacyLocation && geoLoading)}
+                disabled={submitting || !recipientName.trim() || !verificationCode.trim() || (hasPharmacyLocation && !canConfirm) || (hasPharmacyLocation && geoLoading)}
               >
                 {submitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <CheckCircle className="w-4 h-4 mr-2" />}
                 Confirmer la livraison

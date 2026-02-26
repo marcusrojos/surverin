@@ -6,7 +6,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { Button } from '@/components/ui/button';
 import { generateReceiptPDF } from '@/lib/generate-receipt-pdf';
-import { Package, CheckCircle, FileText, Loader2 } from 'lucide-react';
+import { Package, CheckCircle, FileText, Loader2, KeyRound } from 'lucide-react';
 import { Database } from '@/integrations/supabase/types';
 
 type Delivery = Database['public']['Tables']['deliveries']['Row'];
@@ -96,6 +96,13 @@ export default function PharmacyDashboard() {
                       <p className="font-mono font-medium">{d.reference}</p>
                       <p className="text-xs text-muted-foreground mt-1">{d.nb_cartons}C · {d.nb_sachets}S · {d.nb_barques}B</p>
                       <p className="text-xs text-muted-foreground">{new Date(d.created_at).toLocaleDateString('fr-FR')}</p>
+                      {d.status === 'en_attente' && d.verification_code && (
+                        <div className="flex items-center gap-1.5 mt-2 bg-primary/10 rounded-md px-2 py-1.5 w-fit">
+                          <KeyRound className="w-3.5 h-3.5 text-primary" />
+                          <span className="text-xs font-medium text-primary">Code de vérification :</span>
+                          <span className="font-mono font-bold text-sm text-primary tracking-widest">{d.verification_code}</span>
+                        </div>
+                      )}
                     </div>
                     <div className="flex items-center gap-2">
                       <StatusBadge status={d.status} />
