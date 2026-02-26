@@ -89,10 +89,13 @@ export function PharmacyLocationPicker({
     }
     setSearching(true);
     try {
-      // Search specifically for pharmacies in Côte d'Ivoire using structured query
+      const q = query.trim();
+      // Multiple search strategies for maximum coverage
       const searches = [
-        fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent('pharmacie ' + query)}&countrycodes=ci&limit=5&addressdetails=1&viewbox=-8.6,4.3,-2.5,10.7&bounded=1`),
-        fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query + ' pharmacy côte d\'ivoire')}&countrycodes=ci&limit=5&addressdetails=1&viewbox=-8.6,4.3,-2.5,10.7&bounded=1`),
+        fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent('pharmacie ' + q)}&countrycodes=ci&limit=10&addressdetails=1&viewbox=-8.6,4.3,-2.5,10.7&bounded=1`),
+        fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&countrycodes=ci&limit=10&addressdetails=1&viewbox=-8.6,4.3,-2.5,10.7&bounded=1`),
+        fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent('pharmacie ' + q + ' abidjan')}&countrycodes=ci&limit=5&addressdetails=1`),
+        fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q + ' pharmacie côte d\'ivoire')}&limit=10&addressdetails=1`),
       ];
       const responses = await Promise.all(searches);
       const allData = await Promise.all(responses.map(r => r.json()));
@@ -108,7 +111,7 @@ export function PharmacyLocationPicker({
           }
         }
       }
-      setResults(merged.slice(0, 8));
+      setResults(merged.slice(0, 15));
     } catch {
       setResults([]);
     } finally {
@@ -189,7 +192,7 @@ export function PharmacyLocationPicker({
 
       {/* Results list */}
       {results.length > 0 && (
-        <Card className="max-h-48 overflow-y-auto">
+        <Card className="max-h-64 overflow-y-auto">
           <CardContent className="p-1">
             {results.map((r) => (
               <button
