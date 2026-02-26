@@ -83,17 +83,32 @@ export function PharmacyLocationPicker({
   const CI_BOUNDS: L.LatLngBoundsExpression = [[4.3, -8.6], [10.7, -2.5]];
 
   const searchPharmacies = useCallback(async (query: string) => {
-    if (query.length < 3) {
+    if (query.length < 2) {
       setResults([]);
       return;
     }
     setSearching(true);
     try {
-      const response = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query + ' pharmacie')}&countrycodes=ci&limit=8&addressdetails=1`
-      );
-      const data: NominatimResult[] = await response.json();
-      setResults(data);
+      // Search specifically for pharmacies in Côte d'Ivoire using structured query
+      const searches = [
+        fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent('pharmacie ' + query)}&countrycodes=ci&limit=5&addressdetails=1&viewbox=-8.6,4.3,-2.5,10.7&bounded=1`),
+        fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query + ' pharmacy côte d\'ivoire')}&countrycodes=ci&limit=5&addressdetails=1&viewbox=-8.6,4.3,-2.5,10.7&bounded=1`),
+      ];
+      const responses = await Promise.all(searches);
+      const allData = await Promise.all(responses.map(r => r.json()));
+      
+      // Deduplicate by place_id
+      const seen = new Set<number>();
+      const merged: NominatimResult[] = [];
+      for (const results of allData) {
+        for (const r of results) {
+          if (!seen.has(r.place_id)) {
+            seen.add(r.place_id);
+            merged.push(r);
+          }
+        }
+      }
+      setResults(merged.slice(0, 8));
     } catch {
       setResults([]);
     } finally {
