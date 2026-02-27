@@ -9,9 +9,10 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
 // Error boundary to prevent map crashes from taking down the whole page
-class MapErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
-  state = { hasError: false };
-  static getDerivedStateFromError() { return { hasError: true }; }
+class MapErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean; error: string }> {
+  state = { hasError: false, error: '' };
+  static getDerivedStateFromError(error: Error) { return { hasError: true, error: error.message }; }
+  componentDidCatch(error: Error) { console.error('[MapErrorBoundary]', error); }
   render() {
     if (this.state.hasError) {
       return (
@@ -19,7 +20,8 @@ class MapErrorBoundary extends Component<{ children: ReactNode }, { hasError: bo
           <div className="text-center text-sm text-muted-foreground space-y-2">
             <AlertTriangle className="w-6 h-6 mx-auto text-warning" />
             <p>Impossible de charger la carte</p>
-            <Button variant="outline" size="sm" onClick={() => this.setState({ hasError: false })}>
+            <p className="text-xs">{this.state.error}</p>
+            <Button variant="outline" size="sm" onClick={() => this.setState({ hasError: false, error: '' })}>
               Réessayer
             </Button>
           </div>
@@ -287,7 +289,7 @@ export function PharmacyLocationPicker({
             setMapKey(k => k + 1);
             setShowMap(true);
             // Delay rendering to ensure container has dimensions
-            setTimeout(() => setMapReady(true), 100);
+            setTimeout(() => setMapReady(true), 300);
           } else {
             setShowMap(false);
           }
@@ -299,7 +301,7 @@ export function PharmacyLocationPicker({
 
       {/* Map */}
       {showMap && (
-        <div className="h-64 rounded-lg overflow-hidden border">
+        <div className="rounded-lg overflow-hidden border" style={{ height: '256px', width: '100%' }}>
           {mapReady ? (
             <MapErrorBoundary key={`boundary-${mapKey}`}>
               <MapContainer
@@ -308,7 +310,7 @@ export function PharmacyLocationPicker({
                 zoom={markerPos ? 16 : 7}
                 maxBounds={CI_BOUNDS}
                 minZoom={6}
-                className="h-full w-full"
+                style={{ height: '100%', width: '100%' }}
               >
                 <TileLayer
                   attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
