@@ -108,6 +108,8 @@ export function PharmacyLocationPicker({
   );
   const [selectedAddress, setSelectedAddress] = useState(initialAddress);
   const [mapCenter, setMapCenter] = useState<[number, number] | null>(null);
+  const [mapReady, setMapReady] = useState(false);
+  const [mapKey, setMapKey] = useState(0);
   const searchTimeout = useRef<NodeJS.Timeout | null>(null);
 
   // Côte d'Ivoire bounds
@@ -279,7 +281,17 @@ export function PharmacyLocationPicker({
         variant="outline"
         size="sm"
         className="w-full"
-        onClick={() => setShowMap(!showMap)}
+        onClick={() => {
+          if (!showMap) {
+            setMapReady(false);
+            setMapKey(k => k + 1);
+            setShowMap(true);
+            // Delay rendering to ensure container has dimensions
+            setTimeout(() => setMapReady(true), 100);
+          } else {
+            setShowMap(false);
+          }
+        }}
       >
         <MapPin className="w-4 h-4 mr-2" />
         {showMap ? 'Masquer la carte' : 'Sélection manuelle sur la carte'}
@@ -287,26 +299,33 @@ export function PharmacyLocationPicker({
 
       {/* Map */}
       {showMap && (
-        <MapErrorBoundary>
-          <div className="h-64 rounded-lg overflow-hidden border">
-            <MapContainer
-              center={markerPos || CI_CENTER}
-              zoom={markerPos ? 16 : 7}
-              maxBounds={CI_BOUNDS}
-              minZoom={6}
-              className="h-full w-full"
-            >
-              <TileLayer
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-              />
-              <MapClickHandler onMapClick={handleMapClick} />
-              <MapSizeInvalidator />
-              {mapCenter && <MapCenterUpdater center={mapCenter} />}
-              {markerPos && <Marker position={markerPos} />}
-            </MapContainer>
-          </div>
-        </MapErrorBoundary>
+        <div className="h-64 rounded-lg overflow-hidden border">
+          {mapReady ? (
+            <MapErrorBoundary key={`boundary-${mapKey}`}>
+              <MapContainer
+                key={`map-${mapKey}`}
+                center={markerPos || CI_CENTER}
+                zoom={markerPos ? 16 : 7}
+                maxBounds={CI_BOUNDS}
+                minZoom={6}
+                className="h-full w-full"
+              >
+                <TileLayer
+                  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                />
+                <MapClickHandler onMapClick={handleMapClick} />
+                <MapSizeInvalidator />
+                {mapCenter && <MapCenterUpdater center={mapCenter} />}
+                {markerPos && <Marker position={markerPos} />}
+              </MapContainer>
+            </MapErrorBoundary>
+          ) : (
+            <div className="h-full flex items-center justify-center bg-muted/50">
+              <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+            </div>
+          )}
+        </div>
       )}
     </div>
   );
