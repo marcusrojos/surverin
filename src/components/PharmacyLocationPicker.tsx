@@ -90,28 +90,44 @@ export function PharmacyLocationPicker({
     setSearching(true);
     try {
       const q = query.trim();
-      // Multiple search strategies for maximum coverage
+      const base = 'https://nominatim.openstreetmap.org/search?format=json&addressdetails=1';
+      // Cast a wide net with many strategies - no bounded restriction
       const searches = [
-        fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent('pharmacie ' + q)}&countrycodes=ci&limit=10&addressdetails=1&viewbox=-8.6,4.3,-2.5,10.7&bounded=1`),
-        fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&countrycodes=ci&limit=10&addressdetails=1&viewbox=-8.6,4.3,-2.5,10.7&bounded=1`),
-        fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent('pharmacie ' + q + ' abidjan')}&countrycodes=ci&limit=5&addressdetails=1`),
-        fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q + ' pharmacie côte d\'ivoire')}&limit=10&addressdetails=1`),
+        // Direct search in CI
+        fetch(`${base}&q=${encodeURIComponent(q)}&countrycodes=ci&limit=15`),
+        // Pharmacy-prefixed in CI
+        fetch(`${base}&q=${encodeURIComponent('pharmacie ' + q)}&countrycodes=ci&limit=15`),
+        // With viewbox preference (not bounded) for better ranking
+        fetch(`${base}&q=${encodeURIComponent(q)}&countrycodes=ci&limit=10&viewbox=-8.6,4.3,-2.5,10.7`),
+        // Pharmacy as amenity type
+        fetch(`${base}&q=${encodeURIComponent(q)}&countrycodes=ci&limit=10&amenity=pharmacy`),
+        // Broader: with country name in query (catches entries not tagged with CI)
+        fetch(`${base}&q=${encodeURIComponent('pharmacie ' + q + ' côte d\'ivoire')}&limit=10`),
+        // City-specific searches for major cities
+        fetch(`${base}&q=${encodeURIComponent('pharmacie ' + q + ' abidjan')}&countrycodes=ci&limit=5`),
+        fetch(`${base}&q=${encodeURIComponent('pharmacie ' + q + ' bouaké')}&countrycodes=ci&limit=3`),
+        fetch(`${base}&q=${encodeURIComponent('pharmacie ' + q + ' yamoussoukro')}&countrycodes=ci&limit=3`),
       ];
-      const responses = await Promise.all(searches);
-      const allData = await Promise.all(responses.map(r => r.json()));
+      const responses = await Promise.allSettled(searches);
+      const allData: NominatimResult[][] = [];
+      for (const r of responses) {
+        if (r.status === 'fulfilled') {
+          try { allData.push(await r.value.json()); } catch { /* skip */ }
+        }
+      }
       
       // Deduplicate by place_id
       const seen = new Set<number>();
       const merged: NominatimResult[] = [];
-      for (const results of allData) {
-        for (const r of results) {
+      for (const batch of allData) {
+        for (const r of batch) {
           if (!seen.has(r.place_id)) {
             seen.add(r.place_id);
             merged.push(r);
           }
         }
       }
-      setResults(merged.slice(0, 15));
+      setResults(merged.slice(0, 20));
     } catch {
       setResults([]);
     } finally {
