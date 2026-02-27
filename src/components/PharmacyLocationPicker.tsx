@@ -1,12 +1,34 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, Component, type ReactNode } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
-import { MapPin, Search, X, Loader2, Navigation } from 'lucide-react';
+import { MapPin, Search, X, Loader2, Navigation, AlertTriangle } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+
+// Error boundary to prevent map crashes from taking down the whole page
+class MapErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
+  state = { hasError: false };
+  static getDerivedStateFromError() { return { hasError: true }; }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="h-64 rounded-lg border flex items-center justify-center bg-muted/50">
+          <div className="text-center text-sm text-muted-foreground space-y-2">
+            <AlertTriangle className="w-6 h-6 mx-auto text-warning" />
+            <p>Impossible de charger la carte</p>
+            <Button variant="outline" size="sm" onClick={() => this.setState({ hasError: false })}>
+              Réessayer
+            </Button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 // Fix default marker icon
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -58,6 +80,16 @@ function MapCenterUpdater({ center }: { center: [number, number] | null }) {
       map.setView(center, 16);
     }
   }, [center, map]);
+  return null;
+}
+
+function MapSizeInvalidator() {
+  const map = useMap();
+  useEffect(() => {
+    // Invalidate size after dialog animation completes
+    const t = setTimeout(() => map.invalidateSize(), 400);
+    return () => clearTimeout(t);
+  }, [map]);
   return null;
 }
 
@@ -255,23 +287,26 @@ export function PharmacyLocationPicker({
 
       {/* Map */}
       {showMap && (
-        <div className="h-64 rounded-lg overflow-hidden border">
-          <MapContainer
-            center={markerPos || CI_CENTER}
-            zoom={markerPos ? 16 : 7}
-            maxBounds={CI_BOUNDS}
-            minZoom={6}
-            className="h-full w-full"
-          >
-            <TileLayer
-              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-            />
-            <MapClickHandler onMapClick={handleMapClick} />
-            {mapCenter && <MapCenterUpdater center={mapCenter} />}
-            {markerPos && <Marker position={markerPos} />}
-          </MapContainer>
-        </div>
+        <MapErrorBoundary>
+          <div className="h-64 rounded-lg overflow-hidden border">
+            <MapContainer
+              center={markerPos || CI_CENTER}
+              zoom={markerPos ? 16 : 7}
+              maxBounds={CI_BOUNDS}
+              minZoom={6}
+              className="h-full w-full"
+            >
+              <TileLayer
+                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              />
+              <MapClickHandler onMapClick={handleMapClick} />
+              <MapSizeInvalidator />
+              {mapCenter && <MapCenterUpdater center={mapCenter} />}
+              {markerPos && <Marker position={markerPos} />}
+            </MapContainer>
+          </div>
+        </MapErrorBoundary>
       )}
     </div>
   );
