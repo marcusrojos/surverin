@@ -1,36 +1,11 @@
-import { useState, useEffect, useRef, useCallback, Component, type ReactNode } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
-import { MapPin, Search, X, Loader2, Navigation, AlertTriangle } from 'lucide-react';
-import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from 'react-leaflet';
+import { MapPin, Search, X, Loader2, Navigation } from 'lucide-react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-
-// Error boundary to prevent map crashes from taking down the whole page
-class MapErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean; error: string }> {
-  state = { hasError: false, error: '' };
-  static getDerivedStateFromError(error: Error) { return { hasError: true, error: error.message }; }
-  componentDidCatch(error: Error) { console.error('[MapErrorBoundary]', error); }
-  render() {
-    if (this.state.hasError) {
-      return (
-        <div className="h-64 rounded-lg border flex items-center justify-center bg-muted/50">
-          <div className="text-center text-sm text-muted-foreground space-y-2">
-            <AlertTriangle className="w-6 h-6 mx-auto text-warning" />
-            <p>Impossible de charger la carte</p>
-            <p className="text-xs">{this.state.error}</p>
-            <Button variant="outline" size="sm" onClick={() => this.setState({ hasError: false, error: '' })}>
-              Réessayer
-            </Button>
-          </div>
-        </div>
-      );
-    }
-    return this.props.children;
-  }
-}
 
 // Fix default marker icon
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -66,34 +41,9 @@ interface PharmacyLocationPickerProps {
   }) => void;
 }
 
-function MapClickHandler({ onMapClick }: { onMapClick: (lat: number, lng: number) => void }) {
-  useMapEvents({
-    click(e) {
-      onMapClick(e.latlng.lat, e.latlng.lng);
-    },
-  });
-  return null;
-}
-
-function MapCenterUpdater({ center }: { center: [number, number] | null }) {
-  const map = useMap();
-  useEffect(() => {
-    if (center) {
-      map.setView(center, 16);
-    }
-  }, [center, map]);
-  return null;
-}
-
-function MapSizeInvalidator() {
-  const map = useMap();
-  useEffect(() => {
-    // Invalidate size after dialog animation completes
-    const t = setTimeout(() => map.invalidateSize(), 400);
-    return () => clearTimeout(t);
-  }, [map]);
-  return null;
-}
+// Côte d'Ivoire bounds & center
+const CI_CENTER: L.LatLngTuple = [7.54, -5.55];
+const CI_BOUNDS: L.LatLngBoundsExpression = [[4.3, -8.6], [10.7, -2.5]];
 
 export function PharmacyLocationPicker({
   initialLat,
@@ -109,14 +59,96 @@ export function PharmacyLocationPicker({
     initialLat && initialLng ? [initialLat, initialLng] : null
   );
   const [selectedAddress, setSelectedAddress] = useState(initialAddress);
-  const [mapCenter, setMapCenter] = useState<[number, number] | null>(null);
-  const [mapReady, setMapReady] = useState(false);
-  const [mapKey, setMapKey] = useState(0);
   const searchTimeout = useRef<NodeJS.Timeout | null>(null);
 
-  // Côte d'Ivoire bounds
-  const CI_CENTER: [number, number] = [7.54, -5.55];
-  const CI_BOUNDS: L.LatLngBoundsExpression = [[4.3, -8.6], [10.7, -2.5]];
+  // Leaflet refs - managed imperatively to avoid react-leaflet issues in dialogs
+  const mapContainerRef = useRef<HTMLDivElement>(null);
+  const mapInstanceRef = useRef<L.Map | null>(null);
+  const markerRef = useRef<L.Marker | null>(null);
+  const markerPosRef = useRef(markerPos);
+  markerPosRef.current = markerPos;
+
+  // Initialize/destroy Leaflet map imperatively
+  useEffect(() => {
+    if (!showMap || !mapContainerRef.current) return;
+
+    const container = mapContainerRef.current;
+
+    // Small delay to ensure container has layout dimensions
+    const initTimer = setTimeout(() => {
+      try {
+        const center = markerPosRef.current || CI_CENTER;
+        const zoom = markerPosRef.current ? 16 : 7;
+
+        const map = L.map(container, {
+          center,
+          zoom,
+          maxBounds: CI_BOUNDS,
+          minZoom: 6,
+        });
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+        }).addTo(map);
+
+        // Add click handler
+        map.on('click', (e: L.LeafletMouseEvent) => {
+          const { lat, lng } = e.latlng;
+          updateMarker(map, lat, lng);
+          reverseGeocode(lat, lng);
+        });
+
+        // Force size recalculation after animations
+        setTimeout(() => map.invalidateSize(), 100);
+        setTimeout(() => map.invalidateSize(), 500);
+
+        // Place initial marker if exists
+        if (markerPosRef.current) {
+          const m = L.marker(markerPosRef.current).addTo(map);
+          markerRef.current = m;
+        }
+
+        mapInstanceRef.current = map;
+      } catch (err) {
+        console.error('[LeafletMap] Init error:', err);
+      }
+    }, 50);
+
+    return () => {
+      clearTimeout(initTimer);
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.remove();
+        mapInstanceRef.current = null;
+      }
+      markerRef.current = null;
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showMap]);
+
+  const updateMarker = (map: L.Map, lat: number, lng: number) => {
+    if (markerRef.current) {
+      markerRef.current.setLatLng([lat, lng]);
+    } else {
+      markerRef.current = L.marker([lat, lng]).addTo(map);
+    }
+    setMarkerPos([lat, lng]);
+  };
+
+  const reverseGeocode = async (lat: number, lng: number) => {
+    try {
+      const resp = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`
+      );
+      const data = await resp.json();
+      const addr = data.display_name || `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+      setSelectedAddress(addr);
+      onLocationSelect({ latitude: lat, longitude: lng, address: addr, source: 'manuel' });
+    } catch {
+      const addr = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+      setSelectedAddress(addr);
+      onLocationSelect({ latitude: lat, longitude: lng, address: addr, source: 'manuel' });
+    }
+  };
 
   const searchPharmacies = useCallback(async (query: string) => {
     if (query.length < 2) {
@@ -127,19 +159,12 @@ export function PharmacyLocationPicker({
     try {
       const q = query.trim();
       const base = 'https://nominatim.openstreetmap.org/search?format=json&addressdetails=1';
-      // Cast a wide net with many strategies - no bounded restriction
       const searches = [
-        // Direct search in CI
         fetch(`${base}&q=${encodeURIComponent(q)}&countrycodes=ci&limit=15`),
-        // Pharmacy-prefixed in CI
         fetch(`${base}&q=${encodeURIComponent('pharmacie ' + q)}&countrycodes=ci&limit=15`),
-        // With viewbox preference (not bounded) for better ranking
         fetch(`${base}&q=${encodeURIComponent(q)}&countrycodes=ci&limit=10&viewbox=-8.6,4.3,-2.5,10.7`),
-        // Pharmacy as amenity type
         fetch(`${base}&q=${encodeURIComponent(q)}&countrycodes=ci&limit=10&amenity=pharmacy`),
-        // Broader: with country name in query (catches entries not tagged with CI)
         fetch(`${base}&q=${encodeURIComponent('pharmacie ' + q + ' côte d\'ivoire')}&limit=10`),
-        // City-specific searches for major cities
         fetch(`${base}&q=${encodeURIComponent('pharmacie ' + q + ' abidjan')}&countrycodes=ci&limit=5`),
         fetch(`${base}&q=${encodeURIComponent('pharmacie ' + q + ' bouaké')}&countrycodes=ci&limit=3`),
         fetch(`${base}&q=${encodeURIComponent('pharmacie ' + q + ' yamoussoukro')}&countrycodes=ci&limit=3`),
@@ -151,8 +176,6 @@ export function PharmacyLocationPicker({
           try { allData.push(await r.value.json()); } catch { /* skip */ }
         }
       }
-      
-      // Deduplicate by place_id
       const seen = new Set<number>();
       const merged: NominatimResult[] = [];
       for (const batch of allData) {
@@ -181,10 +204,16 @@ export function PharmacyLocationPicker({
     const lat = parseFloat(result.lat);
     const lng = parseFloat(result.lon);
     setMarkerPos([lat, lng]);
-    setMapCenter([lat, lng]);
     setSelectedAddress(result.display_name);
     setResults([]);
     setSearchQuery(result.display_name.split(',')[0]);
+
+    // Update map view and marker if map is open
+    if (mapInstanceRef.current) {
+      mapInstanceRef.current.setView([lat, lng], 16);
+      updateMarker(mapInstanceRef.current, lat, lng);
+    }
+
     onLocationSelect({
       latitude: lat,
       longitude: lng,
@@ -193,29 +222,15 @@ export function PharmacyLocationPicker({
     });
   };
 
-  const handleMapClick = async (lat: number, lng: number) => {
-    setMarkerPos([lat, lng]);
-    // Reverse geocode
-    try {
-      const resp = await fetch(
-        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`
-      );
-      const data = await resp.json();
-      const addr = data.display_name || `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
-      setSelectedAddress(addr);
-      onLocationSelect({ latitude: lat, longitude: lng, address: addr, source: 'manuel' });
-    } catch {
-      const addr = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
-      setSelectedAddress(addr);
-      onLocationSelect({ latitude: lat, longitude: lng, address: addr, source: 'manuel' });
-    }
-  };
-
   const clearLocation = () => {
     setMarkerPos(null);
     setSelectedAddress('');
     setSearchQuery('');
     setResults([]);
+    if (markerRef.current && mapInstanceRef.current) {
+      mapInstanceRef.current.removeLayer(markerRef.current);
+      markerRef.current = null;
+    }
   };
 
   return (
@@ -283,51 +298,19 @@ export function PharmacyLocationPicker({
         variant="outline"
         size="sm"
         className="w-full"
-        onClick={() => {
-          if (!showMap) {
-            setMapReady(false);
-            setMapKey(k => k + 1);
-            setShowMap(true);
-            // Delay rendering to ensure container has dimensions
-            setTimeout(() => setMapReady(true), 300);
-          } else {
-            setShowMap(false);
-          }
-        }}
+        onClick={() => setShowMap(prev => !prev)}
       >
         <MapPin className="w-4 h-4 mr-2" />
         {showMap ? 'Masquer la carte' : 'Sélection manuelle sur la carte'}
       </Button>
 
-      {/* Map */}
+      {/* Map - uses imperative Leaflet API for reliability in dialogs */}
       {showMap && (
-        <div className="rounded-lg overflow-hidden border" style={{ height: '256px', width: '100%' }}>
-          {mapReady ? (
-            <MapErrorBoundary key={`boundary-${mapKey}`}>
-              <MapContainer
-                key={`map-${mapKey}`}
-                center={markerPos || CI_CENTER}
-                zoom={markerPos ? 16 : 7}
-                maxBounds={CI_BOUNDS}
-                minZoom={6}
-                style={{ height: '100%', width: '100%' }}
-              >
-                <TileLayer
-                  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                />
-                <MapClickHandler onMapClick={handleMapClick} />
-                <MapSizeInvalidator />
-                {mapCenter && <MapCenterUpdater center={mapCenter} />}
-                {markerPos && <Marker position={markerPos} />}
-              </MapContainer>
-            </MapErrorBoundary>
-          ) : (
-            <div className="h-full flex items-center justify-center bg-muted/50">
-              <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-            </div>
-          )}
-        </div>
+        <div
+          ref={mapContainerRef}
+          className="rounded-lg overflow-hidden border"
+          style={{ height: '256px', width: '100%' }}
+        />
       )}
     </div>
   );
