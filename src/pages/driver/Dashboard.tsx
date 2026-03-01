@@ -130,8 +130,8 @@ export default function DriverDashboard() {
       return;
     }
 
-    // Geolocation check
-    if (hasPharmacyLocation && !isWithinZone) {
+    // Geolocation check — bypassed when offline
+    if (isOnline && hasPharmacyLocation && !isWithinZone) {
       toast.error('Vous devez être dans un rayon de 100 m de la pharmacie pour confirmer la réception');
       return;
     }
@@ -192,8 +192,8 @@ export default function DriverDashboard() {
     return `${(d / 1000).toFixed(1)} km`;
   };
 
-  // Can confirm: either no pharmacy location set, or within zone
-  const canConfirm = !hasPharmacyLocation || isWithinZone;
+  // Can confirm: either no pharmacy location set, offline, or within zone
+  const canConfirm = !isOnline || !hasPharmacyLocation || isWithinZone;
 
   return (
     <DashboardLayout requiredRole="livreur">
@@ -316,7 +316,7 @@ export default function DriverDashboard() {
               <p className="text-sm text-muted-foreground">Réf: <span className="font-mono font-medium text-foreground">{deliverDialog?.reference}</span></p>
 
               {/* Geolocation status */}
-              {hasPharmacyLocation && (
+              {hasPharmacyLocation && isOnline && (
                 <Card className={`border-2 ${isWithinZone ? 'border-green-500 bg-green-500/5' : 'border-destructive bg-destructive/5'}`}>
                   <CardContent className="pt-3 pb-3">
                     {geoLoading ? (
@@ -378,7 +378,7 @@ export default function DriverDashboard() {
               <Button
                 onClick={handleDeliver}
                 className="w-full"
-                disabled={submitting || !recipientName.trim() || !verificationCode.trim() || (hasPharmacyLocation && !canConfirm) || (hasPharmacyLocation && geoLoading)}
+                disabled={submitting || !recipientName.trim() || !verificationCode.trim() || (isOnline && hasPharmacyLocation && !canConfirm) || (isOnline && hasPharmacyLocation && geoLoading)}
               >
                 {submitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <CheckCircle className="w-4 h-4 mr-2" />}
                 Confirmer la livraison
