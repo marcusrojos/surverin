@@ -55,27 +55,85 @@ export default function DriverDashboard() {
     enabled: !!deliverDialog && hasPharmacyLocation,
   });
 
+  const CACHE_KEY_DELIVERIES = 'dpci_cached_deliveries';
+  const CACHE_KEY_PHARMACIES = 'dpci_cached_pharmacies';
+  const CACHE_KEY_AXIS = 'dpci_cached_axis_pharmacies';
+
+  // Load cached data on mount (before any fetch)
+  useEffect(() => {
+    try {
+      const cachedDel = localStorage.getItem(CACHE_KEY_DELIVERIES);
+      const cachedPhar = localStorage.getItem(CACHE_KEY_PHARMACIES);
+      const cachedAxis = localStorage.getItem(CACHE_KEY_AXIS);
+      if (cachedDel && cachedPhar) {
+        const dels: Delivery[] = JSON.parse(cachedDel);
+        const phars: Pharmacy[] = JSON.parse(cachedPhar);
+        const pharMap = new Map(phars.map(p => [p.id, p]));
+        setDeliveries(dels.map(d => ({ ...d, pharmacy: pharMap.get(d.pharmacy_id) })));
+        if (cachedAxis) {
+          const axisData = JSON.parse(cachedAxis);
+          const orderMap = new Map<string, number>();
+          axisData.forEach((ap: any) => {
+            const existing = orderMap.get(ap.pharmacy_id);
+            if (existing === undefined || ap.position < existing) {
+              orderMap.set(ap.pharmacy_id, ap.position);
+            }
+          });
+          setPharmacyOrder(orderMap);
+        }
+      }
+    } catch { /* ignore parse errors */ }
+  }, []);
+
   const fetchDeliveries = useCallback(async () => {
     if (!user) return;
-    const [delRes, pharRes, axisRes] = await Promise.all([
-      supabase.from('deliveries').select('*').eq('driver_id', user.id).order('created_at', { ascending: false }),
-      supabase.from('pharmacies').select('*'),
-      supabase.from('axis_pharmacies').select('*').order('position', { ascending: true }),
-    ]);
-    const pharMap = new Map((pharRes.data || []).map(p => [p.id, p]));
-
-    const orderMap = new Map<string, number>();
-    (axisRes.data || []).forEach(ap => {
-      const existing = orderMap.get(ap.pharmacy_id);
-      if (existing === undefined || ap.position < existing) {
-        orderMap.set(ap.pharmacy_id, ap.position);
+    if (!navigator.onLine) {
+      // Apply pending offline deliveries to cached list
+      const pending = pendingDeliveries;
+      if (pending.length > 0) {
+        setDeliveries(prev => prev.map(d => {
+          const match = pending.find(p => p.deliveryId === d.id);
+          if (match) {
+            return { ...d, status: 'livre' as const, recipient_name: match.recipientName, delivered_at: match.deliveredAt };
+          }
+          return d;
+        }));
       }
-    });
-    setPharmacyOrder(orderMap);
+      setLoading(false);
+      return;
+    }
+    try {
+      const [delRes, pharRes, axisRes] = await Promise.all([
+        supabase.from('deliveries').select('*').eq('driver_id', user.id).order('created_at', { ascending: false }),
+        supabase.from('pharmacies').select('*'),
+        supabase.from('axis_pharmacies').select('*').order('position', { ascending: true }),
+      ]);
+      const pharMap = new Map((pharRes.data || []).map(p => [p.id, p]));
 
-    setDeliveries((delRes.data || []).map(d => ({ ...d, pharmacy: pharMap.get(d.pharmacy_id) })));
+      const orderMap = new Map<string, number>();
+      (axisRes.data || []).forEach(ap => {
+        const existing = orderMap.get(ap.pharmacy_id);
+        if (existing === undefined || ap.position < existing) {
+          orderMap.set(ap.pharmacy_id, ap.position);
+        }
+      });
+      setPharmacyOrder(orderMap);
+
+      const enriched = (delRes.data || []).map(d => ({ ...d, pharmacy: pharMap.get(d.pharmacy_id) }));
+      setDeliveries(enriched);
+
+      // Cache for offline use
+      try {
+        localStorage.setItem(CACHE_KEY_DELIVERIES, JSON.stringify(delRes.data || []));
+        localStorage.setItem(CACHE_KEY_PHARMACIES, JSON.stringify(pharRes.data || []));
+        localStorage.setItem(CACHE_KEY_AXIS, JSON.stringify(axisRes.data || []));
+      } catch { /* storage full */ }
+    } catch {
+      // Network error — keep cached data
+      toast.warning('Impossible de charger les livraisons — données en cache utilisées');
+    }
     setLoading(false);
-  }, [user]);
+  }, [user, pendingDeliveries]);
 
   useEffect(() => { fetchDeliveries(); }, [fetchDeliveries]);
 
@@ -177,9 +235,25 @@ export default function DriverDashboard() {
       toast.info('Sauvegardé hors-ligne — sera synchronisé');
     }
 
+    // Update local state immediately so the UI reflects the change
+    setDeliveries(prev => prev.map(d =>
+      d.id === deliverDialog.id
+        ? { ...d, status: 'livre' as const, recipient_name: recipientName.trim(), recipient_signature: signature, delivered_at: now, nb_cartons_received: cartonsReceived, nb_sachets_received: sachetsReceived, nb_barques_received: barquesReceived }
+        : d
+    ));
+    // Also update cache
+    try {
+      const cachedDel = localStorage.getItem('dpci_cached_deliveries');
+      if (cachedDel) {
+        const dels: Delivery[] = JSON.parse(cachedDel);
+        const updated = dels.map(d => d.id === deliverDialog.id ? { ...d, status: 'livre' as const, recipient_name: recipientName.trim(), delivered_at: now } : d);
+        localStorage.setItem('dpci_cached_deliveries', JSON.stringify(updated));
+      }
+    } catch { /* ignore */ }
+
     setDeliverDialog(null);
     setSubmitting(false);
-    fetchDeliveries();
+    if (isOnline) fetchDeliveries();
   };
 
   const pending = deliveries.filter(d => d.status === 'en_attente');
