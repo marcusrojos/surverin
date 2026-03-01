@@ -88,17 +88,38 @@ export default function DriverDashboard() {
   const fetchDeliveries = useCallback(async () => {
     if (!user) return;
     if (!navigator.onLine) {
-      // Apply pending offline deliveries to cached list
-      const pending = pendingDeliveries;
-      if (pending.length > 0) {
-        setDeliveries(prev => prev.map(d => {
-          const match = pending.find(p => p.deliveryId === d.id);
-          if (match) {
-            return { ...d, status: 'livre' as const, recipient_name: match.recipientName, delivered_at: match.deliveredAt };
+      // Offline: always restore from cache + apply pending
+      try {
+        const cachedDel = localStorage.getItem(CACHE_KEY_DELIVERIES);
+        const cachedPhar = localStorage.getItem(CACHE_KEY_PHARMACIES);
+        const cachedAxis = localStorage.getItem(CACHE_KEY_AXIS);
+        if (cachedDel && cachedPhar) {
+          const dels: Delivery[] = JSON.parse(cachedDel);
+          const phars: Pharmacy[] = JSON.parse(cachedPhar);
+          const pharMap = new Map(phars.map(p => [p.id, p]));
+          // Apply any pending offline deliveries to cached data
+          const pending = pendingDeliveries;
+          const enriched = dels.map(d => {
+            const match = pending.find(p => p.deliveryId === d.id);
+            const base = match
+              ? { ...d, status: 'livre' as const, recipient_name: match.recipientName, delivered_at: match.deliveredAt }
+              : d;
+            return { ...base, pharmacy: pharMap.get(d.pharmacy_id) };
+          });
+          setDeliveries(enriched);
+          if (cachedAxis) {
+            const axisData = JSON.parse(cachedAxis);
+            const orderMap = new Map<string, number>();
+            axisData.forEach((ap: any) => {
+              const existing = orderMap.get(ap.pharmacy_id);
+              if (existing === undefined || ap.position < existing) {
+                orderMap.set(ap.pharmacy_id, ap.position);
+              }
+            });
+            setPharmacyOrder(orderMap);
           }
-          return d;
-        }));
-      }
+        }
+      } catch { /* ignore parse errors */ }
       setLoading(false);
       return;
     }
@@ -129,7 +150,17 @@ export default function DriverDashboard() {
         localStorage.setItem(CACHE_KEY_AXIS, JSON.stringify(axisRes.data || []));
       } catch { /* storage full */ }
     } catch {
-      // Network error — keep cached data
+      // Network error — restore from cache
+      try {
+        const cachedDel = localStorage.getItem(CACHE_KEY_DELIVERIES);
+        const cachedPhar = localStorage.getItem(CACHE_KEY_PHARMACIES);
+        if (cachedDel && cachedPhar) {
+          const dels: Delivery[] = JSON.parse(cachedDel);
+          const phars: Pharmacy[] = JSON.parse(cachedPhar);
+          const pharMap = new Map(phars.map(p => [p.id, p]));
+          setDeliveries(dels.map(d => ({ ...d, pharmacy: pharMap.get(d.pharmacy_id) })));
+        }
+      } catch { /* ignore */ }
       toast.warning('Impossible de charger les livraisons — données en cache utilisées');
     }
     setLoading(false);
