@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">DPCI Delivery</string>
+    <string name="title_activity_main">DPCI Delivery</string>
+    <string name="package_name">com.dpcidelivery.app</string>
+    <string name="custom_url_scheme">com.dpcidelivery.app</string>
+</resources>
