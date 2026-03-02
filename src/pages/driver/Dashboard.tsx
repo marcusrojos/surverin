@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { useAuth } from '@/lib/auth';
 import { supabase } from '@/integrations/supabase/client';
@@ -26,6 +26,8 @@ type Pharmacy = Database['public']['Tables']['pharmacies']['Row'];
 export default function DriverDashboard() {
   const { user } = useAuth();
   const { isOnline, pendingDeliveries, queueDelivery, syncPending } = useOfflineSync();
+  const pendingRef = useRef(pendingDeliveries);
+  pendingRef.current = pendingDeliveries;
   const [deliveries, setDeliveries] = useState<(Delivery & { pharmacy?: Pharmacy })[]>([]);
   const [loading, setLoading] = useState(true);
   const [deliverDialog, setDeliverDialog] = useState<(Delivery & { pharmacy?: Pharmacy }) | null>(null);
@@ -85,41 +87,51 @@ export default function DriverDashboard() {
     } catch { /* ignore parse errors */ }
   }, []);
 
+  const restoreFromCache = useCallback(() => {
+    try {
+      const cachedDel = localStorage.getItem(CACHE_KEY_DELIVERIES);
+      const cachedPhar = localStorage.getItem(CACHE_KEY_PHARMACIES);
+      const cachedAxis = localStorage.getItem(CACHE_KEY_AXIS);
+      if (cachedDel && cachedPhar) {
+        const dels: Delivery[] = JSON.parse(cachedDel);
+        const phars: Pharmacy[] = JSON.parse(cachedPhar);
+        const pharMap = new Map(phars.map(p => [p.id, p]));
+        const pending = pendingRef.current;
+        const enriched = dels.map(d => {
+          const match = pending.find(p => p.deliveryId === d.id);
+          const base = match
+            ? { ...d, status: 'livre' as const, recipient_name: match.recipientName, delivered_at: match.deliveredAt }
+            : d;
+          return { ...base, pharmacy: pharMap.get(d.pharmacy_id) };
+        });
+        setDeliveries(enriched);
+        if (cachedAxis) {
+          const axisData = JSON.parse(cachedAxis);
+          const orderMap = new Map<string, number>();
+          axisData.forEach((ap: any) => {
+            const existing = orderMap.get(ap.pharmacy_id);
+            if (existing === undefined || ap.position < existing) {
+              orderMap.set(ap.pharmacy_id, ap.position);
+            }
+          });
+          setPharmacyOrder(orderMap);
+        }
+      }
+    } catch { /* ignore parse errors */ }
+  }, []);
+
   const fetchDeliveries = useCallback(async () => {
     if (!user) return;
+    // When offline, don't try to fetch — just keep current state
     if (!navigator.onLine) {
-      // Offline: always restore from cache + apply pending
-      try {
-        const cachedDel = localStorage.getItem(CACHE_KEY_DELIVERIES);
-        const cachedPhar = localStorage.getItem(CACHE_KEY_PHARMACIES);
-        const cachedAxis = localStorage.getItem(CACHE_KEY_AXIS);
-        if (cachedDel && cachedPhar) {
-          const dels: Delivery[] = JSON.parse(cachedDel);
-          const phars: Pharmacy[] = JSON.parse(cachedPhar);
-          const pharMap = new Map(phars.map(p => [p.id, p]));
-          // Apply any pending offline deliveries to cached data
-          const pending = pendingDeliveries;
-          const enriched = dels.map(d => {
-            const match = pending.find(p => p.deliveryId === d.id);
-            const base = match
-              ? { ...d, status: 'livre' as const, recipient_name: match.recipientName, delivered_at: match.deliveredAt }
-              : d;
-            return { ...base, pharmacy: pharMap.get(d.pharmacy_id) };
-          });
-          setDeliveries(enriched);
-          if (cachedAxis) {
-            const axisData = JSON.parse(cachedAxis);
-            const orderMap = new Map<string, number>();
-            axisData.forEach((ap: any) => {
-              const existing = orderMap.get(ap.pharmacy_id);
-              if (existing === undefined || ap.position < existing) {
-                orderMap.set(ap.pharmacy_id, ap.position);
-              }
-            });
-            setPharmacyOrder(orderMap);
-          }
+      // Only restore from cache if deliveries are empty (first load offline)
+      setDeliveries(prev => {
+        if (prev.length === 0) {
+          // Trigger cache restore asynchronously
+          setTimeout(() => restoreFromCache(), 0);
         }
-      } catch { /* ignore parse errors */ }
+        return prev;
+      });
       setLoading(false);
       return;
     }
@@ -150,29 +162,34 @@ export default function DriverDashboard() {
         localStorage.setItem(CACHE_KEY_AXIS, JSON.stringify(axisRes.data || []));
       } catch { /* storage full */ }
     } catch {
-      // Network error — restore from cache
-      try {
-        const cachedDel = localStorage.getItem(CACHE_KEY_DELIVERIES);
-        const cachedPhar = localStorage.getItem(CACHE_KEY_PHARMACIES);
-        if (cachedDel && cachedPhar) {
-          const dels: Delivery[] = JSON.parse(cachedDel);
-          const phars: Pharmacy[] = JSON.parse(cachedPhar);
-          const pharMap = new Map(phars.map(p => [p.id, p]));
-          setDeliveries(dels.map(d => ({ ...d, pharmacy: pharMap.get(d.pharmacy_id) })));
-        }
-      } catch { /* ignore */ }
+      // Network error — restore from cache if state is empty
+      restoreFromCache();
       toast.warning('Impossible de charger les livraisons — données en cache utilisées');
     }
     setLoading(false);
-  }, [user, pendingDeliveries]);
+  }, [user, restoreFromCache]);
 
-  useEffect(() => { fetchDeliveries(); }, [fetchDeliveries]);
+  // Initial fetch + refetch when online status changes (only fetch when online)
+  useEffect(() => {
+    if (isOnline) {
+      fetchDeliveries();
+    } else {
+      setLoading(false);
+    }
+  }, [isOnline, fetchDeliveries]);
+
+  // Stable refs for realtime callbacks to avoid constant channel re-subscription
+  const fetchRef = useRef(fetchDeliveries);
+  fetchRef.current = fetchDeliveries;
+  const stableOnNew = useCallback(() => { if (navigator.onLine) fetchRef.current(); }, []);
+  const stableOnUpdate = useCallback(() => { if (navigator.onLine) fetchRef.current(); }, []);
+  const stableOnDelete = useCallback(() => { if (navigator.onLine) fetchRef.current(); }, []);
 
   useRealtimeDeliveries({
     userId: user?.id,
-    onNewDelivery: () => fetchDeliveries(),
-    onDeliveryUpdate: () => fetchDeliveries(),
-    onDeliveryDelete: () => fetchDeliveries(),
+    onNewDelivery: stableOnNew,
+    onDeliveryUpdate: stableOnUpdate,
+    onDeliveryDelete: stableOnDelete,
   });
 
   const groupedByDate = useMemo(() => {
