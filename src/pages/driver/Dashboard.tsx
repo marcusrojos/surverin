@@ -1,8 +1,7 @@
-import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
+import { useState, useCallback, useMemo, useRef } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { useAuth } from '@/lib/auth';
-import { supabase } from '@/integrations/supabase/client';
-import { useOfflineSync } from '@/hooks/use-offline-sync';
+import { useOfflineDeliveries, EnrichedDelivery } from '@/hooks/useOfflineDeliveries';
 import { useRealtimeDeliveries } from '@/hooks/use-realtime-deliveries';
 import { useGeolocation } from '@/hooks/use-geolocation';
 import { calculateDistance, GEOFENCE_RADIUS } from '@/lib/geolocation';
@@ -15,7 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { StatusBadge } from '@/components/ui/status-badge';
 import { SignaturePad } from '@/components/ui/signature-pad';
 import { toast } from 'sonner';
-import { Package, CheckCircle, WifiOff, Loader2, Truck, Filter, CalendarDays, MapPin, Navigation, AlertTriangle } from 'lucide-react';
+import { Package, CheckCircle, WifiOff, Loader2, Truck, Filter, CalendarDays, MapPin, Navigation, AlertTriangle, RefreshCw } from 'lucide-react';
 import { Database } from '@/integrations/supabase/types';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -25,12 +24,18 @@ type Pharmacy = Database['public']['Tables']['pharmacies']['Row'];
 
 export default function DriverDashboard() {
   const { user } = useAuth();
-  const { isOnline, pendingDeliveries, queueDelivery, syncPending } = useOfflineSync();
-  const pendingRef = useRef(pendingDeliveries);
-  pendingRef.current = pendingDeliveries;
-  const [deliveries, setDeliveries] = useState<(Delivery & { pharmacy?: Pharmacy })[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [deliverDialog, setDeliverDialog] = useState<(Delivery & { pharmacy?: Pharmacy }) | null>(null);
+  const {
+    deliveries,
+    pharmacyOrder,
+    loading,
+    isOnline,
+    isSyncing,
+    pendingCount,
+    validateDelivery,
+    refetch,
+  } = useOfflineDeliveries({ userId: user?.id });
+
+  const [deliverDialog, setDeliverDialog] = useState<EnrichedDelivery | null>(null);
   const [recipientName, setRecipientName] = useState('');
   const [signature, setSignature] = useState<string | null>(null);
   const [cartonsReceived, setCartonsReceived] = useState(0);
@@ -43,9 +48,6 @@ export default function DriverDashboard() {
   const [statusFilter, setStatusFilter] = useState<'all' | 'en_attente' | 'livre'>('all');
   const [dateFilter, setDateFilter] = useState('');
 
-  // Pharmacy order from axes
-  const [pharmacyOrder, setPharmacyOrder] = useState<Map<string, number>>(new Map());
-
   // Geolocation for delivery confirmation
   const pharmacyLat = (deliverDialog?.pharmacy as any)?.latitude ?? null;
   const pharmacyLng = (deliverDialog?.pharmacy as any)?.longitude ?? null;
@@ -57,133 +59,12 @@ export default function DriverDashboard() {
     enabled: !!deliverDialog && hasPharmacyLocation,
   });
 
-  const CACHE_KEY_DELIVERIES = 'dpci_cached_deliveries';
-  const CACHE_KEY_PHARMACIES = 'dpci_cached_pharmacies';
-  const CACHE_KEY_AXIS = 'dpci_cached_axis_pharmacies';
-
-  // Load cached data on mount (before any fetch)
-  useEffect(() => {
-    try {
-      const cachedDel = localStorage.getItem(CACHE_KEY_DELIVERIES);
-      const cachedPhar = localStorage.getItem(CACHE_KEY_PHARMACIES);
-      const cachedAxis = localStorage.getItem(CACHE_KEY_AXIS);
-      if (cachedDel && cachedPhar) {
-        const dels: Delivery[] = JSON.parse(cachedDel);
-        const phars: Pharmacy[] = JSON.parse(cachedPhar);
-        const pharMap = new Map(phars.map(p => [p.id, p]));
-        setDeliveries(dels.map(d => ({ ...d, pharmacy: pharMap.get(d.pharmacy_id) })));
-        if (cachedAxis) {
-          const axisData = JSON.parse(cachedAxis);
-          const orderMap = new Map<string, number>();
-          axisData.forEach((ap: any) => {
-            const existing = orderMap.get(ap.pharmacy_id);
-            if (existing === undefined || ap.position < existing) {
-              orderMap.set(ap.pharmacy_id, ap.position);
-            }
-          });
-          setPharmacyOrder(orderMap);
-        }
-      }
-    } catch { /* ignore parse errors */ }
-  }, []);
-
-  const restoreFromCache = useCallback(() => {
-    try {
-      const cachedDel = localStorage.getItem(CACHE_KEY_DELIVERIES);
-      const cachedPhar = localStorage.getItem(CACHE_KEY_PHARMACIES);
-      const cachedAxis = localStorage.getItem(CACHE_KEY_AXIS);
-      if (cachedDel && cachedPhar) {
-        const dels: Delivery[] = JSON.parse(cachedDel);
-        const phars: Pharmacy[] = JSON.parse(cachedPhar);
-        const pharMap = new Map(phars.map(p => [p.id, p]));
-        const pending = pendingRef.current;
-        const enriched = dels.map(d => {
-          const match = pending.find(p => p.deliveryId === d.id);
-          const base = match
-            ? { ...d, status: 'livre' as const, recipient_name: match.recipientName, delivered_at: match.deliveredAt }
-            : d;
-          return { ...base, pharmacy: pharMap.get(d.pharmacy_id) };
-        });
-        setDeliveries(enriched);
-        if (cachedAxis) {
-          const axisData = JSON.parse(cachedAxis);
-          const orderMap = new Map<string, number>();
-          axisData.forEach((ap: any) => {
-            const existing = orderMap.get(ap.pharmacy_id);
-            if (existing === undefined || ap.position < existing) {
-              orderMap.set(ap.pharmacy_id, ap.position);
-            }
-          });
-          setPharmacyOrder(orderMap);
-        }
-      }
-    } catch { /* ignore parse errors */ }
-  }, []);
-
-  const fetchDeliveries = useCallback(async () => {
-    if (!user) return;
-    // When offline, don't try to fetch — just keep current state
-    if (!navigator.onLine) {
-      // Only restore from cache if deliveries are empty (first load offline)
-      setDeliveries(prev => {
-        if (prev.length === 0) {
-          // Trigger cache restore asynchronously
-          setTimeout(() => restoreFromCache(), 0);
-        }
-        return prev;
-      });
-      setLoading(false);
-      return;
-    }
-    try {
-      const [delRes, pharRes, axisRes] = await Promise.all([
-        supabase.from('deliveries').select('*').eq('driver_id', user.id).order('created_at', { ascending: false }),
-        supabase.from('pharmacies').select('*'),
-        supabase.from('axis_pharmacies').select('*').order('position', { ascending: true }),
-      ]);
-      const pharMap = new Map((pharRes.data || []).map(p => [p.id, p]));
-
-      const orderMap = new Map<string, number>();
-      (axisRes.data || []).forEach(ap => {
-        const existing = orderMap.get(ap.pharmacy_id);
-        if (existing === undefined || ap.position < existing) {
-          orderMap.set(ap.pharmacy_id, ap.position);
-        }
-      });
-      setPharmacyOrder(orderMap);
-
-      const enriched = (delRes.data || []).map(d => ({ ...d, pharmacy: pharMap.get(d.pharmacy_id) }));
-      setDeliveries(enriched);
-
-      // Cache for offline use
-      try {
-        localStorage.setItem(CACHE_KEY_DELIVERIES, JSON.stringify(delRes.data || []));
-        localStorage.setItem(CACHE_KEY_PHARMACIES, JSON.stringify(pharRes.data || []));
-        localStorage.setItem(CACHE_KEY_AXIS, JSON.stringify(axisRes.data || []));
-      } catch { /* storage full */ }
-    } catch {
-      // Network error — restore from cache if state is empty
-      restoreFromCache();
-      toast.warning('Impossible de charger les livraisons — données en cache utilisées');
-    }
-    setLoading(false);
-  }, [user, restoreFromCache]);
-
-  // Initial fetch + refetch when online status changes (only fetch when online)
-  useEffect(() => {
-    if (isOnline) {
-      fetchDeliveries();
-    } else {
-      setLoading(false);
-    }
-  }, [isOnline, fetchDeliveries]);
-
-  // Stable refs for realtime callbacks to avoid constant channel re-subscription
-  const fetchRef = useRef(fetchDeliveries);
-  fetchRef.current = fetchDeliveries;
-  const stableOnNew = useCallback(() => { if (navigator.onLine) fetchRef.current(); }, []);
-  const stableOnUpdate = useCallback(() => { if (navigator.onLine) fetchRef.current(); }, []);
-  const stableOnDelete = useCallback(() => { if (navigator.onLine) fetchRef.current(); }, []);
+  // Stable refs for realtime callbacks
+  const refetchRef = useRef(refetch);
+  refetchRef.current = refetch;
+  const stableOnNew = useCallback(() => { if (navigator.onLine) refetchRef.current(); }, []);
+  const stableOnUpdate = useCallback(() => { if (navigator.onLine) refetchRef.current(); }, []);
+  const stableOnDelete = useCallback(() => { if (navigator.onLine) refetchRef.current(); }, []);
 
   useRealtimeDeliveries({
     userId: user?.id,
@@ -217,7 +98,7 @@ export default function DriverDashboard() {
     return Array.from(groups.entries()).sort((a, b) => b[0].localeCompare(a[0]));
   }, [deliveries, statusFilter, dateFilter, pharmacyOrder]);
 
-  const openDeliver = (d: Delivery & { pharmacy?: Pharmacy }) => {
+  const openDeliver = (d: EnrichedDelivery) => {
     setDeliverDialog(d);
     setRecipientName('');
     setVerificationCode('');
@@ -230,13 +111,11 @@ export default function DriverDashboard() {
   const handleDeliver = async () => {
     if (!deliverDialog || !recipientName.trim()) return;
 
-    // Verification code check
     if (deliverDialog.verification_code && verificationCode.trim() !== deliverDialog.verification_code) {
       toast.error('Code de vérification incorrect');
       return;
     }
 
-    // Geolocation check — bypassed when offline
     if (isOnline && hasPharmacyLocation && !isWithinZone) {
       toast.error('Vous devez être dans un rayon de 100 m de la pharmacie pour confirmer la réception');
       return;
@@ -245,7 +124,7 @@ export default function DriverDashboard() {
     setSubmitting(true);
     const now = new Date().toISOString();
 
-    const updatePayload: any = {
+    const payload: any = {
       status: 'livre' as const,
       recipient_name: recipientName.trim(),
       recipient_signature: signature,
@@ -255,66 +134,26 @@ export default function DriverDashboard() {
       nb_barques_received: barquesReceived,
     };
 
-    // Save driver position if available
     if (driverPosition) {
-      updatePayload.driver_latitude = driverPosition.latitude;
-      updatePayload.driver_longitude = driverPosition.longitude;
+      payload.driver_latitude = driverPosition.latitude;
+      payload.driver_longitude = driverPosition.longitude;
     }
 
-    if (isOnline) {
-      const { error } = await supabase.from('deliveries').update(updatePayload).eq('id', deliverDialog.id);
-
-      if (error) {
-        toast.error('Erreur — sauvegarde hors-ligne');
-        queueDelivery({
-          deliveryId: deliverDialog.id, reference: deliverDialog.reference,
-          recipientName: recipientName.trim(), recipientSignature: signature, deliveredAt: now,
-          nb_cartons_received: cartonsReceived, nb_sachets_received: sachetsReceived, nb_barques_received: barquesReceived,
-        });
-      } else {
-        toast.success('Livraison confirmée ✓');
-      }
-    } else {
-      queueDelivery({
-        deliveryId: deliverDialog.id, reference: deliverDialog.reference,
-        recipientName: recipientName.trim(), recipientSignature: signature, deliveredAt: now,
-        nb_cartons_received: cartonsReceived, nb_sachets_received: sachetsReceived, nb_barques_received: barquesReceived,
-      });
-      toast.info('Sauvegardé hors-ligne — sera synchronisé');
-    }
-
-    // Update local state immediately so the UI reflects the change
-    setDeliveries(prev => prev.map(d =>
-      d.id === deliverDialog.id
-        ? { ...d, status: 'livre' as const, recipient_name: recipientName.trim(), recipient_signature: signature, delivered_at: now, nb_cartons_received: cartonsReceived, nb_sachets_received: sachetsReceived, nb_barques_received: barquesReceived }
-        : d
-    ));
-    // Also update cache
-    try {
-      const cachedDel = localStorage.getItem('dpci_cached_deliveries');
-      if (cachedDel) {
-        const dels: Delivery[] = JSON.parse(cachedDel);
-        const updated = dels.map(d => d.id === deliverDialog.id ? { ...d, status: 'livre' as const, recipient_name: recipientName.trim(), delivered_at: now } : d);
-        localStorage.setItem('dpci_cached_deliveries', JSON.stringify(updated));
-      }
-    } catch { /* ignore */ }
+    await validateDelivery(deliverDialog.id, payload);
 
     setDeliverDialog(null);
     setSubmitting(false);
-    if (isOnline) fetchDeliveries();
   };
 
   const pending = deliveries.filter(d => d.status === 'en_attente');
   const delivered = deliveries.filter(d => d.status === 'livre');
 
-  // Format distance display
   const formatDistance = (d: number | null) => {
     if (d === null) return '';
     if (d < 1000) return `${Math.round(d)} m`;
     return `${(d / 1000).toFixed(1)} km`;
   };
 
-  // Can confirm: either no pharmacy location set, offline, or within zone
   const canConfirm = !isOnline || !hasPharmacyLocation || isWithinZone;
 
   return (
@@ -322,12 +161,21 @@ export default function DriverDashboard() {
       <div className="space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
           <h1 className="text-xl sm:text-2xl font-bold">Mes livraisons</h1>
-          {!isOnline && (
-            <div className="flex items-center gap-2 text-warning text-sm">
-              <WifiOff className="w-4 h-4" />
-              Hors-ligne ({pendingDeliveries.length} en attente)
-            </div>
-          )}
+          <div className="flex items-center gap-3">
+            {isSyncing && (
+              <div className="flex items-center gap-1 text-primary text-sm">
+                <RefreshCw className="w-4 h-4 animate-spin" />
+                Synchronisation…
+              </div>
+            )}
+            {!isOnline && (
+              <div className="flex items-center gap-2 text-warning text-sm">
+                <WifiOff className="w-4 h-4" />
+                Hors-ligne
+                {pendingCount > 0 && <span className="font-medium">({pendingCount} en attente)</span>}
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="grid grid-cols-2 gap-3">
@@ -405,6 +253,12 @@ export default function DriverDashboard() {
                             <div className="flex items-center gap-2 flex-wrap">
                               <p className="font-mono font-medium text-sm">{d.reference}</p>
                               <StatusBadge status={d.status} />
+                              {d.pendingSync && (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-warning/20 text-warning">
+                                  <RefreshCw className="w-3 h-3 mr-1" />
+                                  Sync en attente
+                                </span>
+                              )}
                             </div>
                             <p className="text-sm text-muted-foreground truncate">{d.pharmacy?.name || '—'}</p>
                             <p className="text-xs text-muted-foreground mt-1">{d.nb_cartons}C · {d.nb_sachets}S · {d.nb_barques}B</p>
