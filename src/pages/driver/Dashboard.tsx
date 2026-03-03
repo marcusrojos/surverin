@@ -111,7 +111,9 @@ export default function DriverDashboard() {
   const handleDeliver = async () => {
     if (!deliverDialog || !recipientName.trim()) return;
 
-    if (deliverDialog.verification_code && verificationCode.trim() !== deliverDialog.verification_code) {
+    // Only check verification code if the delivery has one
+    const hasVerificationCode = !!deliverDialog.verification_code;
+    if (hasVerificationCode && verificationCode.trim() !== deliverDialog.verification_code) {
       toast.error('Code de vérification incorrect');
       return;
     }
@@ -330,17 +332,24 @@ export default function DriverDashboard() {
                 </Card>
               )}
 
-              <div className="space-y-2">
-                <Label>Code de vérification</Label>
-                <Input
-                  value={verificationCode}
-                  onChange={(e) => setVerificationCode(e.target.value)}
-                  placeholder="Entrez le code à 6 chiffres"
-                  maxLength={6}
-                  className="font-mono tracking-widest text-center text-lg"
-                />
-                <p className="text-xs text-muted-foreground">Demandez le code de vérification au réceptionnaire de la pharmacie</p>
-              </div>
+              {/* Verification code - only show if delivery has one */}
+              {deliverDialog?.verification_code ? (
+                <div className="space-y-2">
+                  <Label>Code de vérification</Label>
+                  <Input
+                    value={verificationCode}
+                    onChange={(e) => setVerificationCode(e.target.value)}
+                    placeholder="Entrez le code à 6 chiffres"
+                    maxLength={6}
+                    className="font-mono tracking-widest text-center text-lg"
+                  />
+                  <p className="text-xs text-muted-foreground">Demandez le code de vérification au réceptionnaire de la pharmacie</p>
+                </div>
+              ) : (
+                <div className="p-3 bg-muted rounded-lg text-sm text-muted-foreground">
+                  Pas de code de vérification requis pour cette pharmacie
+                </div>
+              )}
               <div className="space-y-2"><Label>Nom du réceptionnaire</Label><Input value={recipientName} onChange={(e) => setRecipientName(e.target.value)} placeholder="Nom et prénom" /></div>
               <div className="grid grid-cols-3 gap-2 sm:gap-3">
                 <div className="space-y-1"><Label className="text-xs">Cartons reçus</Label><Input type="number" min={0} value={cartonsReceived} onChange={(e) => setCartonsReceived(Number(e.target.value))} /></div>
@@ -354,7 +363,7 @@ export default function DriverDashboard() {
               <Button
                 onClick={handleDeliver}
                 className="w-full"
-                disabled={submitting || !recipientName.trim() || !verificationCode.trim() || (isOnline && hasPharmacyLocation && !canConfirm) || (isOnline && hasPharmacyLocation && geoLoading)}
+                disabled={submitting || !recipientName.trim() || (!!deliverDialog?.verification_code && !verificationCode.trim()) || (isOnline && hasPharmacyLocation && !canConfirm) || (isOnline && hasPharmacyLocation && geoLoading)}
               >
                 {submitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <CheckCircle className="w-4 h-4 mr-2" />}
                 Confirmer la livraison

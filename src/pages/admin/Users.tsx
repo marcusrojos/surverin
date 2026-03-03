@@ -37,6 +37,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
 import { Plus, Pencil, Trash2, Search, Users, Loader2, Shield, Truck, Eye, EyeOff } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -50,6 +51,7 @@ interface UserWithRole {
   username: string | null;
   role: 'admin' | 'livreur' | 'pharmacie';
   created_at: string;
+  is_active: boolean;
 }
 
 const userSchema = z.object({
@@ -78,6 +80,7 @@ export default function UsersPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [newPassword, setNewPassword] = useState('');
+  const [togglingUserId, setTogglingUserId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchUsers();
@@ -109,9 +112,9 @@ export default function UsersPage() {
             username: profile.username || null,
             role: (userRole?.role as 'admin' | 'livreur' | 'pharmacie') || 'livreur',
             created_at: profile.created_at,
+            is_active: (profile as any).is_active ?? true,
           };
         })
-        // Filter out pharmacy users - they are managed in the Pharmacies page
         .filter(u => u.role !== 'pharmacie');
 
       setUsers(usersWithRoles);
@@ -119,6 +122,26 @@ export default function UsersPage() {
       toast.error('Erreur lors du chargement des utilisateurs');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleToggleActive = async (user: UserWithRole) => {
+    setTogglingUserId(user.id);
+    try {
+      const newStatus = !user.is_active;
+      const { error } = await supabase
+        .from('profiles')
+        .update({ is_active: newStatus } as any)
+        .eq('id', user.id);
+
+      if (error) throw error;
+
+      setUsers(prev => prev.map(u => u.id === user.id ? { ...u, is_active: newStatus } : u));
+      toast.success(newStatus ? 'Compte réactivé' : 'Compte désactivé');
+    } catch {
+      toast.error('Erreur lors de la modification du statut');
+    } finally {
+      setTogglingUserId(null);
     }
   };
 
@@ -181,7 +204,6 @@ export default function UsersPage() {
 
         if (roleError) throw roleError;
 
-        // Update password if provided
         if (newPassword) {
           if (newPassword.length < 6) {
             toast.error('Le mot de passe doit contenir au moins 6 caractères');
@@ -308,12 +330,13 @@ export default function UsersPage() {
                   <TableHead className="hidden md:table-cell">Identifiant</TableHead>
                   <TableHead className="hidden md:table-cell">Email</TableHead>
                   <TableHead>Rôle</TableHead>
+                  <TableHead>Actif</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredUsers.map((user) => (
-                  <TableRow key={user.id}>
+                  <TableRow key={user.id} className={!user.is_active ? 'opacity-50' : ''}>
                     <TableCell className="font-medium">{user.full_name}</TableCell>
                     <TableCell className="hidden md:table-cell font-mono text-sm text-primary">
                       {user.username || '-'}
@@ -333,6 +356,13 @@ export default function UsersPage() {
                         )}
                         {user.role === 'admin' ? 'Admin' : 'Livreur'}
                       </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Switch
+                        checked={user.is_active}
+                        onCheckedChange={() => handleToggleActive(user)}
+                        disabled={togglingUserId === user.id}
+                      />
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-2">

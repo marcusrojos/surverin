@@ -51,6 +51,7 @@ interface Pharmacy {
   client_code?: string;
   phone?: string | null;
   email?: string | null;
+  user_id?: string | null;
 }
 
 interface Driver {
@@ -113,7 +114,7 @@ export default function DeliveriesPage() {
 
       const { data: pharmaciesData } = await supabase
         .from('pharmacies')
-        .select('id, name, address, client_code, phone, email')
+        .select('id, name, address, client_code, phone, email, user_id')
         .order('name');
 
       const { data: driverRoles } = await supabase
@@ -196,7 +197,9 @@ export default function DeliveriesPage() {
         toast.success('Livraison modifiée');
         setIsDialogOpen(false);
       } else {
-        const verificationCode = generateVerificationCode();
+        // Determine if pharmacy has an account — if not, no verification code
+        const selectedPharmacy = pharmacies.find(p => p.id === formData.pharmacy_id);
+        const verificationCode = selectedPharmacy?.user_id ? generateVerificationCode() : null;
         
         const { error } = await supabase
           .from('deliveries')
@@ -223,9 +226,14 @@ export default function DeliveriesPage() {
           throw error;
         }
         
-        setNewVerificationCode(verificationCode);
-        setIsDialogOpen(false);
-        setIsCodeDialogOpen(true);
+        if (verificationCode) {
+          setNewVerificationCode(verificationCode);
+          setIsDialogOpen(false);
+          setIsCodeDialogOpen(true);
+        } else {
+          toast.success('Livraison créée (sans code de vérification — pharmacie sans compte)');
+          setIsDialogOpen(false);
+        }
       }
 
       fetchData();

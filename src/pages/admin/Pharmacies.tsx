@@ -29,6 +29,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { Switch } from '@/components/ui/switch';
 import { Plus, Pencil, Trash2, Search, Building2, Loader2, User, Eye, EyeOff, MapPin } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -50,6 +51,7 @@ interface Pharmacy {
 
 export default function PharmaciesPage() {
   const [pharmacies, setPharmacies] = useState<Pharmacy[]>([]);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -81,7 +83,27 @@ export default function PharmaciesPage() {
         .order('name');
 
       if (error) throw error;
-      setPharmacies(data || []);
+      
+      // For pharmacies with accounts, fetch their profile is_active status
+      const pharmaciesWithStatus = data || [];
+      const userIds = pharmaciesWithStatus.filter(p => p.user_id).map(p => p.user_id!);
+      
+      let profileStatuses = new Map<string, boolean>();
+      if (userIds.length > 0) {
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('user_id, is_active')
+          .in('user_id', userIds);
+        
+        (profiles || []).forEach((p: any) => {
+          profileStatuses.set(p.user_id, p.is_active ?? true);
+        });
+      }
+      
+      setPharmacies(pharmaciesWithStatus.map(p => ({
+        ...p,
+        _is_active: p.user_id ? (profileStatuses.get(p.user_id!) ?? true) : undefined,
+      })) as any);
     } catch (error) {
       toast.error('Erreur lors du chargement des pharmacies');
     } finally {
@@ -109,6 +131,30 @@ export default function PharmaciesPage() {
     }
     setShowPassword(false);
     setIsDialogOpen(true);
+  };
+
+  const handleTogglePharmacyActive = async (pharmacy: Pharmacy) => {
+    if (!pharmacy.user_id) return;
+    setTogglingId(pharmacy.id);
+    try {
+      const current = (pharmacy as any)._is_active ?? true;
+      const newStatus = !current;
+      const { error } = await supabase
+        .from('profiles')
+        .update({ is_active: newStatus } as any)
+        .eq('user_id', pharmacy.user_id);
+
+      if (error) throw error;
+
+      setPharmacies(prev => prev.map(p => 
+        p.id === pharmacy.id ? { ...p, _is_active: newStatus } as any : p
+      ));
+      toast.success(newStatus ? 'Compte pharmacie réactivé' : 'Compte pharmacie désactivé');
+    } catch {
+      toast.error('Erreur lors de la modification du statut');
+    } finally {
+      setTogglingId(null);
+    }
   };
 
   const handleSave = async () => {
@@ -331,6 +377,7 @@ export default function PharmaciesPage() {
                   <TableHead className="hidden lg:table-cell">Téléphone</TableHead>
                   <TableHead className="hidden lg:table-cell">Email</TableHead>
                   <TableHead className="hidden md:table-cell">Compte</TableHead>
+                  <TableHead className="hidden md:table-cell">Statut</TableHead>
                   <TableHead className="hidden md:table-cell">GPS</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
@@ -356,7 +403,19 @@ export default function PharmaciesPage() {
                           Actif
                         </span>
                       ) : (
-                        <span className="text-xs text-muted-foreground">-</span>
+                        <span className="text-xs text-muted-foreground">Sans compte</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="hidden md:table-cell">
+                      {pharmacy.user_id && (
+                        <Switch
+                          checked={(() => {
+                            // We need to check profile is_active for this pharmacy's user
+                            return (pharmacy as any)._is_active ?? true;
+                          })()}
+                          onCheckedChange={() => handleTogglePharmacyActive(pharmacy)}
+                          disabled={togglingId === pharmacy.id}
+                        />
                       )}
                     </TableCell>
                     <TableCell className="hidden md:table-cell">
