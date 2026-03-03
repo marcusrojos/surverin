@@ -377,6 +377,7 @@ export default function PharmaciesPage() {
                   <TableHead className="hidden lg:table-cell">Téléphone</TableHead>
                   <TableHead className="hidden lg:table-cell">Email</TableHead>
                   <TableHead className="hidden md:table-cell">Compte</TableHead>
+                  <TableHead className="hidden md:table-cell">Statut</TableHead>
                   <TableHead className="hidden md:table-cell">GPS</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
