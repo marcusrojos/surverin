@@ -83,7 +83,27 @@ export default function PharmaciesPage() {
         .order('name');
 
       if (error) throw error;
-      setPharmacies(data || []);
+      
+      // For pharmacies with accounts, fetch their profile is_active status
+      const pharmaciesWithStatus = data || [];
+      const userIds = pharmaciesWithStatus.filter(p => p.user_id).map(p => p.user_id!);
+      
+      let profileStatuses = new Map<string, boolean>();
+      if (userIds.length > 0) {
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('user_id, is_active')
+          .in('user_id', userIds);
+        
+        (profiles || []).forEach((p: any) => {
+          profileStatuses.set(p.user_id, p.is_active ?? true);
+        });
+      }
+      
+      setPharmacies(pharmaciesWithStatus.map(p => ({
+        ...p,
+        _is_active: p.user_id ? (profileStatuses.get(p.user_id!) ?? true) : undefined,
+      })) as any);
     } catch (error) {
       toast.error('Erreur lors du chargement des pharmacies');
     } finally {
