@@ -226,9 +226,14 @@ export default function DeliveriesPage() {
           throw error;
         }
         
-        setNewVerificationCode(verificationCode);
-        setIsDialogOpen(false);
-        setIsCodeDialogOpen(true);
+        if (verificationCode) {
+          setNewVerificationCode(verificationCode);
+          setIsDialogOpen(false);
+          setIsCodeDialogOpen(true);
+        } else {
+          toast.success('Livraison créée (sans code de vérification — pharmacie sans compte)');
+          setIsDialogOpen(false);
+        }
       }
 
       fetchData();
