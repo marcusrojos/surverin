@@ -133,6 +133,30 @@ export default function PharmaciesPage() {
     setIsDialogOpen(true);
   };
 
+  const handleTogglePharmacyActive = async (pharmacy: Pharmacy) => {
+    if (!pharmacy.user_id) return;
+    setTogglingId(pharmacy.id);
+    try {
+      const current = (pharmacy as any)._is_active ?? true;
+      const newStatus = !current;
+      const { error } = await supabase
+        .from('profiles')
+        .update({ is_active: newStatus } as any)
+        .eq('user_id', pharmacy.user_id);
+
+      if (error) throw error;
+
+      setPharmacies(prev => prev.map(p => 
+        p.id === pharmacy.id ? { ...p, _is_active: newStatus } as any : p
+      ));
+      toast.success(newStatus ? 'Compte pharmacie réactivé' : 'Compte pharmacie désactivé');
+    } catch {
+      toast.error('Erreur lors de la modification du statut');
+    } finally {
+      setTogglingId(null);
+    }
+  };
+
   const handleSave = async () => {
     if (!formData.name.trim()) {
       toast.error('Le nom de la pharmacie est requis');
