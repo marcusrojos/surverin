@@ -358,7 +358,19 @@ export default function PharmaciesPage() {
                           Actif
                         </span>
                       ) : (
-                        <span className="text-xs text-muted-foreground">-</span>
+                        <span className="text-xs text-muted-foreground">Sans compte</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="hidden md:table-cell">
+                      {pharmacy.user_id && (
+                        <Switch
+                          checked={(() => {
+                            // We need to check profile is_active for this pharmacy's user
+                            return (pharmacy as any)._is_active ?? true;
+                          })()}
+                          onCheckedChange={() => handleTogglePharmacyActive(pharmacy)}
+                          disabled={togglingId === pharmacy.id}
+                        />
                       )}
                     </TableCell>
                     <TableCell className="hidden md:table-cell">
