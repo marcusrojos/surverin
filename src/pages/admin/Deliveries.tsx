@@ -114,7 +114,7 @@ export default function DeliveriesPage() {
 
       const { data: pharmaciesData } = await supabase
         .from('pharmacies')
-        .select('id, name, address, client_code, phone, email')
+        .select('id, name, address, client_code, phone, email, user_id')
         .order('name');
 
       const { data: driverRoles } = await supabase
