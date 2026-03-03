@@ -197,7 +197,9 @@ export default function DeliveriesPage() {
         toast.success('Livraison modifiée');
         setIsDialogOpen(false);
       } else {
-        const verificationCode = generateVerificationCode();
+        // Determine if pharmacy has an account — if not, no verification code
+        const selectedPharmacy = pharmacies.find(p => p.id === formData.pharmacy_id);
+        const verificationCode = selectedPharmacy?.user_id ? generateVerificationCode() : null;
         
         const { error } = await supabase
           .from('deliveries')
