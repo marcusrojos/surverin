@@ -111,7 +111,9 @@ export default function DriverDashboard() {
   const handleDeliver = async () => {
     if (!deliverDialog || !recipientName.trim()) return;
 
-    if (deliverDialog.verification_code && verificationCode.trim() !== deliverDialog.verification_code) {
+    // Only check verification code if the delivery has one
+    const hasVerificationCode = !!deliverDialog.verification_code;
+    if (hasVerificationCode && verificationCode.trim() !== deliverDialog.verification_code) {
       toast.error('Code de vérification incorrect');
       return;
     }
