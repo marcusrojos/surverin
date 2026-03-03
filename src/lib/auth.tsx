@@ -95,11 +95,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data: signInData, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
-    return { error };
+    
+    if (error) return { error };
+    
+    // Check if account is active
+    if (signInData?.user) {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('is_active')
+        .eq('user_id', signInData.user.id)
+        .maybeSingle();
+      
+      if (profile && (profile as any).is_active === false) {
+        await supabase.auth.signOut();
+        return { error: new Error('Votre compte a été désactivé. Contactez un administrateur.') };
+      }
+    }
+    
+    return { error: null };
   };
 
   const signOut = async () => {

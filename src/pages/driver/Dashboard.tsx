@@ -363,7 +363,7 @@ export default function DriverDashboard() {
               <Button
                 onClick={handleDeliver}
                 className="w-full"
-                disabled={submitting || !recipientName.trim() || !verificationCode.trim() || (isOnline && hasPharmacyLocation && !canConfirm) || (isOnline && hasPharmacyLocation && geoLoading)}
+                disabled={submitting || !recipientName.trim() || (!!deliverDialog?.verification_code && !verificationCode.trim()) || (isOnline && hasPharmacyLocation && !canConfirm) || (isOnline && hasPharmacyLocation && geoLoading)}
               >
                 {submitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <CheckCircle className="w-4 h-4 mr-2" />}
                 Confirmer la livraison
