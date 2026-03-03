@@ -51,6 +51,7 @@ interface Pharmacy {
   client_code?: string;
   phone?: string | null;
   email?: string | null;
+  user_id?: string | null;
 }
 
 interface Driver {
