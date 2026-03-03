@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { OfflineStorage, AxisPharmacy } from '@/services/offlineStorage';
 import { SyncQueue, PendingValidation } from '@/services/syncQueue';
+import { AppNotifications } from '@/services/notifications';
 import { toast } from 'sonner';
 import { Database } from '@/integrations/supabase/types';
 
@@ -24,13 +25,22 @@ export function useOfflineDeliveries({ userId }: UseOfflineDeliveriesOptions) {
   const syncingRef = useRef(false);
   const userIdRef = useRef(userId);
   userIdRef.current = userId;
+  const deliveriesRef = useRef(deliveries);
+  deliveriesRef.current = deliveries;
 
   // ── Online/offline listener ──
   useEffect(() => {
-    const onOnline = () => setIsOnline(true);
+    const onOnline = () => {
+      setIsOnline(true);
+      toast.success('Connexion rétablie — synchronisation en cours…');
+      AppNotifications.online();
+      // Auto-sync + refresh on reconnect
+      syncPendingRef.current().then(() => fetchFromServerRef.current());
+    };
     const onOffline = () => {
       setIsOnline(false);
       toast.warning('Mode hors-ligne activé');
+      AppNotifications.offline();
     };
     window.addEventListener('online', onOnline);
     window.addEventListener('offline', onOffline);
@@ -83,7 +93,7 @@ export function useOfflineDeliveries({ userId }: UseOfflineDeliveriesOptions) {
 
   // ── Fetch from Supabase (online) ──
   const fetchFromServer = useCallback(async () => {
-    if (!userIdRef.current) return false;
+    if (!userIdRef.current || !navigator.onLine) return false;
     try {
       const [delRes, pharRes, axisRes] = await Promise.all([
         supabase.from('deliveries').select('*').eq('driver_id', userIdRef.current).order('created_at', { ascending: false }),
@@ -94,6 +104,13 @@ export function useOfflineDeliveries({ userId }: UseOfflineDeliveriesOptions) {
       const dels = delRes.data || [];
       const phars = pharRes.data || [];
       const axisData = (axisRes.data || []).map(a => ({ pharmacy_id: a.pharmacy_id, position: a.position }));
+
+      // Detect new deliveries for notification
+      const oldPendingIds = new Set(deliveriesRef.current.filter(d => d.status === 'en_attente').map(d => d.id));
+      const newPending = dels.filter(d => d.status === 'en_attente' && !oldPendingIds.has(d.id));
+      if (newPending.length > 0 && deliveriesRef.current.length > 0) {
+        AppNotifications.newDeliveries(newPending.length);
+      }
 
       // Persist to IndexedDB
       await Promise.all([
@@ -111,6 +128,10 @@ export function useOfflineDeliveries({ userId }: UseOfflineDeliveriesOptions) {
     }
   }, [enrichDeliveries, buildOrderMap]);
 
+  // Stable refs for event listeners
+  const fetchFromServerRef = useRef(fetchFromServer);
+  fetchFromServerRef.current = fetchFromServer;
+
   // ── Sync pending validations ──
   const syncPending = useCallback(async () => {
     if (syncingRef.current || !navigator.onLine) return;
@@ -121,9 +142,11 @@ export function useOfflineDeliveries({ userId }: UseOfflineDeliveriesOptions) {
       const { synced, failed } = await SyncQueue.syncAll();
       if (synced > 0) {
         toast.success(`${synced} livraison${synced > 1 ? 's' : ''} synchronisée${synced > 1 ? 's' : ''}`);
+        AppNotifications.syncSuccess(synced);
       }
       if (failed > 0) {
         toast.error(`${failed} livraison${failed > 1 ? 's' : ''} en échec de synchronisation`);
+        AppNotifications.syncError(failed);
       }
 
       // Refresh data from server after sync
@@ -131,7 +154,6 @@ export function useOfflineDeliveries({ userId }: UseOfflineDeliveriesOptions) {
         await fetchFromServer();
       }
 
-      // Cleanup old synced items
       await SyncQueue.cleanup();
 
       const count = await SyncQueue.getPendingCount();
@@ -142,11 +164,17 @@ export function useOfflineDeliveries({ userId }: UseOfflineDeliveriesOptions) {
     }
   }, [fetchFromServer]);
 
+  const syncPendingRef = useRef(syncPending);
+  syncPendingRef.current = syncPending;
+
   // ── Initial load: cache first, then server ──
   useEffect(() => {
     let cancelled = false;
 
     async function init() {
+      // Request notification permission early
+      AppNotifications.requestPermission();
+
       // 1. Hydrate from IndexedDB immediately
       await loadFromCache();
 
@@ -154,12 +182,10 @@ export function useOfflineDeliveries({ userId }: UseOfflineDeliveriesOptions) {
       const count = await SyncQueue.getPendingCount();
       if (!cancelled) setPendingCount(count);
 
-      // 3. If online, fetch fresh data + sync
+      // 3. If online, sync pending + fetch fresh data
       if (navigator.onLine && userIdRef.current) {
-        const ok = await fetchFromServer();
-        if (ok && !cancelled) {
-          await syncPending();
-        }
+        await syncPendingRef.current();
+        await fetchFromServerRef.current();
       }
 
       if (!cancelled) setLoading(false);
@@ -168,14 +194,6 @@ export function useOfflineDeliveries({ userId }: UseOfflineDeliveriesOptions) {
     init();
     return () => { cancelled = true; };
   }, [userId]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // ── When coming back online: sync + refresh ──
-  useEffect(() => {
-    if (isOnline && !loading) {
-      toast.success('Connexion rétablie — synchronisation en cours…');
-      syncPending().then(() => fetchFromServer());
-    }
-  }, [isOnline]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Validate a delivery (works offline) ──
   const validateDelivery = useCallback(async (
@@ -214,14 +232,12 @@ export function useOfflineDeliveries({ userId }: UseOfflineDeliveriesOptions) {
       // 3a. Try direct update
       const { error } = await supabase.from('deliveries').update(payload).eq('id', deliveryId);
       if (error) {
-        // Failed — enqueue for later
         await SyncQueue.enqueue(deliveryId, payload);
         const count = await SyncQueue.getPendingCount();
         setPendingCount(count);
         toast.warning('Erreur réseau — sauvegardé pour synchronisation');
       } else {
         toast.success('Livraison confirmée ✓');
-        // Remove pendingSync flag
         setDeliveries(prev => prev.map(d =>
           d.id === deliveryId ? { ...d, pendingSync: false } : d
         ));
@@ -231,14 +247,14 @@ export function useOfflineDeliveries({ userId }: UseOfflineDeliveriesOptions) {
       await SyncQueue.enqueue(deliveryId, payload);
       const count = await SyncQueue.getPendingCount();
       setPendingCount(count);
-      toast.info('Sauvegardé hors-ligne — sera synchronisé au retour du réseau');
+      toast.info('Sauvegardé hors-ligne — sera synchronisé automatiquement');
     }
   }, []);
 
   // ── Refetch (for realtime callbacks) ──
   const refetch = useCallback(() => {
-    if (navigator.onLine) fetchFromServer();
-  }, [fetchFromServer]);
+    if (navigator.onLine) fetchFromServerRef.current();
+  }, []);
 
   return {
     deliveries,
