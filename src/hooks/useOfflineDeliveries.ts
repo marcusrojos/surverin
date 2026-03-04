@@ -15,6 +15,8 @@ interface UseOfflineDeliveriesOptions {
   userId: string | undefined;
 }
 
+const SYNC_RETRY_INTERVAL = 30_000; // Retry sync every 30s if pending items exist
+
 export function useOfflineDeliveries({ userId }: UseOfflineDeliveriesOptions) {
   const [deliveries, setDeliveries] = useState<EnrichedDelivery[]>([]);
   const [pharmacyOrder, setPharmacyOrder] = useState<Map<string, number>>(new Map());
@@ -27,28 +29,6 @@ export function useOfflineDeliveries({ userId }: UseOfflineDeliveriesOptions) {
   userIdRef.current = userId;
   const deliveriesRef = useRef(deliveries);
   deliveriesRef.current = deliveries;
-
-  // ── Online/offline listener ──
-  useEffect(() => {
-    const onOnline = () => {
-      setIsOnline(true);
-      toast.success('Connexion rétablie — synchronisation en cours…');
-      AppNotifications.online();
-      // Auto-sync + refresh on reconnect
-      syncPendingRef.current().then(() => fetchFromServerRef.current());
-    };
-    const onOffline = () => {
-      setIsOnline(false);
-      toast.warning('Mode hors-ligne activé');
-      AppNotifications.offline();
-    };
-    window.addEventListener('online', onOnline);
-    window.addEventListener('offline', onOffline);
-    return () => {
-      window.removeEventListener('online', onOnline);
-      window.removeEventListener('offline', onOffline);
-    };
-  }, []);
 
   // ── Helper: enrich deliveries with pharmacies & pending status ──
   const enrichDeliveries = useCallback(async (dels: Delivery[], phars: Pharmacy[]): Promise<EnrichedDelivery[]> => {
@@ -112,7 +92,7 @@ export function useOfflineDeliveries({ userId }: UseOfflineDeliveriesOptions) {
         AppNotifications.newDeliveries(newPending.length);
       }
 
-      // Persist to IndexedDB
+      // Persist to IndexedDB for offline access
       await Promise.all([
         OfflineStorage.saveDeliveries(dels),
         OfflineStorage.savePharmacies(phars),
@@ -124,17 +104,25 @@ export function useOfflineDeliveries({ userId }: UseOfflineDeliveriesOptions) {
       setPharmacyOrder(buildOrderMap(axisData));
       return true;
     } catch {
+      // Network error — keep existing cached data, don't clear state
       return false;
     }
   }, [enrichDeliveries, buildOrderMap]);
 
-  // Stable refs for event listeners
+  // Stable refs for event listeners (avoid stale closures)
   const fetchFromServerRef = useRef(fetchFromServer);
   fetchFromServerRef.current = fetchFromServer;
 
   // ── Sync pending validations ──
   const syncPending = useCallback(async () => {
     if (syncingRef.current || !navigator.onLine) return;
+    
+    const count = await SyncQueue.getPendingCount();
+    if (count === 0) {
+      setPendingCount(0);
+      return;
+    }
+
     syncingRef.current = true;
     setIsSyncing(true);
 
@@ -149,23 +137,58 @@ export function useOfflineDeliveries({ userId }: UseOfflineDeliveriesOptions) {
         AppNotifications.syncError(failed);
       }
 
-      // Refresh data from server after sync
+      // Refresh data from server after sync to get authoritative state
       if (synced > 0) {
-        await fetchFromServer();
+        await fetchFromServerRef.current();
       }
 
       await SyncQueue.cleanup();
 
-      const count = await SyncQueue.getPendingCount();
-      setPendingCount(count);
+      const remaining = await SyncQueue.getPendingCount();
+      setPendingCount(remaining);
     } finally {
       setIsSyncing(false);
       syncingRef.current = false;
     }
-  }, [fetchFromServer]);
+  }, []);
 
   const syncPendingRef = useRef(syncPending);
   syncPendingRef.current = syncPending;
+
+  // ── Online/offline listener ──
+  useEffect(() => {
+    const onOnline = () => {
+      setIsOnline(true);
+      toast.success('Connexion rétablie — synchronisation en cours…');
+      AppNotifications.online();
+      // Auto-sync + refresh on reconnect — no manual refresh needed
+      syncPendingRef.current().then(() => fetchFromServerRef.current());
+    };
+    const onOffline = () => {
+      setIsOnline(false);
+      toast.warning('Mode hors-ligne activé');
+      AppNotifications.offline();
+    };
+    window.addEventListener('online', onOnline);
+    window.addEventListener('offline', onOffline);
+    return () => {
+      window.removeEventListener('online', onOnline);
+      window.removeEventListener('offline', onOffline);
+    };
+  }, []);
+
+  // ── Periodic sync retry: catches cases where online event fires but sync fails ──
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      if (!navigator.onLine) return;
+      const count = await SyncQueue.getPendingCount();
+      setPendingCount(count);
+      if (count > 0) {
+        syncPendingRef.current();
+      }
+    }, SYNC_RETRY_INTERVAL);
+    return () => clearInterval(interval);
+  }, []);
 
   // ── Initial load: cache first, then server ──
   useEffect(() => {
@@ -175,10 +198,10 @@ export function useOfflineDeliveries({ userId }: UseOfflineDeliveriesOptions) {
       // Request notification permission early
       AppNotifications.requestPermission();
 
-      // 1. Hydrate from IndexedDB immediately
+      // 1. Hydrate from IndexedDB immediately (works offline)
       await loadFromCache();
 
-      // 2. Update pending count
+      // 2. Update pending count from queue
       const count = await SyncQueue.getPendingCount();
       if (!cancelled) setPendingCount(count);
 
@@ -195,12 +218,12 @@ export function useOfflineDeliveries({ userId }: UseOfflineDeliveriesOptions) {
     return () => { cancelled = true; };
   }, [userId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Validate a delivery (works offline) ──
+  // ── Validate a delivery (works 100% offline) ──
   const validateDelivery = useCallback(async (
     deliveryId: string,
     payload: PendingValidation['payload'],
   ) => {
-    // 1. Optimistic update in state
+    // 1. Optimistic update in React state — immediate UI feedback
     setDeliveries(prev => prev.map(d =>
       d.id === deliveryId
         ? {
@@ -212,12 +235,12 @@ export function useOfflineDeliveries({ userId }: UseOfflineDeliveriesOptions) {
             nb_cartons_received: payload.nb_cartons_received,
             nb_sachets_received: payload.nb_sachets_received,
             nb_barques_received: payload.nb_barques_received,
-            pendingSync: !navigator.onLine,
+            pendingSync: true, // Always mark as pending initially
           }
         : d
     ));
 
-    // 2. Update IndexedDB cache
+    // 2. Update IndexedDB cache — survives app close/reopen
     await OfflineStorage.updateDelivery(deliveryId, {
       status: 'livre' as const,
       recipient_name: payload.recipient_name,
@@ -228,25 +251,17 @@ export function useOfflineDeliveries({ userId }: UseOfflineDeliveriesOptions) {
       nb_barques_received: payload.nb_barques_received,
     });
 
+    // 3. Always enqueue first for safety (idempotent sync handles duplicates)
+    await SyncQueue.enqueue(deliveryId, payload);
+    const count = await SyncQueue.getPendingCount();
+    setPendingCount(count);
+
     if (navigator.onLine) {
-      // 3a. Try direct update
-      const { error } = await supabase.from('deliveries').update(payload).eq('id', deliveryId);
-      if (error) {
-        await SyncQueue.enqueue(deliveryId, payload);
-        const count = await SyncQueue.getPendingCount();
-        setPendingCount(count);
-        toast.warning('Erreur réseau — sauvegardé pour synchronisation');
-      } else {
-        toast.success('Livraison confirmée ✓');
-        setDeliveries(prev => prev.map(d =>
-          d.id === deliveryId ? { ...d, pendingSync: false } : d
-        ));
-      }
+      // 4. If online, attempt immediate sync
+      toast.info('Envoi en cours…');
+      // Small delay to ensure queue entry is persisted
+      setTimeout(() => syncPendingRef.current(), 100);
     } else {
-      // 3b. Queue for sync
-      await SyncQueue.enqueue(deliveryId, payload);
-      const count = await SyncQueue.getPendingCount();
-      setPendingCount(count);
       toast.info('Sauvegardé hors-ligne — sera synchronisé automatiquement');
     }
   }, []);
