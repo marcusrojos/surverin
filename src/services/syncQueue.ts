@@ -19,6 +19,7 @@ export interface PendingValidation {
     driver_latitude?: number;
     driver_longitude?: number;
     verification_code?: string;
+    offline_photo?: string; // base64 photo taken offline
   };
   created_at: string;
   sync_status: SyncStatus;

@@ -4,7 +4,7 @@ import { useAuth } from '@/lib/auth';
 import { useOfflineDeliveries, EnrichedDelivery } from '@/hooks/useOfflineDeliveries';
 import { useRealtimeDeliveries } from '@/hooks/use-realtime-deliveries';
 import { useGeolocation } from '@/hooks/use-geolocation';
-import { calculateDistance, GEOFENCE_RADIUS } from '@/lib/geolocation';
+import { GEOFENCE_RADIUS } from '@/lib/geolocation';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,7 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { StatusBadge } from '@/components/ui/status-badge';
 import { SignaturePad } from '@/components/ui/signature-pad';
 import { toast } from 'sonner';
-import { Package, CheckCircle, WifiOff, Loader2, Truck, Filter, CalendarDays, MapPin, Navigation, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Package, CheckCircle, WifiOff, Loader2, Truck, Filter, CalendarDays, MapPin, Navigation, AlertTriangle, RefreshCw, Camera, ArrowDownFromLine } from 'lucide-react';
 import { Database } from '@/integrations/supabase/types';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -42,7 +42,17 @@ export default function DriverDashboard() {
   const [sachetsReceived, setSachetsReceived] = useState(0);
   const [barquesReceived, setBarquesReceived] = useState(0);
   const [verificationCode, setVerificationCode] = useState('');
+  const [offlinePhoto, setOfflinePhoto] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Pull-to-refresh state
+  const [pullDistance, setPullDistance] = useState(0);
+  const [isPulling, setIsPulling] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const touchStartY = useRef(0);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const PULL_THRESHOLD = 80;
 
   // Filters
   const [statusFilter, setStatusFilter] = useState<'all' | 'en_attente' | 'livre'>('all');
@@ -72,6 +82,35 @@ export default function DriverDashboard() {
     onDeliveryUpdate: stableOnUpdate,
     onDeliveryDelete: stableOnDelete,
   });
+
+  // Pull-to-refresh handlers
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    if (scrollContainerRef.current && scrollContainerRef.current.scrollTop === 0) {
+      touchStartY.current = e.touches[0].clientY;
+      setIsPulling(true);
+    }
+  }, []);
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (!isPulling) return;
+    const delta = e.touches[0].clientY - touchStartY.current;
+    if (delta > 0) {
+      setPullDistance(Math.min(delta * 0.5, 120));
+    }
+  }, [isPulling]);
+
+  const handleTouchEnd = useCallback(async () => {
+    if (pullDistance >= PULL_THRESHOLD && !isRefreshing) {
+      setIsRefreshing(true);
+      setPullDistance(0);
+      await refetch();
+      setIsRefreshing(false);
+      toast.success('Données actualisées');
+    } else {
+      setPullDistance(0);
+    }
+    setIsPulling(false);
+  }, [pullDistance, isRefreshing, refetch]);
 
   const groupedByDate = useMemo(() => {
     let filtered = deliveries;
@@ -103,13 +142,30 @@ export default function DriverDashboard() {
     setRecipientName('');
     setVerificationCode('');
     setSignature(null);
+    setOfflinePhoto(null);
     setCartonsReceived(d.nb_cartons);
     setSachetsReceived(d.nb_sachets);
     setBarquesReceived(d.nb_barques);
   };
 
+  const handlePhotoCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setOfflinePhoto(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
   const handleDeliver = async () => {
     if (!deliverDialog || !recipientName.trim()) return;
+
+    // Offline mode: require photo
+    if (!isOnline && !offlinePhoto) {
+      toast.error('En mode hors-ligne, une photo du bon papier est obligatoire.');
+      return;
+    }
 
     // Only check verification code if the delivery has one
     const hasVerificationCode = !!deliverDialog.verification_code;
@@ -118,8 +174,9 @@ export default function DriverDashboard() {
       return;
     }
 
+    // Online geofence check: block if outside 20m
     if (isOnline && hasPharmacyLocation && !isWithinZone) {
-      toast.error('Vous devez être dans un rayon de 100 m de la pharmacie pour confirmer la réception');
+      toast.error(`Vous devez être dans la pharmacie (${GEOFENCE_RADIUS}m maximum) pour valider la livraison.`);
       return;
     }
 
@@ -141,6 +198,10 @@ export default function DriverDashboard() {
       payload.driver_longitude = driverPosition.longitude;
     }
 
+    if (offlinePhoto) {
+      payload.offline_photo = offlinePhoto;
+    }
+
     await validateDelivery(deliverDialog.id, payload);
 
     setDeliverDialog(null);
@@ -160,10 +221,49 @@ export default function DriverDashboard() {
 
   return (
     <DashboardLayout requiredRole="livreur">
-      <div className="space-y-4">
+      <div
+        ref={scrollContainerRef}
+        className="space-y-4"
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+      >
+        {/* Pull-to-refresh indicator */}
+        {(pullDistance > 0 || isRefreshing) && (
+          <div
+            className="flex items-center justify-center transition-all duration-200"
+            style={{ height: isRefreshing ? 48 : pullDistance }}
+          >
+            <div className={`flex items-center gap-2 text-sm text-muted-foreground ${pullDistance >= PULL_THRESHOLD ? 'text-primary' : ''}`}>
+              {isRefreshing ? (
+                <><Loader2 className="w-4 h-4 animate-spin" /> Actualisation…</>
+              ) : pullDistance >= PULL_THRESHOLD ? (
+                <><ArrowDownFromLine className="w-4 h-4" /> Relâchez pour actualiser</>
+              ) : (
+                <><ArrowDownFromLine className="w-4 h-4" /> Tirez pour actualiser</>
+              )}
+            </div>
+          </div>
+        )}
+
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
           <h1 className="text-xl sm:text-2xl font-bold">Mes livraisons</h1>
           <div className="flex items-center gap-3">
+            {/* Discrete refresh button */}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={async () => {
+                setIsRefreshing(true);
+                await refetch();
+                setIsRefreshing(false);
+                toast.success('Données actualisées');
+              }}
+              disabled={isRefreshing || !isOnline}
+            >
+              <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+            </Button>
             {isSyncing && (
               <div className="flex items-center gap-1 text-primary text-sm">
                 <RefreshCw className="w-4 h-4 animate-spin" />
@@ -293,7 +393,22 @@ export default function DriverDashboard() {
             <div className="space-y-4">
               <p className="text-sm text-muted-foreground">Réf: <span className="font-mono font-medium text-foreground">{deliverDialog?.reference}</span></p>
 
-              {/* Geolocation status */}
+              {/* Offline mode notice */}
+              {!isOnline && (
+                <Card className="border-2 border-warning bg-warning/5">
+                  <CardContent className="pt-3 pb-3">
+                    <div className="flex items-center gap-2 text-sm text-warning font-medium">
+                      <WifiOff className="w-4 h-4" />
+                      Vous êtes hors ligne
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      La validation se fera par photo du bon papier. Les données seront synchronisées automatiquement au retour du réseau.
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Geolocation status — only when online */}
               {hasPharmacyLocation && isOnline && (
                 <Card className={`border-2 ${isWithinZone ? 'border-green-500 bg-green-500/5' : 'border-destructive bg-destructive/5'}`}>
                   <CardContent className="pt-3 pb-3">
@@ -312,7 +427,7 @@ export default function DriverDashboard() {
                         <div className="flex items-center gap-2">
                           <div className={`w-3 h-3 rounded-full ${isWithinZone ? 'bg-green-500' : 'bg-destructive'} animate-pulse`} />
                           <span className="text-sm font-medium">
-                            {isWithinZone ? 'Dans la zone autorisée' : 'Hors zone'}
+                            {isWithinZone ? 'Dans la zone autorisée' : 'Hors zone — validation bloquée'}
                           </span>
                         </div>
                         {distance !== null && (
@@ -323,7 +438,7 @@ export default function DriverDashboard() {
                         )}
                         {!isWithinZone && (
                           <p className="text-xs text-destructive">
-                            Vous devez être dans un rayon de {GEOFENCE_RADIUS} m de la pharmacie pour confirmer la réception.
+                            Vous devez être dans la pharmacie ({GEOFENCE_RADIUS}m maximum) pour valider la livraison.
                           </p>
                         )}
                       </div>
@@ -350,12 +465,56 @@ export default function DriverDashboard() {
                   Pas de code de vérification requis pour cette pharmacie
                 </div>
               )}
+
               <div className="space-y-2"><Label>Nom du réceptionnaire</Label><Input value={recipientName} onChange={(e) => setRecipientName(e.target.value)} placeholder="Nom et prénom" /></div>
               <div className="grid grid-cols-3 gap-2 sm:gap-3">
                 <div className="space-y-1"><Label className="text-xs">Cartons reçus</Label><Input type="number" min={0} value={cartonsReceived} onChange={(e) => setCartonsReceived(Number(e.target.value))} /></div>
                 <div className="space-y-1"><Label className="text-xs">Sachets reçus</Label><Input type="number" min={0} value={sachetsReceived} onChange={(e) => setSachetsReceived(Number(e.target.value))} /></div>
                 <div className="space-y-1"><Label className="text-xs">Barques reçues</Label><Input type="number" min={0} value={barquesReceived} onChange={(e) => setBarquesReceived(Number(e.target.value))} /></div>
               </div>
+
+              {/* Offline photo capture */}
+              {!isOnline && (
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-1">
+                    <Camera className="w-4 h-4" />
+                    Photo du bon papier <span className="text-destructive">*</span>
+                  </Label>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    onChange={handlePhotoCapture}
+                    className="hidden"
+                  />
+                  {offlinePhoto ? (
+                    <div className="relative">
+                      <img src={offlinePhoto} alt="Bon papier" className="w-full h-40 object-cover rounded-lg border" />
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        className="absolute bottom-2 right-2"
+                        onClick={() => fileInputRef.current?.click()}
+                      >
+                        Reprendre
+                      </Button>
+                    </div>
+                  ) : (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full h-24 border-dashed flex flex-col items-center gap-2"
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      <Camera className="w-6 h-6 text-muted-foreground" />
+                      <span className="text-sm text-muted-foreground">Prendre une photo du bon papier</span>
+                    </Button>
+                  )}
+                </div>
+              )}
+
               <div className="space-y-2">
                 <Label>Signature</Label>
                 <SignaturePad onSignatureChange={setSignature} />
@@ -363,7 +522,14 @@ export default function DriverDashboard() {
               <Button
                 onClick={handleDeliver}
                 className="w-full"
-                disabled={submitting || !recipientName.trim() || (!!deliverDialog?.verification_code && !verificationCode.trim()) || (isOnline && hasPharmacyLocation && !canConfirm) || (isOnline && hasPharmacyLocation && geoLoading)}
+                disabled={
+                  submitting ||
+                  !recipientName.trim() ||
+                  (!!deliverDialog?.verification_code && !verificationCode.trim()) ||
+                  (isOnline && hasPharmacyLocation && !canConfirm) ||
+                  (isOnline && hasPharmacyLocation && geoLoading) ||
+                  (!isOnline && !offlinePhoto)
+                }
               >
                 {submitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <CheckCircle className="w-4 h-4 mr-2" />}
                 Confirmer la livraison
