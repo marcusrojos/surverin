@@ -3,7 +3,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
-import { MapPin, Search, X, Loader2, Navigation } from 'lucide-react';
+import { MapPin, Search, X, Loader2, Navigation, Crosshair, Check } from 'lucide-react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
@@ -37,7 +37,7 @@ interface PharmacyLocationPickerProps {
     longitude: number;
     address: string;
     name?: string;
-    source: 'nominatim' | 'manuel';
+    source: 'nominatim' | 'manuel' | 'gps';
   }) => void;
 }
 
@@ -59,9 +59,11 @@ export function PharmacyLocationPicker({
     initialLat && initialLng ? [initialLat, initialLng] : null
   );
   const [selectedAddress, setSelectedAddress] = useState(initialAddress);
+  const [gettingLocation, setGettingLocation] = useState(false);
+  const [locationSuccess, setLocationSuccess] = useState(false);
   const searchTimeout = useRef<NodeJS.Timeout | null>(null);
 
-  // Leaflet refs - managed imperatively to avoid react-leaflet issues in dialogs
+  // Leaflet refs
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const markerRef = useRef<L.Marker | null>(null);
@@ -74,7 +76,6 @@ export function PharmacyLocationPicker({
 
     const container = mapContainerRef.current;
 
-    // Small delay to ensure container has layout dimensions
     const initTimer = setTimeout(() => {
       try {
         const center = markerPosRef.current || CI_CENTER;
@@ -91,18 +92,15 @@ export function PharmacyLocationPicker({
           attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
         }).addTo(map);
 
-        // Add click handler
         map.on('click', (e: L.LeafletMouseEvent) => {
           const { lat, lng } = e.latlng;
           updateMarker(map, lat, lng);
           reverseGeocode(lat, lng);
         });
 
-        // Force size recalculation after animations
         setTimeout(() => map.invalidateSize(), 100);
         setTimeout(() => map.invalidateSize(), 500);
 
-        // Place initial marker if exists
         if (markerPosRef.current) {
           const m = L.marker(markerPosRef.current).addTo(map);
           markerRef.current = m;
@@ -208,7 +206,6 @@ export function PharmacyLocationPicker({
     setResults([]);
     setSearchQuery(result.display_name.split(',')[0]);
 
-    // Update map view and marker if map is open
     if (mapInstanceRef.current) {
       mapInstanceRef.current.setView([lat, lng], 16);
       updateMarker(mapInstanceRef.current, lat, lng);
@@ -231,6 +228,49 @@ export function PharmacyLocationPicker({
       mapInstanceRef.current.removeLayer(markerRef.current);
       markerRef.current = null;
     }
+  };
+
+  const handleUseCurrentPosition = async () => {
+    if (!navigator.geolocation) {
+      return;
+    }
+    setGettingLocation(true);
+    setLocationSuccess(false);
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
+        setMarkerPos([lat, lng]);
+
+        if (mapInstanceRef.current) {
+          mapInstanceRef.current.setView([lat, lng], 16);
+          updateMarker(mapInstanceRef.current, lat, lng);
+        }
+
+        // Reverse geocode
+        try {
+          const resp = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`
+          );
+          const data = await resp.json();
+          const addr = data.display_name || `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+          setSelectedAddress(addr);
+          onLocationSelect({ latitude: lat, longitude: lng, address: addr, source: 'gps' });
+        } catch {
+          const addr = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+          setSelectedAddress(addr);
+          onLocationSelect({ latitude: lat, longitude: lng, address: addr, source: 'gps' });
+        }
+
+        setGettingLocation(false);
+        setLocationSuccess(true);
+        setTimeout(() => setLocationSuccess(false), 2000);
+      },
+      () => {
+        setGettingLocation(false);
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+    );
   };
 
   return (
@@ -276,6 +316,29 @@ export function PharmacyLocationPicker({
         </Card>
       )}
 
+      {/* Use current position button */}
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="w-full gap-2 transition-all"
+        onClick={handleUseCurrentPosition}
+        disabled={gettingLocation}
+      >
+        {gettingLocation ? (
+          <Loader2 className="w-4 h-4 animate-spin" />
+        ) : locationSuccess ? (
+          <Check className="w-4 h-4 text-green-500" />
+        ) : (
+          <Crosshair className="w-4 h-4" />
+        )}
+        {gettingLocation
+          ? 'Récupération de la position…'
+          : locationSuccess
+            ? 'Position récupérée !'
+            : 'Utiliser ma position actuelle'}
+      </Button>
+
       {/* Selected location display */}
       {selectedAddress && markerPos && (
         <div className="flex items-start gap-2 p-2 bg-accent/50 rounded-md text-sm">
@@ -304,7 +367,7 @@ export function PharmacyLocationPicker({
         {showMap ? 'Masquer la carte' : 'Sélection manuelle sur la carte'}
       </Button>
 
-      {/* Map - uses imperative Leaflet API for reliability in dialogs */}
+      {/* Map */}
       {showMap && (
         <div
           ref={mapContainerRef}

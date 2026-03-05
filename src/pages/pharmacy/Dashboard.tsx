@@ -6,6 +6,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { Button } from '@/components/ui/button';
 import { generateReceiptPDF } from '@/lib/generate-receipt-pdf';
+import { GEOFENCE_RADIUS } from '@/lib/geolocation';
 import { Package, CheckCircle, FileText, Loader2, KeyRound } from 'lucide-react';
 import { Database } from '@/integrations/supabase/types';
 
@@ -51,6 +52,11 @@ export default function PharmacyDashboard() {
       nb_sachets_received: d.nb_sachets_received,
       nb_barques_received: d.nb_barques_received,
       packages: Array.isArray(d.packages) ? d.packages as { type: string; reference: string }[] : [],
+      pharmacyLatitude: d.pharmacy.latitude,
+      pharmacyLongitude: d.pharmacy.longitude,
+      driverLatitude: d.driver_latitude,
+      driverLongitude: d.driver_longitude,
+      geofenceRadius: GEOFENCE_RADIUS,
     });
   };
 
