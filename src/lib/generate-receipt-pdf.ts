@@ -27,6 +27,12 @@ interface ReceiptData {
   nb_sachets_received?: number | null;
   nb_barques_received?: number | null;
   packages?: PackageItem[];
+  // GPS data
+  pharmacyLatitude?: number | null;
+  pharmacyLongitude?: number | null;
+  driverLatitude?: number | null;
+  driverLongitude?: number | null;
+  geofenceRadius?: number;
 }
 
 function loadImage(src: string): Promise<HTMLImageElement> {
@@ -37,6 +43,21 @@ function loadImage(src: string): Promise<HTMLImageElement> {
     img.onerror = reject;
     img.src = src;
   });
+}
+
+function calculateDistance(
+  lat1: number, lon1: number,
+  lat2: number, lon2: number
+): number {
+  const R = 6371000;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
 }
 
 export async function generateReceiptPDF(data: ReceiptData) {
@@ -147,12 +168,27 @@ export async function generateReceiptPDF(data: ReceiptData) {
   if (data.pharmacyAddress) addField('Adresse :', data.pharmacyAddress);
   if (data.pharmacyPhone) addField('Téléphone :', data.pharmacyPhone);
   if (data.pharmacyEmail) addField('Email :', data.pharmacyEmail);
+  if (data.pharmacyLatitude && data.pharmacyLongitude) {
+    addField('Position GPS :', `${data.pharmacyLatitude.toFixed(6)}, ${data.pharmacyLongitude.toFixed(6)}`);
+  }
   y += 2;
 
   if (data.driverName || data.driverEmail) {
     drawSectionTitle('LIVREUR');
     if (data.driverName) addField('Nom du livreur :', data.driverName);
     if (data.driverEmail) addField('Email du livreur :', data.driverEmail);
+    if (data.driverLatitude && data.driverLongitude) {
+      addField('Position GPS livreur :', `${data.driverLatitude.toFixed(6)}, ${data.driverLongitude.toFixed(6)}`);
+    }
+    // Geofence compliance
+    if (data.driverLatitude && data.driverLongitude && data.pharmacyLatitude && data.pharmacyLongitude) {
+      const dist = calculateDistance(data.driverLatitude, data.driverLongitude, data.pharmacyLatitude, data.pharmacyLongitude);
+      const radius = data.geofenceRadius || 20;
+      const withinZone = dist <= radius;
+      const distStr = dist < 1000 ? `${Math.round(dist)} m` : `${(dist / 1000).toFixed(1)} km`;
+      addField('Distance pharmacie :', `${distStr} (périmètre autorisé : ${radius}m)`);
+      addField('Périmètre respecté :', withinZone ? '✓ Oui' : '✗ Non', true);
+    }
     y += 2;
   }
 
@@ -178,7 +214,7 @@ export async function generateReceiptPDF(data: ReceiptData) {
     const types = [
       { label: 'Carton(s)', sent: data.nb_cartons || 0, received: data.nb_cartons_received },
       { label: 'Sachet(s)', sent: data.nb_sachets || 0, received: data.nb_sachets_received },
-      { label: 'Barque(s)', sent: data.nb_barques || 0, received: data.nb_barques_received },
+      { label: 'Bac(s)', sent: data.nb_barques || 0, received: data.nb_barques_received },
     ];
 
     let hasDiscrepancy = false;
@@ -230,7 +266,7 @@ export async function generateReceiptPDF(data: ReceiptData) {
       doc.setFont('helvetica', 'normal');
       for (const pkg of data.packages) {
         ensureSpace(6);
-        const typeLabel = pkg.type ? pkg.type.charAt(0).toUpperCase() + pkg.type.slice(1) : 'Colis';
+        const typeLabel = pkg.type === 'barque' ? 'Bac' : pkg.type ? pkg.type.charAt(0).toUpperCase() + pkg.type.slice(1) : 'Colis';
         doc.text(`• ${typeLabel} — ${pkg.reference || 'Sans réf.'}`, margin + 5, y);
         y += 5;
       }
@@ -289,4 +325,47 @@ export async function generateReceiptPDF(data: ReceiptData) {
   }
 
   doc.save(`bon-reception-${data.reference}.pdf`);
+}
+
+/**
+ * Generate a PDF from a base64 photo (used for offline delivery validation)
+ */
+export async function generatePhotoPDF(photoBase64: string, reference: string, deliveredAt: string): Promise<string> {
+  const doc = new jsPDF('p', 'mm', 'a4');
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const margin = 15;
+  let y = 14;
+
+  // Header
+  doc.setFontSize(14);
+  doc.setFont('helvetica', 'bold');
+  doc.text('DPCI — Bon de livraison (hors-ligne)', pageWidth / 2, y + 5, { align: 'center' });
+  y += 15;
+
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`Référence : ${reference}`, margin, y);
+  y += 7;
+  doc.text(`Date de livraison : ${new Date(deliveredAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}`, margin, y);
+  y += 10;
+
+  // Add photo
+  try {
+    const img = await loadImage(photoBase64);
+    const maxW = pageWidth - margin * 2;
+    const maxH = 200;
+    const ratio = img.height / img.width;
+    let w = maxW;
+    let h = ratio * w;
+    if (h > maxH) {
+      h = maxH;
+      w = h / ratio;
+    }
+    doc.addImage(img, 'JPEG', margin, y, w, h);
+  } catch {
+    doc.text('Photo non disponible', margin, y + 10);
+  }
+
+  // Return as base64 data URI
+  return doc.output('datauristring');
 }

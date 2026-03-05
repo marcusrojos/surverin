@@ -39,6 +39,7 @@ import {
 import { StatusBadge } from '@/components/ui/status-badge';
 import { Plus, Pencil, Trash2, Search, Package, Loader2, Copy, Check, X, FileDown } from 'lucide-react';
 import { generateReceiptPDF } from '@/lib/generate-receipt-pdf';
+import { GEOFENCE_RADIUS } from '@/lib/geolocation';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
@@ -52,6 +53,8 @@ interface Pharmacy {
   phone?: string | null;
   email?: string | null;
   user_id?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
 }
 
 interface Driver {
@@ -69,6 +72,16 @@ interface Delivery {
   delivered_at: string | null;
   created_at: string;
   verification_code: string | null;
+  nb_cartons: number;
+  nb_sachets: number;
+  nb_barques: number;
+  nb_cartons_received: number | null;
+  nb_sachets_received: number | null;
+  nb_barques_received: number | null;
+  driver_latitude: number | null;
+  driver_longitude: number | null;
+  recipient_signature: string | null;
+  packages: any;
   pharmacy: { name: string } | null;
   driver: { full_name: string } | null;
 }
@@ -76,6 +89,14 @@ interface Delivery {
 const generateVerificationCode = (): string => {
   return Math.floor(100000 + Math.random() * 900000).toString();
 };
+
+function parsePackages(raw: any): { type: string; reference: string }[] {
+  if (Array.isArray(raw)) return raw;
+  if (typeof raw === 'string') {
+    try { const parsed = JSON.parse(raw); return Array.isArray(parsed) ? parsed : []; } catch { return []; }
+  }
+  return [];
+}
 
 export default function DeliveriesPage() {
   const [deliveries, setDeliveries] = useState<Delivery[]>([]);
@@ -114,7 +135,7 @@ export default function DeliveriesPage() {
 
       const { data: pharmaciesData } = await supabase
         .from('pharmacies')
-        .select('id, name, address, client_code, phone, email, user_id')
+        .select('id, name, address, client_code, phone, email, user_id, latitude, longitude')
         .order('name');
 
       const { data: driverRoles } = await supabase
@@ -140,7 +161,7 @@ export default function DeliveriesPage() {
       }));
 
       setDeliveries(mappedDeliveries as Delivery[]);
-      setPharmacies(pharmaciesData || []);
+      setPharmacies((pharmaciesData || []) as Pharmacy[]);
       setDrivers(driversData || []);
     } catch (error) {
       toast.error('Erreur lors du chargement');
@@ -157,7 +178,7 @@ export default function DeliveriesPage() {
         pharmacy_id: delivery.pharmacy_id,
         driver_id: delivery.driver_id || '',
       });
-      setFormPackages(((delivery as any).packages as any[]) || []);
+      setFormPackages(parsePackages(delivery.packages));
     } else {
       setSelectedDelivery(null);
       setFormData({ reference: '', pharmacy_id: '', driver_id: '' });
@@ -176,8 +197,8 @@ export default function DeliveriesPage() {
     try {
       const nb_cartons = formPackages.filter(p => p.type === 'carton').length;
       const nb_sachets = formPackages.filter(p => p.type === 'sachet').length;
-      const nb_barques = formPackages.filter(p => p.type === 'barque').length;
-      const packagesJson = JSON.stringify(formPackages);
+      const nb_barques = formPackages.filter(p => p.type === 'bac').length;
+      const packagesJson = formPackages;
 
       if (selectedDelivery) {
         const { error } = await supabase
@@ -197,7 +218,6 @@ export default function DeliveriesPage() {
         toast.success('Livraison modifiée');
         setIsDialogOpen(false);
       } else {
-        // Determine if pharmacy has an account — if not, no verification code
         const selectedPharmacy = pharmacies.find(p => p.id === formData.pharmacy_id);
         const verificationCode = selectedPharmacy?.user_id ? generateVerificationCode() : null;
         
@@ -264,11 +284,7 @@ export default function DeliveriesPage() {
 
   const filteredDeliveries = deliveries.filter((d) => {
     const q = searchQuery.toLowerCase();
-    let pkgs: any[] = [];
-    try {
-      const raw = (d as any).packages;
-      pkgs = Array.isArray(raw) ? raw : typeof raw === 'string' ? JSON.parse(raw) : [];
-    } catch { pkgs = []; }
+    const pkgs = parsePackages(d.packages);
     const matchesSearch =
       d.reference.toLowerCase().includes(q) ||
       d.pharmacy?.name.toLowerCase().includes(q) ||
@@ -383,11 +399,10 @@ export default function DeliveriesPage() {
                     </TableCell>
                     <TableCell className="hidden md:table-cell text-muted-foreground text-sm">
                       {(() => {
-                        const d = delivery as any;
                         const parts: string[] = [];
-                        if (d.nb_cartons > 0) parts.push(`${d.nb_cartons}C`);
-                        if (d.nb_sachets > 0) parts.push(`${d.nb_sachets}S`);
-                        if (d.nb_barques > 0) parts.push(`${d.nb_barques}B`);
+                        if (delivery.nb_cartons > 0) parts.push(`${delivery.nb_cartons}C`);
+                        if (delivery.nb_sachets > 0) parts.push(`${delivery.nb_sachets}S`);
+                        if (delivery.nb_barques > 0) parts.push(`${delivery.nb_barques}B`);
                         return parts.length > 0 ? parts.join(' / ') : '-';
                       })()}
                     </TableCell>
@@ -406,7 +421,6 @@ export default function DeliveriesPage() {
                             title="Télécharger le bon de réception"
                             onClick={async () => {
                               try {
-                                const d = delivery as any;
                                 const ph = pharmacies.find(p => p.id === delivery.pharmacy_id);
                                 await generateReceiptPDF({
                                   reference: delivery.reference,
@@ -415,19 +429,24 @@ export default function DeliveriesPage() {
                                   pharmacyClientCode: ph?.client_code || null,
                                   pharmacyPhone: ph?.phone || null,
                                   pharmacyEmail: ph?.email || null,
-                                  recipientName: d.recipient_name || 'Non renseigné',
-                                  recipientSignature: d.recipient_signature || null,
-                                  deliveredAt: d.delivered_at || delivery.created_at,
+                                  recipientName: delivery.recipient_name || 'Non renseigné',
+                                  recipientSignature: delivery.recipient_signature || null,
+                                  deliveredAt: delivery.delivered_at || delivery.created_at,
                                   createdAt: delivery.created_at,
                                   driverName: delivery.driver?.full_name || null,
                                   verificationCode: delivery.verification_code || null,
-                                  nb_cartons: d.nb_cartons,
-                                  nb_sachets: d.nb_sachets,
-                                  nb_barques: d.nb_barques,
-                                  nb_cartons_received: d.nb_cartons_received,
-                                  nb_sachets_received: d.nb_sachets_received,
-                                  nb_barques_received: d.nb_barques_received,
-                                  packages: Array.isArray(d.packages) ? d.packages : [],
+                                  nb_cartons: delivery.nb_cartons,
+                                  nb_sachets: delivery.nb_sachets,
+                                  nb_barques: delivery.nb_barques,
+                                  nb_cartons_received: delivery.nb_cartons_received,
+                                  nb_sachets_received: delivery.nb_sachets_received,
+                                  nb_barques_received: delivery.nb_barques_received,
+                                  packages: parsePackages(delivery.packages),
+                                  pharmacyLatitude: ph?.latitude || null,
+                                  pharmacyLongitude: ph?.longitude || null,
+                                  driverLatitude: delivery.driver_latitude,
+                                  driverLongitude: delivery.driver_longitude,
+                                  geofenceRadius: GEOFENCE_RADIUS,
                                 });
                               } catch (error) {
                                 console.error('Erreur lors du téléchargement du bon:', error);
@@ -548,7 +567,7 @@ export default function DeliveriesPage() {
                         <SelectContent>
                           <SelectItem value="carton">Carton</SelectItem>
                           <SelectItem value="sachet">Sachet</SelectItem>
-                          <SelectItem value="barque">Barque</SelectItem>
+                          <SelectItem value="bac">Bac</SelectItem>
                         </SelectContent>
                       </Select>
                       <Input
@@ -575,7 +594,7 @@ export default function DeliveriesPage() {
                 </div>
                 {formPackages.length > 0 && (
                   <p className="text-xs text-muted-foreground">
-                    {formPackages.filter(p => p.type === 'carton').length} carton(s), {formPackages.filter(p => p.type === 'sachet').length} sachet(s), {formPackages.filter(p => p.type === 'barque').length} barque(s)
+                    {formPackages.filter(p => p.type === 'carton').length} carton(s), {formPackages.filter(p => p.type === 'sachet').length} sachet(s), {formPackages.filter(p => p.type === 'bac').length} bac(s)
                   </p>
                 )}
               </div>

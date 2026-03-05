@@ -40,7 +40,7 @@ export default function DriverDashboard() {
   const [signature, setSignature] = useState<string | null>(null);
   const [cartonsReceived, setCartonsReceived] = useState(0);
   const [sachetsReceived, setSachetsReceived] = useState(0);
-  const [barquesReceived, setBarquesReceived] = useState(0);
+  const [bacsReceived, setBacsReceived] = useState(0);
   const [verificationCode, setVerificationCode] = useState('');
   const [offlinePhoto, setOfflinePhoto] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -145,7 +145,7 @@ export default function DriverDashboard() {
     setOfflinePhoto(null);
     setCartonsReceived(d.nb_cartons);
     setSachetsReceived(d.nb_sachets);
-    setBarquesReceived(d.nb_barques);
+    setBacsReceived(d.nb_barques);
   };
 
   const handlePhotoCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -190,7 +190,7 @@ export default function DriverDashboard() {
       delivered_at: now,
       nb_cartons_received: cartonsReceived,
       nb_sachets_received: sachetsReceived,
-      nb_barques_received: barquesReceived,
+      nb_barques_received: bacsReceived,
     };
 
     if (driverPosition) {
@@ -470,7 +470,7 @@ export default function DriverDashboard() {
               <div className="grid grid-cols-3 gap-2 sm:gap-3">
                 <div className="space-y-1"><Label className="text-xs">Cartons reçus</Label><Input type="number" min={0} value={cartonsReceived} onChange={(e) => setCartonsReceived(Number(e.target.value))} /></div>
                 <div className="space-y-1"><Label className="text-xs">Sachets reçus</Label><Input type="number" min={0} value={sachetsReceived} onChange={(e) => setSachetsReceived(Number(e.target.value))} /></div>
-                <div className="space-y-1"><Label className="text-xs">Barques reçues</Label><Input type="number" min={0} value={barquesReceived} onChange={(e) => setBarquesReceived(Number(e.target.value))} /></div>
+                <div className="space-y-1"><Label className="text-xs">Bacs reçus</Label><Input type="number" min={0} value={bacsReceived} onChange={(e) => setBacsReceived(Number(e.target.value))} /></div>
               </div>
 
               {/* Offline photo capture */}

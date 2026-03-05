@@ -124,7 +124,6 @@ export default function AdminLists() {
   async function fetchData() {
     setLoading(true);
     try {
-      // Fetch drivers
       const { data: driverRoles } = await supabase
         .from('user_roles')
         .select('user_id')
@@ -139,7 +138,6 @@ export default function AdminLists() {
         setDrivers((driverProfiles as DriverInfo[]) || []);
       }
 
-      // Fetch pharmacies with linked profiles
       const { data: pharmaData } = await supabase
         .from('pharmacies')
         .select('name, client_code, address, email, phone, user_id');
@@ -173,7 +171,6 @@ export default function AdminLists() {
         setPharmacies(pharmaWithPasswords);
       }
 
-      // Fetch deliveries grouped by driver
       const { data: allDeliveries } = await supabase
         .from('deliveries')
         .select('reference, pharmacy_id, verification_code, status, created_at, delivered_at, driver_id, nb_cartons, nb_sachets, nb_barques')
