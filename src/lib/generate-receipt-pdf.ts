@@ -162,6 +162,21 @@ export async function generateReceiptPDF(data: ReceiptData) {
   addField('Date de création :', new Date(data.createdAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }));
   addField('Date de livraison :', new Date(data.deliveredAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }));
   addField('Statut :', 'LIVRÉ ✓', true);
+  addField('Mode :', data.isOffline ? 'Hors ligne' : 'En ligne', true);
+  if (data.isOffline) {
+    ensureSpace(12);
+    y += 1;
+    doc.setFillColor(255, 243, 205);
+    doc.setDrawColor(255, 193, 7);
+    doc.setLineWidth(0.5);
+    doc.rect(margin, y, pageWidth - margin * 2, 8, 'FD');
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'italic');
+    doc.setTextColor(133, 100, 4);
+    doc.text('Livraison validée hors connexion – position GPS non vérifiée', margin + 3, y + 5);
+    doc.setTextColor(0, 0, 0);
+    y += 11;
+  }
   if (data.verificationCode) addField('Code de vérification :', data.verificationCode);
   y += 2;
 
