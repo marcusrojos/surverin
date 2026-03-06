@@ -418,7 +418,7 @@ export default function DeliveriesPage() {
                           <Button
                             variant="ghost"
                             size="icon"
-                            title="Télécharger le bon de réception"
+                            title="Télécharger le bon de livraison"
                             onClick={async () => {
                               try {
                                 const ph = pharmacies.find(p => p.id === delivery.pharmacy_id);
