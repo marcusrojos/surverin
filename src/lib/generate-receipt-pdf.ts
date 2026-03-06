@@ -33,6 +33,8 @@ interface ReceiptData {
   driverLatitude?: number | null;
   driverLongitude?: number | null;
   geofenceRadius?: number;
+  // Online/offline status
+  isOffline?: boolean;
 }
 
 function loadImage(src: string): Promise<HTMLImageElement> {
@@ -151,7 +153,8 @@ export async function generateReceiptPDF(data: ReceiptData) {
   doc.setFontSize(15);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(0, 0, 0);
-  doc.text('BON DE RÉCEPTION', pageWidth / 2, y, { align: 'center' });
+  doc.text('BON DE LIVRAISON', pageWidth / 2, y, { align: 'center' });
+  y += 10;
   y += 10;
 
   drawSectionTitle('INFORMATIONS DE LA LIVRAISON');
@@ -159,6 +162,21 @@ export async function generateReceiptPDF(data: ReceiptData) {
   addField('Date de création :', new Date(data.createdAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }));
   addField('Date de livraison :', new Date(data.deliveredAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }));
   addField('Statut :', 'LIVRÉ ✓', true);
+  addField('Mode :', data.isOffline ? 'Hors ligne' : 'En ligne', true);
+  if (data.isOffline) {
+    ensureSpace(12);
+    y += 1;
+    doc.setFillColor(255, 243, 205);
+    doc.setDrawColor(255, 193, 7);
+    doc.setLineWidth(0.5);
+    doc.rect(margin, y, pageWidth - margin * 2, 8, 'FD');
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'italic');
+    doc.setTextColor(133, 100, 4);
+    doc.text('Livraison validée hors connexion – position GPS non vérifiée', margin + 3, y + 5);
+    doc.setTextColor(0, 0, 0);
+    y += 11;
+  }
   if (data.verificationCode) addField('Code de vérification :', data.verificationCode);
   y += 2;
 
@@ -168,7 +186,7 @@ export async function generateReceiptPDF(data: ReceiptData) {
   if (data.pharmacyAddress) addField('Adresse :', data.pharmacyAddress);
   if (data.pharmacyPhone) addField('Téléphone :', data.pharmacyPhone);
   if (data.pharmacyEmail) addField('Email :', data.pharmacyEmail);
-  if (data.pharmacyLatitude && data.pharmacyLongitude) {
+  if (!data.isOffline && data.pharmacyLatitude && data.pharmacyLongitude) {
     addField('Position GPS :', `${data.pharmacyLatitude.toFixed(6)}, ${data.pharmacyLongitude.toFixed(6)}`);
   }
   y += 2;
@@ -177,11 +195,11 @@ export async function generateReceiptPDF(data: ReceiptData) {
     drawSectionTitle('LIVREUR');
     if (data.driverName) addField('Nom du livreur :', data.driverName);
     if (data.driverEmail) addField('Email du livreur :', data.driverEmail);
-    if (data.driverLatitude && data.driverLongitude) {
+    if (!data.isOffline && data.driverLatitude && data.driverLongitude) {
       addField('Position GPS livreur :', `${data.driverLatitude.toFixed(6)}, ${data.driverLongitude.toFixed(6)}`);
     }
-    // Geofence compliance
-    if (data.driverLatitude && data.driverLongitude && data.pharmacyLatitude && data.pharmacyLongitude) {
+    // Geofence compliance — only for online deliveries
+    if (!data.isOffline && data.driverLatitude && data.driverLongitude && data.pharmacyLatitude && data.pharmacyLongitude) {
       const dist = calculateDistance(data.driverLatitude, data.driverLongitude, data.pharmacyLatitude, data.pharmacyLongitude);
       const radius = data.geofenceRadius || 20;
       const withinZone = dist <= radius;
@@ -274,7 +292,7 @@ export async function generateReceiptPDF(data: ReceiptData) {
     y += 2;
   }
 
-  drawSectionTitle('VALIDATION DE RÉCEPTION');
+  drawSectionTitle('VALIDATION DE LIVRAISON');
   addField('Réceptionnaire :', data.recipientName);
   y += 2;
 
@@ -324,7 +342,7 @@ export async function generateReceiptPDF(data: ReceiptData) {
     drawFooter();
   }
 
-  doc.save(`bon-reception-${data.reference}.pdf`);
+  doc.save(`bon-livraison-${data.reference}.pdf`);
 }
 
 /**

@@ -57,6 +57,7 @@ export default function PharmacyDashboard() {
       driverLatitude: d.driver_latitude,
       driverLongitude: d.driver_longitude,
       geofenceRadius: GEOFENCE_RADIUS,
+      isOffline: !d.driver_latitude && !d.driver_longitude,
     });
   };
 
@@ -113,7 +114,7 @@ export default function PharmacyDashboard() {
                     <div className="flex items-center gap-2">
                       <StatusBadge status={d.status} />
                       {d.status === 'livre' && (
-                        <Button variant="ghost" size="icon" onClick={() => handleReceipt(d)} title="Bon de réception">
+                        <Button variant="ghost" size="icon" onClick={() => handleReceipt(d)} title="Bon de livraison">
                           <FileText className="w-4 h-4" />
                         </Button>
                       )}

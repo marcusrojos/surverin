@@ -418,7 +418,7 @@ export default function DeliveriesPage() {
                           <Button
                             variant="ghost"
                             size="icon"
-                            title="Télécharger le bon de réception"
+                            title="Télécharger le bon de livraison"
                             onClick={async () => {
                               try {
                                 const ph = pharmacies.find(p => p.id === delivery.pharmacy_id);
@@ -447,10 +447,11 @@ export default function DeliveriesPage() {
                                   driverLatitude: delivery.driver_latitude,
                                   driverLongitude: delivery.driver_longitude,
                                   geofenceRadius: GEOFENCE_RADIUS,
+                                  isOffline: !delivery.driver_latitude && !delivery.driver_longitude,
                                 });
                               } catch (error) {
                                 console.error('Erreur lors du téléchargement du bon:', error);
-                                toast.error('Erreur lors de la génération du bon de réception');
+                                toast.error('Erreur lors de la génération du bon de livraison');
                               }
                             }}
                           >

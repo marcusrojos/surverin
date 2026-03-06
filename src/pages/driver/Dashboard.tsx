@@ -161,12 +161,6 @@ export default function DriverDashboard() {
   const handleDeliver = async () => {
     if (!deliverDialog || !recipientName.trim()) return;
 
-    // Offline mode: require photo
-    if (!isOnline && !offlinePhoto) {
-      toast.error('En mode hors-ligne, une photo du bon papier est obligatoire.');
-      return;
-    }
-
     // Only check verification code if the delivery has one
     const hasVerificationCode = !!deliverDialog.verification_code;
     if (hasVerificationCode && verificationCode.trim() !== deliverDialog.verification_code) {
@@ -402,7 +396,7 @@ export default function DriverDashboard() {
                       Vous êtes hors ligne
                     </div>
                     <p className="text-xs text-muted-foreground mt-1">
-                      La validation se fera par photo du bon papier. Les données seront synchronisées automatiquement au retour du réseau.
+                      La livraison sera marquée comme « effectuée hors ligne ». La position GPS ne sera pas vérifiée. Les données seront synchronisées automatiquement au retour du réseau.
                     </p>
                   </CardContent>
                 </Card>
@@ -473,47 +467,45 @@ export default function DriverDashboard() {
                 <div className="space-y-1"><Label className="text-xs">Bacs reçus</Label><Input type="number" min={0} value={bacsReceived} onChange={(e) => setBacsReceived(Number(e.target.value))} /></div>
               </div>
 
-              {/* Offline photo capture */}
-              {!isOnline && (
-                <div className="space-y-2">
-                  <Label className="flex items-center gap-1">
-                    <Camera className="w-4 h-4" />
-                    Photo du bon papier <span className="text-destructive">*</span>
-                  </Label>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*"
-                    capture="environment"
-                    onChange={handlePhotoCapture}
-                    className="hidden"
-                  />
-                  {offlinePhoto ? (
-                    <div className="relative">
-                      <img src={offlinePhoto} alt="Bon papier" className="w-full h-40 object-cover rounded-lg border" />
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        size="sm"
-                        className="absolute bottom-2 right-2"
-                        onClick={() => fileInputRef.current?.click()}
-                      >
-                        Reprendre
-                      </Button>
-                    </div>
-                  ) : (
+              {/* Optional photo capture (available in both modes) */}
+              <div className="space-y-2">
+                <Label className="flex items-center gap-1">
+                  <Camera className="w-4 h-4" />
+                  Photo du bon papier {!isOnline && <span className="text-xs text-muted-foreground">(optionnel)</span>}
+                </Label>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  onChange={handlePhotoCapture}
+                  className="hidden"
+                />
+                {offlinePhoto ? (
+                  <div className="relative">
+                    <img src={offlinePhoto} alt="Bon papier" className="w-full h-40 object-cover rounded-lg border" />
                     <Button
                       type="button"
-                      variant="outline"
-                      className="w-full h-24 border-dashed flex flex-col items-center gap-2"
+                      variant="secondary"
+                      size="sm"
+                      className="absolute bottom-2 right-2"
                       onClick={() => fileInputRef.current?.click()}
                     >
-                      <Camera className="w-6 h-6 text-muted-foreground" />
-                      <span className="text-sm text-muted-foreground">Prendre une photo du bon papier</span>
+                      Reprendre
                     </Button>
-                  )}
-                </div>
-              )}
+                  </div>
+                ) : (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full h-24 border-dashed flex flex-col items-center gap-2"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <Camera className="w-6 h-6 text-muted-foreground" />
+                    <span className="text-sm text-muted-foreground">Prendre une photo du bon papier</span>
+                  </Button>
+                )}
+              </div>
 
               <div className="space-y-2">
                 <Label>Signature</Label>
@@ -527,8 +519,7 @@ export default function DriverDashboard() {
                   !recipientName.trim() ||
                   (!!deliverDialog?.verification_code && !verificationCode.trim()) ||
                   (isOnline && hasPharmacyLocation && !canConfirm) ||
-                  (isOnline && hasPharmacyLocation && geoLoading) ||
-                  (!isOnline && !offlinePhoto)
+                  (isOnline && hasPharmacyLocation && geoLoading)
                 }
               >
                 {submitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <CheckCircle className="w-4 h-4 mr-2" />}
