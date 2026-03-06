@@ -33,6 +33,8 @@ interface ReceiptData {
   driverLatitude?: number | null;
   driverLongitude?: number | null;
   geofenceRadius?: number;
+  // Online/offline status
+  isOffline?: boolean;
 }
 
 function loadImage(src: string): Promise<HTMLImageElement> {

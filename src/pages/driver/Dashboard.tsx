@@ -396,7 +396,7 @@ export default function DriverDashboard() {
                       Vous êtes hors ligne
                     </div>
                     <p className="text-xs text-muted-foreground mt-1">
-                      La validation se fera par photo du bon papier. Les données seront synchronisées automatiquement au retour du réseau.
+                      La livraison sera marquée comme « effectuée hors ligne ». La position GPS ne sera pas vérifiée. Les données seront synchronisées automatiquement au retour du réseau.
                     </p>
                   </CardContent>
                 </Card>
