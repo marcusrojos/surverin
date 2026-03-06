@@ -519,8 +519,7 @@ export default function DriverDashboard() {
                   !recipientName.trim() ||
                   (!!deliverDialog?.verification_code && !verificationCode.trim()) ||
                   (isOnline && hasPharmacyLocation && !canConfirm) ||
-                  (isOnline && hasPharmacyLocation && geoLoading) ||
-                  (!isOnline && !offlinePhoto)
+                  (isOnline && hasPharmacyLocation && geoLoading)
                 }
               >
                 {submitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <CheckCircle className="w-4 h-4 mr-2" />}
