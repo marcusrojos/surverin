@@ -447,6 +447,7 @@ export default function DeliveriesPage() {
                                   driverLatitude: delivery.driver_latitude,
                                   driverLongitude: delivery.driver_longitude,
                                   geofenceRadius: GEOFENCE_RADIUS,
+                                  isOffline: !delivery.driver_latitude && !delivery.driver_longitude,
                                 });
                               } catch (error) {
                                 console.error('Erreur lors du téléchargement du bon:', error);
