@@ -161,12 +161,6 @@ export default function DriverDashboard() {
   const handleDeliver = async () => {
     if (!deliverDialog || !recipientName.trim()) return;
 
-    // Offline mode: require photo
-    if (!isOnline && !offlinePhoto) {
-      toast.error('En mode hors-ligne, une photo du bon papier est obligatoire.');
-      return;
-    }
-
     // Only check verification code if the delivery has one
     const hasVerificationCode = !!deliverDialog.verification_code;
     if (hasVerificationCode && verificationCode.trim() !== deliverDialog.verification_code) {
