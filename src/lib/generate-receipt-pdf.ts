@@ -195,11 +195,11 @@ export async function generateReceiptPDF(data: ReceiptData) {
     drawSectionTitle('LIVREUR');
     if (data.driverName) addField('Nom du livreur :', data.driverName);
     if (data.driverEmail) addField('Email du livreur :', data.driverEmail);
-    if (data.driverLatitude && data.driverLongitude) {
+    if (!data.isOffline && data.driverLatitude && data.driverLongitude) {
       addField('Position GPS livreur :', `${data.driverLatitude.toFixed(6)}, ${data.driverLongitude.toFixed(6)}`);
     }
-    // Geofence compliance
-    if (data.driverLatitude && data.driverLongitude && data.pharmacyLatitude && data.pharmacyLongitude) {
+    // Geofence compliance — only for online deliveries
+    if (!data.isOffline && data.driverLatitude && data.driverLongitude && data.pharmacyLatitude && data.pharmacyLongitude) {
       const dist = calculateDistance(data.driverLatitude, data.driverLongitude, data.pharmacyLatitude, data.pharmacyLongitude);
       const radius = data.geofenceRadius || 20;
       const withinZone = dist <= radius;
