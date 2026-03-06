@@ -57,6 +57,7 @@ export default function PharmacyDashboard() {
       driverLatitude: d.driver_latitude,
       driverLongitude: d.driver_longitude,
       geofenceRadius: GEOFENCE_RADIUS,
+      isOffline: !d.driver_latitude && !d.driver_longitude,
     });
   };
 
