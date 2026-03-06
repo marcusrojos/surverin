@@ -186,7 +186,7 @@ export async function generateReceiptPDF(data: ReceiptData) {
   if (data.pharmacyAddress) addField('Adresse :', data.pharmacyAddress);
   if (data.pharmacyPhone) addField('Téléphone :', data.pharmacyPhone);
   if (data.pharmacyEmail) addField('Email :', data.pharmacyEmail);
-  if (data.pharmacyLatitude && data.pharmacyLongitude) {
+  if (!data.isOffline && data.pharmacyLatitude && data.pharmacyLongitude) {
     addField('Position GPS :', `${data.pharmacyLatitude.toFixed(6)}, ${data.pharmacyLongitude.toFixed(6)}`);
   }
   y += 2;
