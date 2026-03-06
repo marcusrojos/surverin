@@ -30,6 +30,7 @@ export default function DriverDashboard() {
     loading,
     isOnline,
     isSyncing,
+    syncMessage,
     pendingCount,
     validateDelivery,
     refetch,
