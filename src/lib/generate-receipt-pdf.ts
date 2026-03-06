@@ -37,6 +37,14 @@ interface ReceiptData {
   isOffline?: boolean;
 }
 
+// DPCI Brand Colors (HSL 152 72% 30% → RGB)
+const BRAND_GREEN = { r: 21, g: 131, b: 82 };   // Primary green
+const BRAND_DARK = { r: 18, g: 46, b: 34 };      // Dark green (secondary)
+const BRAND_LIGHT_BG = { r: 234, g: 247, b: 241 }; // Light green background
+const TEXT_DARK = { r: 30, g: 30, b: 30 };
+const TEXT_MUTED = { r: 120, g: 120, b: 120 };
+const BORDER_LIGHT = { r: 200, g: 220, b: 210 };
+
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -62,12 +70,19 @@ function calculateDistance(
   return R * c;
 }
 
+function formatDateFR(dateStr: string): string {
+  return new Date(dateStr).toLocaleDateString('fr-FR', {
+    day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit'
+  });
+}
+
 export async function generateReceiptPDF(data: ReceiptData) {
   const doc = new jsPDF('p', 'mm', 'a4');
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
   const margin = 15;
-  const footerHeight = 18;
+  const contentWidth = pageWidth - margin * 2;
+  const footerHeight = 20;
   const maxY = pageHeight - footerHeight - 5;
   let y = 14;
 
@@ -78,107 +93,148 @@ export async function generateReceiptPDF(data: ReceiptData) {
     }
   };
 
+  const setColor = (c: typeof BRAND_GREEN) => doc.setTextColor(c.r, c.g, c.b);
+  const setDrawCol = (c: typeof BRAND_GREEN) => doc.setDrawColor(c.r, c.g, c.b);
+  const setFillCol = (c: typeof BRAND_GREEN) => doc.setFillColor(c.r, c.g, c.b);
+
+  // ── Footer ──
   const drawFooter = () => {
     const fy = pageHeight - footerHeight;
-    doc.setDrawColor(0, 102, 204);
-    doc.setLineWidth(0.5);
+    setDrawCol(BRAND_GREEN);
+    doc.setLineWidth(0.6);
     doc.line(margin, fy, pageWidth - margin, fy);
-    doc.setFontSize(7.5);
+    doc.setFontSize(7);
     doc.setFont('helvetica', 'normal');
-    doc.setTextColor(120, 120, 120);
-    doc.text('DPCI - Livraison Express Pharmaceutique', pageWidth / 2, fy + 5, { align: 'center' });
+    setColor(TEXT_MUTED);
+    doc.text('DPCI — Livraison Express Pharmaceutique', margin, fy + 5);
+    doc.text(`ID: ${data.reference}`, pageWidth - margin, fy + 5, { align: 'right' });
     doc.text(
-      `Document généré le ${new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}`,
-      pageWidth / 2, fy + 10, { align: 'center' }
+      `Document généré le ${formatDateFR(new Date().toISOString())}`,
+      margin, fy + 10
     );
+    const totalPages = (doc as any).internal.getNumberOfPages();
+    const currentPage = (doc as any).internal.getCurrentPageInfo().pageNumber;
+    doc.text(`Page ${currentPage}/${totalPages}`, pageWidth - margin, fy + 10, { align: 'right' });
   };
 
+  // ── Section title with brand accent ──
   const drawSectionTitle = (title: string) => {
-    ensureSpace(12);
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(0, 102, 204);
-    doc.text(title, margin, y);
+    ensureSpace(14);
     y += 2;
-    doc.setDrawColor(0, 102, 204);
-    doc.setLineWidth(0.3);
-    doc.line(margin, y, pageWidth - margin, y);
-    y += 5;
-    doc.setTextColor(0, 0, 0);
+    setFillCol(BRAND_GREEN);
+    doc.rect(margin, y - 3, 3, 10, 'F'); // Accent bar
+    doc.setFontSize(10.5);
+    doc.setFont('helvetica', 'bold');
+    setColor(BRAND_DARK);
+    doc.text(title, margin + 6, y + 4);
+    y += 12;
   };
 
-  const valueX = margin + 52;
+  const valueX = margin + 50;
   const addField = (label: string, value: string, bold = false) => {
     ensureSpace(8);
-    doc.setFontSize(9);
+    doc.setFontSize(8.5);
     doc.setFont('helvetica', 'bold');
-    doc.setTextColor(0, 0, 0);
-    doc.text(label, margin, y);
+    setColor(TEXT_MUTED);
+    doc.text(label, margin + 6, y);
     doc.setFont('helvetica', bold ? 'bold' : 'normal');
+    setColor(TEXT_DARK);
     const lines = doc.splitTextToSize(value, pageWidth - valueX - margin);
     doc.text(lines, valueX, y);
-    y += 6.5 * (lines.length > 1 ? lines.length * 0.9 : 1);
+    y += 5.5 * Math.max(1, lines.length * 0.9);
   };
+
+  const addInfoBox = (text: string, type: 'warning' | 'success' | 'info') => {
+    ensureSpace(14);
+    y += 1;
+    if (type === 'warning') {
+      doc.setFillColor(255, 243, 205);
+      doc.setDrawColor(255, 193, 7);
+    } else if (type === 'success') {
+      doc.setFillColor(220, 252, 231);
+      doc.setDrawColor(BRAND_GREEN.r, BRAND_GREEN.g, BRAND_GREEN.b);
+    } else {
+      doc.setFillColor(BRAND_LIGHT_BG.r, BRAND_LIGHT_BG.g, BRAND_LIGHT_BG.b);
+      doc.setDrawColor(BRAND_GREEN.r, BRAND_GREEN.g, BRAND_GREEN.b);
+    }
+    doc.setLineWidth(0.5);
+    doc.roundedRect(margin, y, contentWidth, 9, 1.5, 1.5, 'FD');
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'italic');
+    if (type === 'warning') doc.setTextColor(133, 100, 4);
+    else if (type === 'success') setColor(BRAND_GREEN);
+    else setColor(BRAND_DARK);
+    doc.text(text, margin + 4, y + 6);
+    setColor(TEXT_DARK);
+    y += 13;
+  };
+
+  // ══════════════════════════════════════════════
+  //                 HEADER / LOGO
+  // ══════════════════════════════════════════════
+
+  // Top accent line
+  setFillCol(BRAND_GREEN);
+  doc.rect(0, 0, pageWidth, 3, 'F');
+  y = 10;
 
   try {
     const logoImg = await loadImage(dpciLogo);
-    const logoWidth = 25;
+    const logoWidth = 22;
     const logoHeight = (logoImg.height / logoImg.width) * logoWidth;
     doc.addImage(logoImg, 'WEBP', margin, y, logoWidth, logoHeight);
-    doc.setFontSize(18);
+    doc.setFontSize(16);
     doc.setFont('helvetica', 'bold');
-    doc.setTextColor(0, 0, 0);
-    doc.text('DPCI', margin + logoWidth + 6, y + 8);
-    doc.setFontSize(9);
+    setColor(BRAND_DARK);
+    doc.text('DPCI', margin + logoWidth + 5, y + 7);
+    doc.setFontSize(8);
     doc.setFont('helvetica', 'normal');
-    doc.text('Livraison Express Pharmaceutique', margin + logoWidth + 6, y + 14);
-    y += Math.max(logoHeight, 18) + 5;
+    setColor(TEXT_MUTED);
+    doc.text('Livraison Express Pharmaceutique', margin + logoWidth + 5, y + 12);
+    y += Math.max(logoHeight, 16) + 4;
   } catch {
-    doc.setFontSize(18);
+    doc.setFontSize(16);
     doc.setFont('helvetica', 'bold');
-    doc.setTextColor(0, 0, 0);
-    doc.text('DPCI', margin, y + 8);
-    doc.setFontSize(9);
+    setColor(BRAND_DARK);
+    doc.text('DPCI', margin, y + 7);
+    doc.setFontSize(8);
     doc.setFont('helvetica', 'normal');
-    doc.text('Livraison Express Pharmaceutique', margin, y + 14);
-    y += 20;
+    setColor(TEXT_MUTED);
+    doc.text('Livraison Express Pharmaceutique', margin, y + 12);
+    y += 18;
   }
 
-  doc.setDrawColor(0, 102, 204);
-  doc.setLineWidth(0.8);
-  doc.line(margin, y, pageWidth - margin, y);
-  y += 6;
-
-  ensureSpace(12);
-  doc.setFontSize(15);
+  // Title bar
+  ensureSpace(16);
+  setFillCol(BRAND_GREEN);
+  doc.roundedRect(margin, y, contentWidth, 12, 2, 2, 'F');
+  doc.setFontSize(13);
   doc.setFont('helvetica', 'bold');
-  doc.setTextColor(0, 0, 0);
-  doc.text('BON DE LIVRAISON', pageWidth / 2, y, { align: 'center' });
-  y += 10;
-  y += 10;
+  doc.setTextColor(255, 255, 255);
+  doc.text('BON DE LIVRAISON', pageWidth / 2, y + 8.5, { align: 'center' });
+  y += 18;
+
+  // ══════════════════════════════════════════════
+  //            DELIVERY INFORMATION
+  // ══════════════════════════════════════════════
 
   drawSectionTitle('INFORMATIONS DE LA LIVRAISON');
   addField('Référence :', data.reference, true);
-  addField('Date de création :', new Date(data.createdAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }));
-  addField('Date de livraison :', new Date(data.deliveredAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }));
+  addField('Identifiant :', data.reference, false);
+  addField('Date de création :', formatDateFR(data.createdAt));
+  addField('Date de livraison :', formatDateFR(data.deliveredAt));
   addField('Statut :', 'LIVRÉ ✓', true);
-  addField('Mode :', data.isOffline ? 'Hors ligne' : 'En ligne', true);
+  addField('Mode :', data.isOffline ? 'Hors ligne (offline)' : 'En ligne (online)', true);
+
   if (data.isOffline) {
-    ensureSpace(12);
-    y += 1;
-    doc.setFillColor(255, 243, 205);
-    doc.setDrawColor(255, 193, 7);
-    doc.setLineWidth(0.5);
-    doc.rect(margin, y, pageWidth - margin * 2, 8, 'FD');
-    doc.setFontSize(8);
-    doc.setFont('helvetica', 'italic');
-    doc.setTextColor(133, 100, 4);
-    doc.text('Livraison validée hors connexion – position GPS non vérifiée', margin + 3, y + 5);
-    doc.setTextColor(0, 0, 0);
-    y += 11;
+    addInfoBox('⚠ Livraison validée hors connexion – position GPS non vérifiée', 'warning');
   }
-  if (data.verificationCode) addField('Code de vérification :', data.verificationCode);
-  y += 2;
+
+  if (data.verificationCode) addField('Code vérification :', data.verificationCode);
+
+  // ══════════════════════════════════════════════
+  //               PHARMACY
+  // ══════════════════════════════════════════════
 
   drawSectionTitle('PHARMACIE DESTINATAIRE');
   addField('Pharmacie :', data.pharmacyName);
@@ -189,14 +245,17 @@ export async function generateReceiptPDF(data: ReceiptData) {
   if (!data.isOffline && data.pharmacyLatitude && data.pharmacyLongitude) {
     addField('Position GPS :', `${data.pharmacyLatitude.toFixed(6)}, ${data.pharmacyLongitude.toFixed(6)}`);
   }
-  y += 2;
+
+  // ══════════════════════════════════════════════
+  //                  DRIVER
+  // ══════════════════════════════════════════════
 
   if (data.driverName || data.driverEmail) {
     drawSectionTitle('LIVREUR');
-    if (data.driverName) addField('Nom du livreur :', data.driverName);
-    if (data.driverEmail) addField('Email du livreur :', data.driverEmail);
+    if (data.driverName) addField('Nom :', data.driverName);
+    if (data.driverEmail) addField('Email :', data.driverEmail);
     if (!data.isOffline && data.driverLatitude && data.driverLongitude) {
-      addField('Position GPS livreur :', `${data.driverLatitude.toFixed(6)}, ${data.driverLongitude.toFixed(6)}`);
+      addField('Position GPS :', `${data.driverLatitude.toFixed(6)}, ${data.driverLongitude.toFixed(6)}`);
     }
     // Geofence compliance — only for online deliveries
     if (!data.isOffline && data.driverLatitude && data.driverLongitude && data.pharmacyLatitude && data.pharmacyLongitude) {
@@ -204,29 +263,42 @@ export async function generateReceiptPDF(data: ReceiptData) {
       const radius = data.geofenceRadius || 20;
       const withinZone = dist <= radius;
       const distStr = dist < 1000 ? `${Math.round(dist)} m` : `${(dist / 1000).toFixed(1)} km`;
-      addField('Distance pharmacie :', `${distStr} (périmètre autorisé : ${radius}m)`);
-      addField('Périmètre respecté :', withinZone ? '✓ Oui' : '✗ Non', true);
+      addField('Distance :', `${distStr} (périmètre autorisé : ${radius}m)`);
+
+      if (withinZone) {
+        addInfoBox(`✓ Périmètre de sécurité respecté (${distStr} ≤ ${radius}m)`, 'success');
+      } else {
+        addInfoBox(`✗ Périmètre de sécurité NON respecté (${distStr} > ${radius}m)`, 'warning');
+      }
     }
-    y += 2;
   }
+
+  // ══════════════════════════════════════════════
+  //               PACKAGES TABLE
+  // ══════════════════════════════════════════════
 
   const totalSent = (data.nb_cartons || 0) + (data.nb_sachets || 0) + (data.nb_barques || 0);
   const hasPackages = (data.packages && data.packages.length > 0) || totalSent > 0;
 
   if (hasPackages) {
     drawSectionTitle('DÉTAIL DES COLIS');
-    ensureSpace(12);
-    doc.setFontSize(9);
+    ensureSpace(14);
+
+    // Table header
+    const colX = [margin + 6, margin + 50, margin + 85, margin + 120];
+    setFillCol(BRAND_LIGHT_BG);
+    doc.roundedRect(margin, y - 3, contentWidth, 8, 1, 1, 'F');
+    doc.setFontSize(8.5);
     doc.setFont('helvetica', 'bold');
-    doc.setTextColor(0, 0, 0);
-    doc.text('Type', margin + 5, y);
-    doc.text('Envoyé(s)', margin + 55, y);
-    doc.text('Reçu(s)', margin + 90, y);
-    doc.text('Écart', margin + 125, y);
-    y += 2;
-    doc.setDrawColor(180, 180, 180);
+    setColor(BRAND_DARK);
+    doc.text('Type', colX[0], y + 2);
+    doc.text('Envoyé(s)', colX[1], y + 2);
+    doc.text('Reçu(s)', colX[2], y + 2);
+    doc.text('Écart', colX[3], y + 2);
+    y += 8;
+    setDrawCol(BORDER_LIGHT);
     doc.setLineWidth(0.3);
-    doc.line(margin + 5, y, margin + 150, y);
+    doc.line(margin, y, pageWidth - margin, y);
     y += 4;
 
     const types = [
@@ -239,75 +311,71 @@ export async function generateReceiptPDF(data: ReceiptData) {
     doc.setFont('helvetica', 'normal');
     for (const t of types) {
       if (t.sent > 0 || (t.received != null && t.received > 0)) {
-        ensureSpace(6);
+        ensureSpace(7);
         const ecart = t.received != null ? t.received - t.sent : null;
         const ecartStr = ecart != null ? (ecart === 0 ? '—' : (ecart > 0 ? `+${ecart}` : String(ecart))) : '—';
         if (ecart != null && ecart !== 0) hasDiscrepancy = true;
 
-        doc.setTextColor(0, 0, 0);
-        doc.text(t.label, margin + 5, y);
-        doc.text(String(t.sent), margin + 65, y);
-        doc.text(t.received != null ? String(t.received) : '—', margin + 97, y);
+        doc.setFontSize(8.5);
+        setColor(TEXT_DARK);
+        doc.text(t.label, colX[0], y);
+        doc.text(String(t.sent), colX[1] + 8, y);
+        doc.text(t.received != null ? String(t.received) : '—', colX[2] + 5, y);
 
         if (ecart != null && ecart < 0) doc.setTextColor(200, 60, 60);
         else if (ecart != null && ecart > 0) doc.setTextColor(30, 150, 30);
-        else doc.setTextColor(100, 100, 100);
-        doc.text(ecartStr, margin + 132, y);
-        doc.setTextColor(0, 0, 0);
+        else setColor(TEXT_MUTED);
+        doc.setFont('helvetica', 'bold');
+        doc.text(ecartStr, colX[3] + 3, y);
+        doc.setFont('helvetica', 'normal');
+        setColor(TEXT_DARK);
         y += 6;
       }
     }
 
     if (hasDiscrepancy) {
-      ensureSpace(12);
-      y += 1;
-      doc.setFillColor(255, 243, 205);
-      doc.setDrawColor(255, 193, 7);
-      doc.setLineWidth(0.5);
-      doc.rect(margin, y, pageWidth - margin * 2, 8, 'FD');
-      doc.setFontSize(8);
-      doc.setFont('helvetica', 'bold');
-      doc.setTextColor(133, 100, 4);
-      doc.text('⚠ Des écarts ont été constatés entre les quantités envoyées et reçues.', margin + 3, y + 5);
-      doc.setTextColor(0, 0, 0);
-      y += 11;
+      addInfoBox('⚠ Des écarts ont été constatés entre les quantités envoyées et reçues.', 'warning');
     }
 
     if (data.packages && data.packages.length > 0) {
       ensureSpace(12);
       y += 1;
-      doc.setFontSize(9);
+      doc.setFontSize(8.5);
       doc.setFont('helvetica', 'bold');
-      doc.setTextColor(0, 0, 0);
-      doc.text('Références individuelles :', margin, y);
+      setColor(BRAND_DARK);
+      doc.text('Références individuelles :', margin + 6, y);
       y += 5;
       doc.setFont('helvetica', 'normal');
+      setColor(TEXT_DARK);
       for (const pkg of data.packages) {
         ensureSpace(6);
         const typeLabel = pkg.type === 'barque' ? 'Bac' : pkg.type ? pkg.type.charAt(0).toUpperCase() + pkg.type.slice(1) : 'Colis';
-        doc.text(`• ${typeLabel} — ${pkg.reference || 'Sans réf.'}`, margin + 5, y);
+        doc.text(`• ${typeLabel} — ${pkg.reference || 'Sans réf.'}`, margin + 8, y);
         y += 5;
       }
     }
-    y += 2;
   }
+
+  // ══════════════════════════════════════════════
+  //              SIGNATURE
+  // ══════════════════════════════════════════════
 
   drawSectionTitle('VALIDATION DE LIVRAISON');
   addField('Réceptionnaire :', data.recipientName);
   y += 2;
 
   ensureSpace(8);
-  doc.setFontSize(9);
+  doc.setFontSize(8.5);
   doc.setFont('helvetica', 'bold');
-  doc.setTextColor(0, 0, 0);
-  doc.text('Signature du réceptionnaire :', margin, y);
+  setColor(TEXT_MUTED);
+  doc.text('Signature du réceptionnaire :', margin + 6, y);
   y += 5;
 
   if (data.recipientSignature) {
     try {
       const sigImg = await loadImage(data.recipientSignature);
-      const maxSigW = 60;
-      const maxSigH = 28;
+      const maxSigW = 55;
+      const maxSigH = 25;
       const ratio = sigImg.height / sigImg.width;
       let sigWidth = maxSigW;
       let sigHeight = ratio * sigWidth;
@@ -316,26 +384,46 @@ export async function generateReceiptPDF(data: ReceiptData) {
         sigWidth = sigHeight / ratio;
       }
       ensureSpace(sigHeight + 10);
-      doc.setDrawColor(200, 200, 200);
+      setDrawCol(BORDER_LIGHT);
       doc.setLineWidth(0.3);
-      doc.rect(margin, y, sigWidth + 8, sigHeight + 6);
-      doc.addImage(sigImg, 'PNG', margin + 4, y + 3, sigWidth, sigHeight);
+      doc.roundedRect(margin + 6, y, sigWidth + 8, sigHeight + 6, 1.5, 1.5);
+      doc.addImage(sigImg, 'PNG', margin + 10, y + 3, sigWidth, sigHeight);
       y += sigHeight + 12;
     } catch {
       ensureSpace(10);
       doc.setFont('helvetica', 'italic');
-      doc.setTextColor(100, 100, 100);
-      doc.text('Signature non disponible', margin, y + 5);
+      setColor(TEXT_MUTED);
+      doc.text('Signature non disponible', margin + 6, y + 5);
       y += 10;
     }
   } else {
     ensureSpace(10);
     doc.setFont('helvetica', 'italic');
-    doc.setTextColor(100, 100, 100);
-    doc.text('Pas de signature enregistrée', margin, y + 5);
+    setColor(TEXT_MUTED);
+    doc.text('Pas de signature enregistrée', margin + 6, y + 5);
     y += 10;
   }
 
+  // ══════════════════════════════════════════════
+  //               TRACEABILITY
+  // ══════════════════════════════════════════════
+
+  ensureSpace(20);
+  y += 3;
+  setDrawCol(BORDER_LIGHT);
+  doc.setLineWidth(0.3);
+  doc.line(margin, y, pageWidth - margin, y);
+  y += 5;
+  doc.setFontSize(7);
+  doc.setFont('helvetica', 'normal');
+  setColor(TEXT_MUTED);
+  doc.text(`Identifiant unique de livraison : ${data.reference}`, margin, y);
+  y += 4;
+  doc.text(`Bon créé le : ${formatDateFR(new Date().toISOString())}`, margin, y);
+  y += 4;
+  doc.text(`Mode de validation : ${data.isOffline ? 'Hors connexion' : 'En ligne — GPS vérifié'}`, margin, y);
+
+  // ── Apply footers to all pages ──
   const totalPages = (doc as any).internal.getNumberOfPages();
   for (let p = 1; p <= totalPages; p++) {
     doc.setPage(p);
@@ -354,24 +442,41 @@ export async function generatePhotoPDF(photoBase64: string, reference: string, d
   const margin = 15;
   let y = 14;
 
-  // Header
+  // Top accent bar
+  doc.setFillColor(BRAND_GREEN.r, BRAND_GREEN.g, BRAND_GREEN.b);
+  doc.rect(0, 0, pageWidth, 3, 'F');
+  y = 10;
+
   doc.setFontSize(14);
   doc.setFont('helvetica', 'bold');
+  doc.setTextColor(BRAND_DARK.r, BRAND_DARK.g, BRAND_DARK.b);
   doc.text('DPCI — Bon de livraison (hors-ligne)', pageWidth / 2, y + 5, { align: 'center' });
   y += 15;
 
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
+  doc.setTextColor(TEXT_DARK.r, TEXT_DARK.g, TEXT_DARK.b);
   doc.text(`Référence : ${reference}`, margin, y);
   y += 7;
-  doc.text(`Date de livraison : ${new Date(deliveredAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}`, margin, y);
-  y += 10;
+  doc.text(`Date de livraison : ${formatDateFR(deliveredAt)}`, margin, y);
+  y += 7;
+
+  // Offline notice
+  doc.setFillColor(255, 243, 205);
+  doc.setDrawColor(255, 193, 7);
+  doc.setLineWidth(0.5);
+  doc.roundedRect(margin, y, pageWidth - margin * 2, 9, 1.5, 1.5, 'FD');
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'italic');
+  doc.setTextColor(133, 100, 4);
+  doc.text('Livraison validée hors connexion – position GPS non vérifiée', margin + 4, y + 6);
+  y += 14;
 
   // Add photo
   try {
     const img = await loadImage(photoBase64);
     const maxW = pageWidth - margin * 2;
-    const maxH = 200;
+    const maxH = 190;
     const ratio = img.height / img.width;
     let w = maxW;
     let h = ratio * w;
@@ -384,6 +489,5 @@ export async function generatePhotoPDF(photoBase64: string, reference: string, d
     doc.text('Photo non disponible', margin, y + 10);
   }
 
-  // Return as base64 data URI
   return doc.output('datauristring');
 }

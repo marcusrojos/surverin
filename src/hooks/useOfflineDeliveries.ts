@@ -15,7 +15,7 @@ interface UseOfflineDeliveriesOptions {
   userId: string | undefined;
 }
 
-const SYNC_RETRY_INTERVAL = 30_000; // Retry sync every 30s if pending items exist
+const SYNC_RETRY_INTERVAL = 30_000;
 
 export function useOfflineDeliveries({ userId }: UseOfflineDeliveriesOptions) {
   const [deliveries, setDeliveries] = useState<EnrichedDelivery[]>([]);
@@ -23,6 +23,7 @@ export function useOfflineDeliveries({ userId }: UseOfflineDeliveriesOptions) {
   const [loading, setLoading] = useState(true);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [pendingCount, setPendingCount] = useState(0);
   const syncingRef = useRef(false);
   const userIdRef = useRef(userId);
@@ -104,16 +105,15 @@ export function useOfflineDeliveries({ userId }: UseOfflineDeliveriesOptions) {
       setPharmacyOrder(buildOrderMap(axisData));
       return true;
     } catch {
-      // Network error — keep existing cached data, don't clear state
       return false;
     }
   }, [enrichDeliveries, buildOrderMap]);
 
-  // Stable refs for event listeners (avoid stale closures)
+  // Stable refs for event listeners
   const fetchFromServerRef = useRef(fetchFromServer);
   fetchFromServerRef.current = fetchFromServer;
 
-  // ── Sync pending validations ──
+  // ── Sync pending validations (progressive, one by one) ──
   const syncPending = useCallback(async () => {
     if (syncingRef.current || !navigator.onLine) return;
     
@@ -125,27 +125,36 @@ export function useOfflineDeliveries({ userId }: UseOfflineDeliveriesOptions) {
 
     syncingRef.current = true;
     setIsSyncing(true);
+    setSyncMessage('Synchronisation des livraisons en cours…');
 
     try {
       const { synced, failed } = await SyncQueue.syncAll();
+      
       if (synced > 0) {
         toast.success(`${synced} livraison${synced > 1 ? 's' : ''} synchronisée${synced > 1 ? 's' : ''}`);
         AppNotifications.syncSuccess(synced);
       }
       if (failed > 0) {
-        toast.error(`${failed} livraison${failed > 1 ? 's' : ''} en échec de synchronisation`);
+        toast.error(`${failed} livraison${failed > 1 ? 's' : ''} en échec — nouvelle tentative automatique`);
         AppNotifications.syncError(failed);
       }
 
-      // Refresh data from server after sync to get authoritative state
+      // Refresh from server after sync to get authoritative state
       if (synced > 0) {
         await fetchFromServerRef.current();
       }
 
-      await SyncQueue.cleanup();
-
       const remaining = await SyncQueue.getPendingCount();
       setPendingCount(remaining);
+
+      if (remaining === 0 && synced > 0) {
+        setSyncMessage('Synchronisation terminée');
+        setTimeout(() => setSyncMessage(null), 3000);
+      } else if (remaining > 0) {
+        setSyncMessage(null);
+      } else {
+        setSyncMessage(null);
+      }
     } finally {
       setIsSyncing(false);
       syncingRef.current = false;
@@ -161,7 +170,7 @@ export function useOfflineDeliveries({ userId }: UseOfflineDeliveriesOptions) {
       setIsOnline(true);
       toast.success('Connexion rétablie — synchronisation en cours…');
       AppNotifications.online();
-      // Auto-sync + refresh on reconnect — no manual refresh needed
+      // Auto-sync + refresh on reconnect
       syncPendingRef.current().then(() => fetchFromServerRef.current());
     };
     const onOffline = () => {
@@ -177,7 +186,7 @@ export function useOfflineDeliveries({ userId }: UseOfflineDeliveriesOptions) {
     };
   }, []);
 
-  // ── Periodic sync retry: catches cases where online event fires but sync fails ──
+  // ── Periodic sync retry ──
   useEffect(() => {
     const interval = setInterval(async () => {
       if (!navigator.onLine) return;
@@ -195,17 +204,11 @@ export function useOfflineDeliveries({ userId }: UseOfflineDeliveriesOptions) {
     let cancelled = false;
 
     async function init() {
-      // Request notification permission early
       AppNotifications.requestPermission();
-
-      // 1. Hydrate from IndexedDB immediately (works offline)
       await loadFromCache();
-
-      // 2. Update pending count from queue
       const count = await SyncQueue.getPendingCount();
       if (!cancelled) setPendingCount(count);
 
-      // 3. If online, sync pending + fetch fresh data
       if (navigator.onLine && userIdRef.current) {
         await syncPendingRef.current();
         await fetchFromServerRef.current();
@@ -223,7 +226,7 @@ export function useOfflineDeliveries({ userId }: UseOfflineDeliveriesOptions) {
     deliveryId: string,
     payload: PendingValidation['payload'],
   ) => {
-    // 1. Optimistic update in React state — immediate UI feedback
+    // 1. Optimistic update in React state
     setDeliveries(prev => prev.map(d =>
       d.id === deliveryId
         ? {
@@ -235,12 +238,12 @@ export function useOfflineDeliveries({ userId }: UseOfflineDeliveriesOptions) {
             nb_cartons_received: payload.nb_cartons_received,
             nb_sachets_received: payload.nb_sachets_received,
             nb_barques_received: payload.nb_barques_received,
-            pendingSync: true, // Always mark as pending initially
+            pendingSync: true,
           }
         : d
     ));
 
-    // 2. Update IndexedDB cache — survives app close/reopen
+    // 2. Update IndexedDB cache
     await OfflineStorage.updateDelivery(deliveryId, {
       status: 'livre' as const,
       recipient_name: payload.recipient_name,
@@ -251,24 +254,22 @@ export function useOfflineDeliveries({ userId }: UseOfflineDeliveriesOptions) {
       nb_barques_received: payload.nb_barques_received,
     });
 
-    // 3. Always enqueue first for safety (idempotent sync handles duplicates)
+    // 3. Enqueue for sync (handles duplicates automatically)
     await SyncQueue.enqueue(deliveryId, payload);
     const count = await SyncQueue.getPendingCount();
     setPendingCount(count);
 
     if (navigator.onLine) {
-      // 4. If online, attempt immediate sync
       toast.info('Envoi en cours…');
-      // Small delay to ensure queue entry is persisted
-      setTimeout(() => syncPendingRef.current(), 100);
+      setTimeout(() => syncPendingRef.current(), 200);
     } else {
       toast.info('Sauvegardé hors-ligne — sera synchronisé automatiquement');
     }
   }, []);
 
-  // ── Refetch (for realtime callbacks) ──
-  const refetch = useCallback(() => {
-    if (navigator.onLine) fetchFromServerRef.current();
+  // ── Refetch ──
+  const refetch = useCallback(async () => {
+    if (navigator.onLine) await fetchFromServerRef.current();
   }, []);
 
   return {
@@ -277,6 +278,7 @@ export function useOfflineDeliveries({ userId }: UseOfflineDeliveriesOptions) {
     loading,
     isOnline,
     isSyncing,
+    syncMessage,
     pendingCount,
     validateDelivery,
     syncPending,

@@ -26,7 +26,7 @@ export interface PendingValidation {
   retry_count: number;
 }
 
-const MAX_RETRIES = 5;
+const MAX_RETRIES = 10;
 
 async function getAllItems(): Promise<PendingValidation[]> {
   const items: PendingValidation[] = [];
@@ -39,6 +39,18 @@ async function getAllItems(): Promise<PendingValidation[]> {
 export const SyncQueue = {
   /** Add a validation to the queue */
   async enqueue(deliveryId: string, payload: PendingValidation['payload']): Promise<PendingValidation> {
+    // Check if there's already a pending entry for this delivery (avoid duplicates)
+    const existing = await this.getPending();
+    const duplicate = existing.find(e => e.delivery_id === deliveryId);
+    if (duplicate) {
+      // Update the existing entry with the latest payload
+      duplicate.payload = payload;
+      duplicate.retry_count = 0;
+      duplicate.sync_status = 'pending';
+      await syncStore.setItem(duplicate.id, duplicate);
+      return duplicate;
+    }
+
     const entry: PendingValidation = {
       id: crypto.randomUUID(),
       delivery_id: deliveryId,
@@ -73,7 +85,7 @@ export const SyncQueue = {
     return new Set(pending.map(p => p.delivery_id));
   },
 
-  /** Sync all pending validations to Supabase */
+  /** Sync all pending validations to Supabase — one by one (progressive) */
   async syncAll(): Promise<{ synced: number; failed: number }> {
     const pending = await this.getPending();
     if (pending.length === 0) return { synced: 0, failed: 0 };
@@ -81,41 +93,51 @@ export const SyncQueue = {
     let synced = 0;
     let failed = 0;
 
+    // Process sequentially — one at a time to avoid overwhelming the network
     for (const item of pending) {
+      // Abort if we went offline mid-sync
+      if (!navigator.onLine) {
+        failed += pending.length - synced - failed;
+        break;
+      }
+
       try {
-        // Check if delivery was already updated (idempotency)
+        // Check if delivery was already marked as delivered (idempotency via delivery_id)
         const { data: existing } = await supabase
           .from('deliveries')
-          .select('status, updated_at')
+          .select('status')
           .eq('id', item.delivery_id)
           .single();
 
-        if (existing) {
-          // If already delivered and updated after our local change, skip (don't overwrite admin changes)
-          if (existing.status === 'livre' && new Date(existing.updated_at) > new Date(item.created_at)) {
-            item.sync_status = 'synced';
-            await syncStore.setItem(item.id, item);
-            synced++;
-            continue;
-          }
+        if (existing && existing.status === 'livre') {
+          // Already delivered — mark as synced, remove from queue
+          item.sync_status = 'synced';
+          await syncStore.removeItem(item.id);
+          synced++;
+          continue;
         }
+
+        // Build the update payload (strip offline_photo — not a DB column)
+        const { offline_photo, ...dbPayload } = item.payload;
 
         const { error } = await supabase
           .from('deliveries')
-          .update(item.payload)
+          .update(dbPayload)
           .eq('id', item.delivery_id);
 
         if (error) {
+          console.error(`[SyncQueue] Failed to sync ${item.delivery_id}:`, error.message);
           item.retry_count++;
           item.sync_status = item.retry_count >= MAX_RETRIES ? 'error' : 'pending';
           await syncStore.setItem(item.id, item);
           failed++;
         } else {
-          item.sync_status = 'synced';
-          await syncStore.setItem(item.id, item);
+          // Success — remove from local storage immediately
+          await syncStore.removeItem(item.id);
           synced++;
         }
-      } catch {
+      } catch (err) {
+        console.error(`[SyncQueue] Network error for ${item.delivery_id}:`, err);
         item.retry_count++;
         item.sync_status = item.retry_count >= MAX_RETRIES ? 'error' : 'pending';
         await syncStore.setItem(item.id, item);

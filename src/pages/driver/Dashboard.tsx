@@ -30,6 +30,7 @@ export default function DriverDashboard() {
     loading,
     isOnline,
     isSyncing,
+    syncMessage,
     pendingCount,
     validateDelivery,
     refetch,
@@ -258,10 +259,13 @@ export default function DriverDashboard() {
             >
               <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
             </Button>
-            {isSyncing && (
+            {(isSyncing || syncMessage) && (
               <div className="flex items-center gap-1 text-primary text-sm">
-                <RefreshCw className="w-4 h-4 animate-spin" />
-                Synchronisation…
+                {isSyncing ? (
+                  <><RefreshCw className="w-4 h-4 animate-spin" /> Synchronisation des livraisons en cours…</>
+                ) : syncMessage ? (
+                  <><CheckCircle className="w-4 h-4" /> {syncMessage}</>
+                ) : null}
               </div>
             )}
             {!isOnline && (
