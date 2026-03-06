@@ -342,7 +342,7 @@ export async function generateReceiptPDF(data: ReceiptData) {
     drawFooter();
   }
 
-  doc.save(`bon-reception-${data.reference}.pdf`);
+  doc.save(`bon-livraison-${data.reference}.pdf`);
 }
 
 /**
