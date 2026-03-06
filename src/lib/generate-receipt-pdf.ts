@@ -292,7 +292,7 @@ export async function generateReceiptPDF(data: ReceiptData) {
     y += 2;
   }
 
-  drawSectionTitle('VALIDATION DE RÉCEPTION');
+  drawSectionTitle('VALIDATION DE LIVRAISON');
   addField('Réceptionnaire :', data.recipientName);
   y += 2;
 
