@@ -153,7 +153,8 @@ export async function generateReceiptPDF(data: ReceiptData) {
   doc.setFontSize(15);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(0, 0, 0);
-  doc.text('BON DE RÉCEPTION', pageWidth / 2, y, { align: 'center' });
+  doc.text('BON DE LIVRAISON', pageWidth / 2, y, { align: 'center' });
+  y += 10;
   y += 10;
 
   drawSectionTitle('INFORMATIONS DE LA LIVRAISON');
