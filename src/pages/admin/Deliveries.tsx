@@ -451,7 +451,7 @@ export default function DeliveriesPage() {
                                 });
                               } catch (error) {
                                 console.error('Erreur lors du téléchargement du bon:', error);
-                                toast.error('Erreur lors de la génération du bon de réception');
+                                toast.error('Erreur lors de la génération du bon de livraison');
                               }
                             }}
                           >
