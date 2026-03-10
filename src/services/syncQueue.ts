@@ -1,5 +1,6 @@
 import localforage from 'localforage';
 import { supabase } from '@/integrations/supabase/client';
+import { generatePhotoPDF } from '@/lib/generate-receipt-pdf';
 
 const syncStore = localforage.createInstance({ name: 'dpci', storeName: 'sync_queue' });
 
