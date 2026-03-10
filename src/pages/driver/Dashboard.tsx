@@ -421,144 +421,210 @@ export default function DriverDashboard() {
             <div className="space-y-4">
               <p className="text-sm text-muted-foreground">Réf: <span className="font-mono font-medium text-foreground">{deliverDialog?.reference}</span></p>
 
-              {/* Offline mode notice */}
-              {!isOnline && (
-                <Card className="border-2 border-warning bg-warning/5">
-                  <CardContent className="pt-3 pb-3">
-                    <div className="flex items-center gap-2 text-sm text-warning font-medium">
-                      <WifiOff className="w-4 h-4" />
-                      Vous êtes hors ligne
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      La livraison sera marquée comme « effectuée hors ligne ». La position GPS ne sera pas vérifiée. Les données seront synchronisées automatiquement au retour du réseau.
-                    </p>
-                  </CardContent>
-                </Card>
-              )}
-
-              {/* Geolocation status — only when online */}
-              {hasPharmacyLocation && isOnline && (
-                <Card className={`border-2 ${isWithinZone ? 'border-green-500 bg-green-500/5' : 'border-destructive bg-destructive/5'}`}>
-                  <CardContent className="pt-3 pb-3">
-                    {geoLoading ? (
-                      <div className="flex items-center gap-2 text-sm">
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        <span>Recherche de votre position GPS...</span>
+              {/* ── OFFLINE MODE: Photo-only form ── */}
+              {!isOnline ? (
+                <>
+                  <Card className="border-2 border-warning bg-warning/5">
+                    <CardContent className="pt-3 pb-3">
+                      <div className="flex items-center gap-2 text-sm text-warning font-medium">
+                        <WifiOff className="w-4 h-4" />
+                        Mode hors ligne
                       </div>
-                    ) : geoError ? (
-                      <div className="flex items-center gap-2 text-sm text-destructive">
-                        <AlertTriangle className="w-4 h-4" />
-                        <span>{geoError}</span>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Prenez une photo du bon de livraison papier signé. La livraison sera synchronisée automatiquement au retour du réseau.
+                      </p>
+                    </CardContent>
+                  </Card>
+
+                  {/* Photo capture — mandatory offline */}
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-1 font-semibold">
+                      <Camera className="w-4 h-4" />
+                      Photo du bon de livraison signé <span className="text-destructive">*</span>
+                    </Label>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      onChange={handlePhotoCapture}
+                      className="hidden"
+                    />
+                    {offlinePhoto ? (
+                      <div className="relative">
+                        <img src={offlinePhoto} alt="Bon de livraison" className="w-full h-48 object-cover rounded-lg border-2 border-primary/30" />
+                        <div className="absolute top-2 right-2 flex gap-1">
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => setOfflinePhoto(null)}
+                          >
+                            <X className="w-3 h-3 mr-1" /> Supprimer
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => fileInputRef.current?.click()}
+                          >
+                            <Camera className="w-3 h-3 mr-1" /> Reprendre
+                          </Button>
+                        </div>
+                        <div className="absolute bottom-2 left-2 bg-primary/90 text-primary-foreground text-xs px-2 py-1 rounded-md flex items-center gap-1">
+                          <CheckCircle className="w-3 h-3" /> Photo capturée
+                        </div>
                       </div>
                     ) : (
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-2">
-                          <div className={`w-3 h-3 rounded-full ${isWithinZone ? 'bg-green-500' : 'bg-destructive'} animate-pulse`} />
-                          <span className="text-sm font-medium">
-                            {isWithinZone ? 'Dans la zone autorisée' : 'Hors zone — validation bloquée'}
-                          </span>
-                        </div>
-                        {distance !== null && (
-                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                            <Navigation className="w-3 h-3" />
-                            <span>Distance: {formatDistance(distance)} / {GEOFENCE_RADIUS} m max</span>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="w-full h-32 border-dashed border-2 flex flex-col items-center gap-3"
+                        onClick={() => fileInputRef.current?.click()}
+                      >
+                        <Camera className="w-8 h-8 text-muted-foreground" />
+                        <span className="text-sm text-muted-foreground">Appuyez pour prendre la photo</span>
+                      </Button>
+                    )}
+                  </div>
+
+                  <Button
+                    onClick={handleDeliver}
+                    className="w-full"
+                    disabled={submitting || !offlinePhoto}
+                  >
+                    {submitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <CheckCircle className="w-4 h-4 mr-2" />}
+                    Valider la livraison hors ligne
+                  </Button>
+                </>
+              ) : (
+                /* ── ONLINE MODE: Full form ── */
+                <>
+                  {/* Geolocation status — only when online */}
+                  {hasPharmacyLocation && (
+                    <Card className={`border-2 ${isWithinZone ? 'border-green-500 bg-green-500/5' : 'border-destructive bg-destructive/5'}`}>
+                      <CardContent className="pt-3 pb-3">
+                        {geoLoading ? (
+                          <div className="flex items-center gap-2 text-sm">
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            <span>Recherche de votre position GPS...</span>
+                          </div>
+                        ) : geoError ? (
+                          <div className="flex items-center gap-2 text-sm text-destructive">
+                            <AlertTriangle className="w-4 h-4" />
+                            <span>{geoError}</span>
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            <div className="flex items-center gap-2">
+                              <div className={`w-3 h-3 rounded-full ${isWithinZone ? 'bg-green-500' : 'bg-destructive'} animate-pulse`} />
+                              <span className="text-sm font-medium">
+                                {isWithinZone ? 'Dans la zone autorisée' : 'Hors zone — validation bloquée'}
+                              </span>
+                            </div>
+                            {distance !== null && (
+                              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                <Navigation className="w-3 h-3" />
+                                <span>Distance: {formatDistance(distance)} / {GEOFENCE_RADIUS} m max</span>
+                              </div>
+                            )}
+                            {!isWithinZone && (
+                              <p className="text-xs text-destructive">
+                                Vous devez être dans la pharmacie ({GEOFENCE_RADIUS}m maximum) pour valider la livraison.
+                              </p>
+                            )}
                           </div>
                         )}
-                        {!isWithinZone && (
-                          <p className="text-xs text-destructive">
-                            Vous devez être dans la pharmacie ({GEOFENCE_RADIUS}m maximum) pour valider la livraison.
-                          </p>
-                        )}
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              )}
+                      </CardContent>
+                    </Card>
+                  )}
 
-              {/* Verification code - only show if delivery has one */}
-              {deliverDialog?.verification_code ? (
-                <div className="space-y-2">
-                  <Label>Code de vérification</Label>
-                  <Input
-                    value={verificationCode}
-                    onChange={(e) => setVerificationCode(e.target.value)}
-                    placeholder="Entrez le code à 6 chiffres"
-                    maxLength={6}
-                    className="font-mono tracking-widest text-center text-lg"
-                  />
-                  <p className="text-xs text-muted-foreground">Demandez le code de vérification au réceptionnaire de la pharmacie</p>
-                </div>
-              ) : (
-                <div className="p-3 bg-muted rounded-lg text-sm text-muted-foreground">
-                  Pas de code de vérification requis pour cette pharmacie
-                </div>
-              )}
+                  {/* Verification code */}
+                  {deliverDialog?.verification_code ? (
+                    <div className="space-y-2">
+                      <Label>Code de vérification</Label>
+                      <Input
+                        value={verificationCode}
+                        onChange={(e) => setVerificationCode(e.target.value)}
+                        placeholder="Entrez le code à 6 chiffres"
+                        maxLength={6}
+                        className="font-mono tracking-widest text-center text-lg"
+                      />
+                      <p className="text-xs text-muted-foreground">Demandez le code de vérification au réceptionnaire de la pharmacie</p>
+                    </div>
+                  ) : (
+                    <div className="p-3 bg-muted rounded-lg text-sm text-muted-foreground">
+                      Pas de code de vérification requis pour cette pharmacie
+                    </div>
+                  )}
 
-              <div className="space-y-2"><Label>Nom du réceptionnaire</Label><Input value={recipientName} onChange={(e) => setRecipientName(e.target.value)} placeholder="Nom et prénom" /></div>
-              <div className="grid grid-cols-3 gap-2 sm:gap-3">
-                <div className="space-y-1"><Label className="text-xs">Cartons reçus</Label><Input type="number" min={0} value={cartonsReceived} onChange={(e) => setCartonsReceived(Number(e.target.value))} /></div>
-                <div className="space-y-1"><Label className="text-xs">Sachets reçus</Label><Input type="number" min={0} value={sachetsReceived} onChange={(e) => setSachetsReceived(Number(e.target.value))} /></div>
-                <div className="space-y-1"><Label className="text-xs">Bacs reçus</Label><Input type="number" min={0} value={bacsReceived} onChange={(e) => setBacsReceived(Number(e.target.value))} /></div>
-              </div>
-
-              {/* Optional photo capture (available in both modes) */}
-              <div className="space-y-2">
-                <Label className="flex items-center gap-1">
-                  <Camera className="w-4 h-4" />
-                  Photo du bon papier {!isOnline && <span className="text-xs text-muted-foreground">(optionnel)</span>}
-                </Label>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  capture="environment"
-                  onChange={handlePhotoCapture}
-                  className="hidden"
-                />
-                {offlinePhoto ? (
-                  <div className="relative">
-                    <img src={offlinePhoto} alt="Bon papier" className="w-full h-40 object-cover rounded-lg border" />
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="sm"
-                      className="absolute bottom-2 right-2"
-                      onClick={() => fileInputRef.current?.click()}
-                    >
-                      Reprendre
-                    </Button>
+                  <div className="space-y-2"><Label>Nom du réceptionnaire</Label><Input value={recipientName} onChange={(e) => setRecipientName(e.target.value)} placeholder="Nom et prénom" /></div>
+                  <div className="grid grid-cols-3 gap-2 sm:gap-3">
+                    <div className="space-y-1"><Label className="text-xs">Cartons reçus</Label><Input type="number" min={0} value={cartonsReceived} onChange={(e) => setCartonsReceived(Number(e.target.value))} /></div>
+                    <div className="space-y-1"><Label className="text-xs">Sachets reçus</Label><Input type="number" min={0} value={sachetsReceived} onChange={(e) => setSachetsReceived(Number(e.target.value))} /></div>
+                    <div className="space-y-1"><Label className="text-xs">Bacs reçus</Label><Input type="number" min={0} value={bacsReceived} onChange={(e) => setBacsReceived(Number(e.target.value))} /></div>
                   </div>
-                ) : (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="w-full h-24 border-dashed flex flex-col items-center gap-2"
-                    onClick={() => fileInputRef.current?.click()}
-                  >
-                    <Camera className="w-6 h-6 text-muted-foreground" />
-                    <span className="text-sm text-muted-foreground">Prendre une photo du bon papier</span>
-                  </Button>
-                )}
-              </div>
 
-              <div className="space-y-2">
-                <Label>Signature</Label>
-                <SignaturePad onSignatureChange={setSignature} />
-              </div>
-              <Button
-                onClick={handleDeliver}
-                className="w-full"
-                disabled={
-                  submitting ||
-                  !recipientName.trim() ||
-                  (!!deliverDialog?.verification_code && !verificationCode.trim()) ||
-                  (isOnline && hasPharmacyLocation && !canConfirm) ||
-                  (isOnline && hasPharmacyLocation && geoLoading)
-                }
-              >
-                {submitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <CheckCircle className="w-4 h-4 mr-2" />}
-                Confirmer la livraison
-              </Button>
+                  {/* Optional photo capture */}
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-1">
+                      <Camera className="w-4 h-4" />
+                      Photo du bon papier <span className="text-xs text-muted-foreground">(optionnel)</span>
+                    </Label>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      onChange={handlePhotoCapture}
+                      className="hidden"
+                    />
+                    {offlinePhoto ? (
+                      <div className="relative">
+                        <img src={offlinePhoto} alt="Bon papier" className="w-full h-40 object-cover rounded-lg border" />
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          className="absolute bottom-2 right-2"
+                          onClick={() => fileInputRef.current?.click()}
+                        >
+                          Reprendre
+                        </Button>
+                      </div>
+                    ) : (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="w-full h-24 border-dashed flex flex-col items-center gap-2"
+                        onClick={() => fileInputRef.current?.click()}
+                      >
+                        <Camera className="w-6 h-6 text-muted-foreground" />
+                        <span className="text-sm text-muted-foreground">Prendre une photo du bon papier</span>
+                      </Button>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Signature</Label>
+                    <SignaturePad onSignatureChange={setSignature} />
+                  </div>
+                  <Button
+                    onClick={handleDeliver}
+                    className="w-full"
+                    disabled={
+                      submitting ||
+                      !recipientName.trim() ||
+                      (!!deliverDialog?.verification_code && !verificationCode.trim()) ||
+                      (hasPharmacyLocation && !canConfirm) ||
+                      (hasPharmacyLocation && geoLoading)
+                    }
+                  >
+                    {submitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <CheckCircle className="w-4 h-4 mr-2" />}
+                    Confirmer la livraison
+                  </Button>
+                </>
+              )}
             </div>
           </DialogContent>
         </Dialog>
