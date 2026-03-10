@@ -160,7 +160,37 @@ export default function DriverDashboard() {
   };
 
   const handleDeliver = async () => {
-    if (!deliverDialog || !recipientName.trim()) return;
+    if (!deliverDialog) return;
+
+    // Offline mode: only photo required
+    if (!isOnline) {
+      if (!offlinePhoto) {
+        toast.error('Veuillez prendre une photo du bon de livraison');
+        return;
+      }
+
+      setSubmitting(true);
+      const now = new Date().toISOString();
+
+      const payload: any = {
+        status: 'livre' as const,
+        recipient_name: 'Validation hors ligne',
+        recipient_signature: null,
+        delivered_at: now,
+        nb_cartons_received: deliverDialog.nb_cartons,
+        nb_sachets_received: deliverDialog.nb_sachets,
+        nb_barques_received: deliverDialog.nb_barques,
+        offline_photo: offlinePhoto,
+      };
+
+      await validateDelivery(deliverDialog.id, payload);
+      setDeliverDialog(null);
+      setSubmitting(false);
+      return;
+    }
+
+    // Online mode: full validation
+    if (!recipientName.trim()) return;
 
     // Only check verification code if the delivery has one
     const hasVerificationCode = !!deliverDialog.verification_code;
