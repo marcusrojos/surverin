@@ -14,7 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { StatusBadge } from '@/components/ui/status-badge';
 import { SignaturePad } from '@/components/ui/signature-pad';
 import { toast } from 'sonner';
-import { Package, CheckCircle, WifiOff, Loader2, Truck, Filter, CalendarDays, MapPin, Navigation, AlertTriangle, RefreshCw, Camera, ArrowDownFromLine } from 'lucide-react';
+import { Package, CheckCircle, WifiOff, Loader2, Truck, Filter, CalendarDays, MapPin, Navigation, AlertTriangle, RefreshCw, Camera, ArrowDownFromLine, X } from 'lucide-react';
 import { Database } from '@/integrations/supabase/types';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
