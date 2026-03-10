@@ -35,6 +35,17 @@ export default function PharmacyDashboard() {
 
   const handleReceipt = async (d: Delivery & { pharmacy?: Pharmacy }) => {
     if (!d.pharmacy) return;
+    // If delivery has a photo-based PDF (offline), download it directly
+    if ((d as any).receipt_pdf_url) {
+      const link = document.createElement('a');
+      link.href = (d as any).receipt_pdf_url;
+      link.download = `bon-livraison-${d.reference}.pdf`;
+      link.target = '_blank';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      return;
+    }
     await generateReceiptPDF({
       reference: d.reference,
       pharmacyName: d.pharmacy.name,

@@ -421,6 +421,17 @@ export default function DeliveriesPage() {
                             title="Télécharger le bon de livraison"
                             onClick={async () => {
                               try {
+                                // If delivery has a photo-based PDF (offline), download it directly
+                                if ((delivery as any).receipt_pdf_url) {
+                                  const link = document.createElement('a');
+                                  link.href = (delivery as any).receipt_pdf_url;
+                                  link.download = `bon-livraison-${delivery.reference}.pdf`;
+                                  link.target = '_blank';
+                                  document.body.appendChild(link);
+                                  link.click();
+                                  document.body.removeChild(link);
+                                  return;
+                                }
                                 const ph = pharmacies.find(p => p.id === delivery.pharmacy_id);
                                 await generateReceiptPDF({
                                   reference: delivery.reference,

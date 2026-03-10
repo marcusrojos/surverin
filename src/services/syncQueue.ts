@@ -1,5 +1,6 @@
 import localforage from 'localforage';
 import { supabase } from '@/integrations/supabase/client';
+import { generatePhotoPDF } from '@/lib/generate-receipt-pdf';
 
 const syncStore = localforage.createInstance({ name: 'dpci', storeName: 'sync_queue' });
 
@@ -120,9 +121,47 @@ export const SyncQueue = {
         // Build the update payload (strip offline_photo — not a DB column)
         const { offline_photo, ...dbPayload } = item.payload;
 
+        // If there's an offline photo, convert to PDF and upload to storage
+        let receiptPdfUrl: string | null = null;
+        if (offline_photo) {
+          try {
+            const pdfDataUri = await generatePhotoPDF(offline_photo, item.delivery_id, item.payload.delivered_at);
+            // Convert data URI to blob
+            const base64Data = pdfDataUri.split(',')[1];
+            const byteCharacters = atob(base64Data);
+            const byteNumbers = new Array(byteCharacters.length);
+            for (let i = 0; i < byteCharacters.length; i++) {
+              byteNumbers[i] = byteCharacters.charCodeAt(i);
+            }
+            const byteArray = new Uint8Array(byteNumbers);
+            const pdfBlob = new Blob([byteArray], { type: 'application/pdf' });
+
+            const fileName = `bon-livraison-${item.delivery_id}.pdf`;
+            const { error: uploadError } = await supabase.storage
+              .from('delivery-receipts')
+              .upload(fileName, pdfBlob, { contentType: 'application/pdf', upsert: true });
+
+            if (!uploadError) {
+              const { data: urlData } = supabase.storage
+                .from('delivery-receipts')
+                .getPublicUrl(fileName);
+              receiptPdfUrl = urlData.publicUrl;
+            } else {
+              console.error(`[SyncQueue] Failed to upload PDF for ${item.delivery_id}:`, uploadError.message);
+            }
+          } catch (pdfErr) {
+            console.error(`[SyncQueue] Failed to generate PDF for ${item.delivery_id}:`, pdfErr);
+          }
+        }
+
+        const updatePayload: any = { ...dbPayload };
+        if (receiptPdfUrl) {
+          updatePayload.receipt_pdf_url = receiptPdfUrl;
+        }
+
         const { error } = await supabase
           .from('deliveries')
-          .update(dbPayload)
+          .update(updatePayload)
           .eq('id', item.delivery_id);
 
         if (error) {
