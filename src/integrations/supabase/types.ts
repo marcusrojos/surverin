@@ -93,6 +93,7 @@ export type Database = {
           nb_sachets_received: number | null
           packages: Json
           pharmacy_id: string
+          receipt_pdf_url: string | null
           recipient_name: string | null
           recipient_signature: string | null
           reference: string
@@ -115,6 +116,7 @@ export type Database = {
           nb_sachets_received?: number | null
           packages?: Json
           pharmacy_id: string
+          receipt_pdf_url?: string | null
           recipient_name?: string | null
           recipient_signature?: string | null
           reference: string
@@ -137,6 +139,7 @@ export type Database = {
           nb_sachets_received?: number | null
           packages?: Json
           pharmacy_id?: string
+          receipt_pdf_url?: string | null
           recipient_name?: string | null
           recipient_signature?: string | null
           reference?: string
