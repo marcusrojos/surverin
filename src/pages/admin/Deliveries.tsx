@@ -153,7 +153,7 @@ export default function DeliveriesPage() {
 
       const { data: allProfiles } = await supabase
         .from('profiles')
-        .select('user_id, full_name');
+        .select('user_id, full_name, is_active');
 
       const mappedDeliveries = (deliveriesData || []).map(d => ({
         ...d,
