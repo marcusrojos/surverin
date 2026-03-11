@@ -147,8 +147,9 @@ export default function DeliveriesPage() {
 
       const { data: driversData } = await supabase
         .from('profiles')
-        .select('user_id, full_name')
-        .in('user_id', driverIds.length > 0 ? driverIds : ['no-match']);
+        .select('user_id, full_name, is_active')
+        .in('user_id', driverIds.length > 0 ? driverIds : ['no-match'])
+        .eq('is_active', true);
 
       const { data: allProfiles } = await supabase
         .from('profiles')
