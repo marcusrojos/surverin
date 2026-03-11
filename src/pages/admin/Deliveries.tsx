@@ -152,20 +152,20 @@ export default function DeliveriesPage() {
         .in('user_id', driverIds.length > 0 ? driverIds : ['no-match'])
         .eq('is_active', true);
 
-      const { data: allProfiles } = await supabase
+      const { data: fetchedProfiles } = await supabase
         .from('profiles')
         .select('user_id, full_name, is_active');
 
       const mappedDeliveries = (deliveriesData || []).map(d => ({
         ...d,
         pharmacy: pharmaciesData?.find(p => p.id === d.pharmacy_id) || null,
-        driver: allProfiles?.find(p => p.user_id === d.driver_id) || null,
+        driver: fetchedProfiles?.find(p => p.user_id === d.driver_id) || null,
       }));
 
       setDeliveries(mappedDeliveries as Delivery[]);
       setPharmacies((pharmaciesData || []) as Pharmacy[]);
       setDrivers(driversData || []);
-      setAllProfiles(allProfiles || []);
+      setAllProfiles(fetchedProfiles || []);
     } catch (error) {
       toast.error('Erreur lors du chargement');
     } finally {
