@@ -165,6 +165,7 @@ export default function DeliveriesPage() {
       setDeliveries(mappedDeliveries as Delivery[]);
       setPharmacies((pharmaciesData || []) as Pharmacy[]);
       setDrivers(driversData || []);
+      setAllProfiles(allProfiles || []);
     } catch (error) {
       toast.error('Erreur lors du chargement');
     } finally {
