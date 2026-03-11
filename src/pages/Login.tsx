@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Loader2, Truck, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
-import dpciLogo from '@/assets/dpci-logo.webp';
+import dpciLogo from '@/assets/dpci-logo.png';
 import { supabase } from '@/integrations/supabase/client';
 
 export default function Login() {
