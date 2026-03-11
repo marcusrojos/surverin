@@ -220,7 +220,14 @@ export default function DeliveriesPage() {
         setIsDialogOpen(false);
       } else {
         const selectedPharmacy = pharmacies.find(p => p.id === formData.pharmacy_id);
-        const verificationCode = selectedPharmacy?.user_id ? generateVerificationCode() : null;
+        // Only generate verification code if pharmacy has an active account
+        let verificationCode: string | null = null;
+        if (selectedPharmacy?.user_id) {
+          const pharmacyProfile = allProfiles?.find((p: any) => p.user_id === selectedPharmacy.user_id);
+          if (pharmacyProfile && (pharmacyProfile as any).is_active !== false) {
+            verificationCode = generateVerificationCode();
+          }
+        }
         
         const { error } = await supabase
           .from('deliveries')
