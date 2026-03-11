@@ -5,7 +5,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent } from '@/components/ui/card';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { Button } from '@/components/ui/button';
-import { generateReceiptPDF } from '@/lib/generate-receipt-pdf';
+import { generateReceiptPDF, downloadPdfFromUrl } from '@/lib/generate-receipt-pdf';
 import { GEOFENCE_RADIUS } from '@/lib/geolocation';
 import { Package, CheckCircle, FileText, Loader2, KeyRound } from 'lucide-react';
 import { Database } from '@/integrations/supabase/types';
@@ -37,13 +37,10 @@ export default function PharmacyDashboard() {
     if (!d.pharmacy) return;
     // If delivery has a photo-based PDF (offline), download it directly
     if ((d as any).receipt_pdf_url) {
-      const link = document.createElement('a');
-      link.href = (d as any).receipt_pdf_url;
-      link.download = `bon-livraison-${d.reference}.pdf`;
-      link.target = '_blank';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      await downloadPdfFromUrl(
+        (d as any).receipt_pdf_url,
+        `bon-livraison-${d.reference}.pdf`
+      );
       return;
     }
     await generateReceiptPDF({
