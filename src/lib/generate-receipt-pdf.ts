@@ -434,60 +434,56 @@ export async function generateReceiptPDF(data: ReceiptData) {
 }
 
 /**
- * Generate a PDF from a base64 photo (used for offline delivery validation)
+ * Generate a PDF from a base64 photo (used for offline delivery validation).
+ * The photo is inserted as-is without any rotation, cropping or EXIF correction.
+ * The PDF page matches the photo orientation (portrait or landscape).
  */
-export async function generatePhotoPDF(photoBase64: string, reference: string, deliveredAt: string): Promise<string> {
-  const doc = new jsPDF('p', 'mm', 'a4');
-  const pageWidth = doc.internal.pageSize.getWidth();
-  const margin = 15;
-  let y = 14;
+export async function generatePhotoPDF(photoBase64: string, _reference: string, _deliveredAt: string): Promise<string> {
+  // Load image to get natural dimensions
+  const img = await loadImage(photoBase64);
+  const imgW = img.naturalWidth || img.width;
+  const imgH = img.naturalHeight || img.height;
 
-  // Top accent bar
-  doc.setFillColor(BRAND_GREEN.r, BRAND_GREEN.g, BRAND_GREEN.b);
-  doc.rect(0, 0, pageWidth, 3, 'F');
-  y = 10;
+  // Determine orientation from raw pixel dimensions
+  const orientation: 'p' | 'l' = imgH >= imgW ? 'p' : 'l';
 
-  doc.setFontSize(14);
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(BRAND_DARK.r, BRAND_DARK.g, BRAND_DARK.b);
-  doc.text('DPCI — Bon de livraison (hors-ligne)', pageWidth / 2, y + 5, { align: 'center' });
-  y += 15;
+  // Create PDF with page size matching image aspect ratio
+  // Use A4-based dimensions scaled to fit the image proportions
+  const doc = new jsPDF(orientation, 'px', [imgW, imgH]);
+  const pageW = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
 
-  doc.setFontSize(10);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(TEXT_DARK.r, TEXT_DARK.g, TEXT_DARK.b);
-  doc.text(`Référence : ${reference}`, margin, y);
-  y += 7;
-  doc.text(`Date de livraison : ${formatDateFR(deliveredAt)}`, margin, y);
-  y += 7;
-
-  // Offline notice
-  doc.setFillColor(255, 243, 205);
-  doc.setDrawColor(255, 193, 7);
-  doc.setLineWidth(0.5);
-  doc.roundedRect(margin, y, pageWidth - margin * 2, 9, 1.5, 1.5, 'FD');
-  doc.setFontSize(8);
-  doc.setFont('helvetica', 'italic');
-  doc.setTextColor(133, 100, 4);
-  doc.text('Livraison validée hors connexion – position GPS non vérifiée', margin + 4, y + 6);
-  y += 14;
-
-  // Add photo
-  try {
-    const img = await loadImage(photoBase64);
-    const maxW = pageWidth - margin * 2;
-    const maxH = 190;
-    const ratio = img.height / img.width;
-    let w = maxW;
-    let h = ratio * w;
-    if (h > maxH) {
-      h = maxH;
-      w = h / ratio;
-    }
-    doc.addImage(img, 'JPEG', margin, y, w, h);
-  } catch {
-    doc.text('Photo non disponible', margin, y + 10);
-  }
+  // Insert photo filling the entire page — no transformation
+  doc.addImage(img, 'JPEG', 0, 0, pageW, pageH);
 
   return doc.output('datauristring');
+}
+
+/**
+ * Download a PDF from a Supabase Storage URL in a cross-browser compatible way.
+ * Uses fetch → blob → object URL → dynamic <a> click.
+ * Works in Edge, Chrome, Android WebView and Capacitor.
+ */
+export async function downloadPdfFromUrl(pdfUrl: string, filename: string): Promise<void> {
+  try {
+    const response = await fetch(pdfUrl);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const blob = await response.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = objectUrl;
+    link.download = filename;
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    link.click();
+    // Cleanup after a short delay
+    setTimeout(() => {
+      document.body.removeChild(link);
+      URL.revokeObjectURL(objectUrl);
+    }, 250);
+  } catch (err) {
+    console.error('[downloadPdfFromUrl] Failed:', err);
+    // Fallback: open in new tab
+    window.open(pdfUrl, '_blank');
+  }
 }
