@@ -423,13 +423,10 @@ export default function DeliveriesPage() {
                               try {
                                 // If delivery has a photo-based PDF (offline), download it directly
                                 if ((delivery as any).receipt_pdf_url) {
-                                  const link = document.createElement('a');
-                                  link.href = (delivery as any).receipt_pdf_url;
-                                  link.download = `bon-livraison-${delivery.reference}.pdf`;
-                                  link.target = '_blank';
-                                  document.body.appendChild(link);
-                                  link.click();
-                                  document.body.removeChild(link);
+                                  await downloadPdfFromUrl(
+                                    (delivery as any).receipt_pdf_url,
+                                    `bon-livraison-${delivery.reference}.pdf`
+                                  );
                                   return;
                                 }
                                 const ph = pharmacies.find(p => p.id === delivery.pharmacy_id);
