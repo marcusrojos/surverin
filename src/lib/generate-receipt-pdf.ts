@@ -1,5 +1,5 @@
 import jsPDF from 'jspdf';
-import dpciLogo from '@/assets/dpci-logo.webp';
+import dpciLogo from '@/assets/dpci-logo.png';
 
 interface PackageItem {
   type: string;

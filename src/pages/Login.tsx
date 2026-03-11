@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Loader2, Truck, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
-import dpciLogo from '@/assets/dpci-logo.webp';
+import dpciLogo from '@/assets/dpci-logo.png';
 import { supabase } from '@/integrations/supabase/client';
 
 export default function Login() {
@@ -62,7 +62,9 @@ export default function Login() {
       const { error } = await signIn(email, password);
       
       if (error) {
-        if (error.message.includes('Invalid login credentials')) {
+        if (error.message.includes('désactivé')) {
+          toast.error(error.message);
+        } else if (error.message.includes('Invalid login credentials')) {
           toast.error('Identifiants incorrects. Veuillez réessayer.');
         } else if (error.message.includes('Email not confirmed')) {
           toast.error('Veuillez confirmer votre email avant de vous connecter.');

@@ -3,7 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { Menu, LayoutDashboard, Package, Building2, Users, LogOut, Truck, Route, FileText } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/lib/auth';
-import dpciLogo from '@/assets/dpci-logo.webp';
+import dpciLogo from '@/assets/dpci-logo.png';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 
 interface NavItem { icon: React.ElementType; label: string; href: string; }

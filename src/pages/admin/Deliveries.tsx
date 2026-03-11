@@ -117,6 +117,7 @@ export default function DeliveriesPage() {
     pharmacy_id: '',
     driver_id: '',
   });
+  const [allProfiles, setAllProfiles] = useState<any[]>([]);
   const [formPackages, setFormPackages] = useState<{ type: string; reference: string }[]>([]);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -147,22 +148,24 @@ export default function DeliveriesPage() {
 
       const { data: driversData } = await supabase
         .from('profiles')
-        .select('user_id, full_name')
-        .in('user_id', driverIds.length > 0 ? driverIds : ['no-match']);
+        .select('user_id, full_name, is_active')
+        .in('user_id', driverIds.length > 0 ? driverIds : ['no-match'])
+        .eq('is_active', true);
 
-      const { data: allProfiles } = await supabase
+      const { data: fetchedProfiles } = await supabase
         .from('profiles')
-        .select('user_id, full_name');
+        .select('user_id, full_name, is_active');
 
       const mappedDeliveries = (deliveriesData || []).map(d => ({
         ...d,
         pharmacy: pharmaciesData?.find(p => p.id === d.pharmacy_id) || null,
-        driver: allProfiles?.find(p => p.user_id === d.driver_id) || null,
+        driver: fetchedProfiles?.find(p => p.user_id === d.driver_id) || null,
       }));
 
       setDeliveries(mappedDeliveries as Delivery[]);
       setPharmacies((pharmaciesData || []) as Pharmacy[]);
       setDrivers(driversData || []);
+      setAllProfiles(fetchedProfiles || []);
     } catch (error) {
       toast.error('Erreur lors du chargement');
     } finally {
@@ -219,7 +222,14 @@ export default function DeliveriesPage() {
         setIsDialogOpen(false);
       } else {
         const selectedPharmacy = pharmacies.find(p => p.id === formData.pharmacy_id);
-        const verificationCode = selectedPharmacy?.user_id ? generateVerificationCode() : null;
+        // Only generate verification code if pharmacy has an active account
+        let verificationCode: string | null = null;
+        if (selectedPharmacy?.user_id) {
+          const pharmacyProfile = allProfiles?.find((p: any) => p.user_id === selectedPharmacy.user_id);
+          if (pharmacyProfile && (pharmacyProfile as any).is_active !== false) {
+            verificationCode = generateVerificationCode();
+          }
+        }
         
         const { error } = await supabase
           .from('deliveries')
