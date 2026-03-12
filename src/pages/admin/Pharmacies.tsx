@@ -29,8 +29,15 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { Plus, Pencil, Trash2, Search, Building2, Loader2, User, Eye, EyeOff, MapPin } from 'lucide-react';
+import { Plus, Pencil, Trash2, Search, Building2, Loader2, User, Eye, EyeOff, MapPin, Filter, ArrowUpDown } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { PharmacyLocationPicker } from '@/components/PharmacyLocationPicker';
@@ -47,13 +54,20 @@ interface Pharmacy {
   latitude: number | null;
   longitude: number | null;
   location_source: string | null;
+  _is_active?: boolean;
+  _axis_position?: number | null;
 }
+
+type AccountFilter = 'all' | 'with_active' | 'with_inactive' | 'no_account';
+type SortMode = 'alphabetical' | 'axis_order';
 
 export default function PharmaciesPage() {
   const [pharmacies, setPharmacies] = useState<Pharmacy[]>([]);
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [accountFilter, setAccountFilter] = useState<AccountFilter>('all');
+  const [sortMode, setSortMode] = useState<SortMode>('alphabetical');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [selectedPharmacy, setSelectedPharmacy] = useState<Pharmacy | null>(null);
@@ -77,33 +91,33 @@ export default function PharmaciesPage() {
 
   const fetchPharmacies = async () => {
     try {
-      const { data, error } = await supabase
-        .from('pharmacies')
-        .select('*')
-        .order('name');
+      const [pharmaciesRes, profilesRes, axisPharmaciesRes] = await Promise.all([
+        supabase.from('pharmacies').select('*').order('name'),
+        supabase.from('profiles').select('user_id, is_active'),
+        supabase.from('axis_pharmacies').select('pharmacy_id, position'),
+      ]);
 
-      if (error) throw error;
-      
-      // For pharmacies with accounts, fetch their profile is_active status
-      const pharmaciesWithStatus = data || [];
-      const userIds = pharmaciesWithStatus.filter(p => p.user_id).map(p => p.user_id!);
-      
-      let profileStatuses = new Map<string, boolean>();
-      if (userIds.length > 0) {
-        const { data: profiles } = await supabase
-          .from('profiles')
-          .select('user_id, is_active')
-          .in('user_id', userIds);
-        
-        (profiles || []).forEach((p: any) => {
-          profileStatuses.set(p.user_id, p.is_active ?? true);
-        });
-      }
-      
-      setPharmacies(pharmaciesWithStatus.map(p => ({
+      if (pharmaciesRes.error) throw pharmaciesRes.error;
+
+      const profileStatuses = new Map<string, boolean>();
+      (profilesRes.data || []).forEach((p: any) => {
+        profileStatuses.set(p.user_id, p.is_active ?? true);
+      });
+
+      // Use lowest position across all axes for sorting
+      const axisPositionMap = new Map<string, number>();
+      (axisPharmaciesRes.data || []).forEach((ap: any) => {
+        const existing = axisPositionMap.get(ap.pharmacy_id);
+        if (existing === undefined || ap.position < existing) {
+          axisPositionMap.set(ap.pharmacy_id, ap.position);
+        }
+      });
+
+      setPharmacies((pharmaciesRes.data || []).map(p => ({
         ...p,
         _is_active: p.user_id ? (profileStatuses.get(p.user_id!) ?? true) : undefined,
-      })) as any);
+        _axis_position: axisPositionMap.get(p.id) ?? null,
+      })));
     } catch (error) {
       toast.error('Erreur lors du chargement des pharmacies');
     } finally {
@@ -137,7 +151,7 @@ export default function PharmaciesPage() {
     if (!pharmacy.user_id) return;
     setTogglingId(pharmacy.id);
     try {
-      const current = (pharmacy as any)._is_active ?? true;
+      const current = pharmacy._is_active ?? true;
       const newStatus = !current;
       const { error } = await supabase
         .from('profiles')
@@ -147,7 +161,7 @@ export default function PharmaciesPage() {
       if (error) throw error;
 
       setPharmacies(prev => prev.map(p => 
-        p.id === pharmacy.id ? { ...p, _is_active: newStatus } as any : p
+        p.id === pharmacy.id ? { ...p, _is_active: newStatus } : p
       ));
       toast.success(newStatus ? 'Compte pharmacie réactivé' : 'Compte pharmacie désactivé');
     } catch {
@@ -166,6 +180,18 @@ export default function PharmaciesPage() {
     if (!selectedPharmacy && !formData.client_code.trim()) {
       toast.error('Le code client est requis');
       return;
+    }
+
+    // Check client code uniqueness
+    const codeToCheck = formData.client_code.trim();
+    if (codeToCheck) {
+      const existing = pharmacies.find(
+        p => p.client_code === codeToCheck && p.id !== selectedPharmacy?.id
+      );
+      if (existing) {
+        toast.error(`Le code client "${codeToCheck}" est déjà utilisé par "${existing.name}"`);
+        return;
+      }
     }
 
     // Validate required fields for new pharmacy with account
@@ -201,7 +227,14 @@ export default function PharmaciesPage() {
           .update(updateData)
           .eq('id', selectedPharmacy.id);
 
-        if (error) throw error;
+        if (error) {
+          if (error.message?.includes('pharmacies_client_code_unique')) {
+            toast.error('Ce code client est déjà utilisé par une autre pharmacie');
+            setIsSaving(false);
+            return;
+          }
+          throw error;
+        }
 
         // If pharmacy has account and password provided, update password
         if (formData.password && selectedPharmacy.user_id) {
@@ -257,7 +290,14 @@ export default function PharmaciesPage() {
           .select()
           .single();
 
-        if (error) throw error;
+        if (error) {
+          if (error.message?.includes('pharmacies_client_code_unique')) {
+            toast.error('Ce code client est déjà utilisé par une autre pharmacie');
+            setIsSaving(false);
+            return;
+          }
+          throw error;
+        }
 
         // If password provided, create user account and link to pharmacy
         if (formData.password && formData.email.trim()) {
@@ -328,11 +368,38 @@ export default function PharmaciesPage() {
     }
   };
 
-  const filteredPharmacies = pharmacies.filter(
-    (p) =>
-      p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.address?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredAndSortedPharmacies = pharmacies
+    .filter(p => {
+      // Text search
+      const matchesSearch =
+        p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        p.client_code.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        p.address?.toLowerCase().includes(searchQuery.toLowerCase());
+      if (!matchesSearch) return false;
+
+      // Account filter
+      switch (accountFilter) {
+        case 'with_active':
+          return p.user_id !== null && p._is_active === true;
+        case 'with_inactive':
+          return p.user_id !== null && p._is_active === false;
+        case 'no_account':
+          return p.user_id === null;
+        default:
+          return true;
+      }
+    })
+    .sort((a, b) => {
+      if (sortMode === 'axis_order') {
+        // Pharmacies with axis position first, then by position, then alphabetical for unpositioned
+        if (a._axis_position !== null && b._axis_position !== null) {
+          return a._axis_position - b._axis_position;
+        }
+        if (a._axis_position !== null) return -1;
+        if (b._axis_position !== null) return 1;
+      }
+      return a.name.localeCompare(b.name, 'fr');
+    });
 
   return (
     <DashboardLayout requiredRole="admin">
@@ -351,15 +418,39 @@ export default function PharmaciesPage() {
           </Button>
         </div>
 
-        {/* Search */}
-        <div className="relative max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            placeholder="Rechercher une pharmacie..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10"
-          />
+        {/* Search + Filters */}
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="relative flex-1 max-w-md">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              placeholder="Rechercher une pharmacie..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-10"
+            />
+          </div>
+          <Select value={accountFilter} onValueChange={(v) => setAccountFilter(v as AccountFilter)}>
+            <SelectTrigger className="w-full sm:w-52">
+              <Filter className="w-4 h-4 mr-2 shrink-0" />
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Toutes</SelectItem>
+              <SelectItem value="with_active">Compte actif</SelectItem>
+              <SelectItem value="with_inactive">Compte désactivé</SelectItem>
+              <SelectItem value="no_account">Sans compte</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={sortMode} onValueChange={(v) => setSortMode(v as SortMode)}>
+            <SelectTrigger className="w-full sm:w-52">
+              <ArrowUpDown className="w-4 h-4 mr-2 shrink-0" />
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="alphabetical">Ordre alphabétique</SelectItem>
+              <SelectItem value="axis_order">Ordre de l'axe</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
         {/* Table */}
@@ -368,7 +459,7 @@ export default function PharmaciesPage() {
             <div className="flex items-center justify-center py-12">
               <Loader2 className="w-8 h-8 animate-spin text-primary" />
             </div>
-          ) : filteredPharmacies.length === 0 ? (
+          ) : filteredAndSortedPharmacies.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
               <Building2 className="w-12 h-12 mx-auto mb-3 opacity-50" />
               <p>Aucune pharmacie trouvée</p>
@@ -377,6 +468,7 @@ export default function PharmaciesPage() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  {sortMode === 'axis_order' && <TableHead className="w-16">Pos.</TableHead>}
                   <TableHead>Nom</TableHead>
                   <TableHead>Code Client</TableHead>
                   <TableHead className="hidden md:table-cell">Adresse</TableHead>
@@ -389,8 +481,13 @@ export default function PharmaciesPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredPharmacies.map((pharmacy) => (
+                {filteredAndSortedPharmacies.map((pharmacy) => (
                   <TableRow key={pharmacy.id}>
+                    {sortMode === 'axis_order' && (
+                      <TableCell className="font-mono text-xs text-muted-foreground">
+                        {pharmacy._axis_position !== null ? pharmacy._axis_position + 1 : '-'}
+                      </TableCell>
+                    )}
                     <TableCell className="font-medium">{pharmacy.name}</TableCell>
                     <TableCell className="font-mono text-sm text-primary font-semibold">{pharmacy.client_code}</TableCell>
                     <TableCell className="hidden md:table-cell text-muted-foreground">
@@ -404,9 +501,13 @@ export default function PharmaciesPage() {
                     </TableCell>
                     <TableCell className="hidden md:table-cell">
                       {pharmacy.user_id ? (
-                        <span className="inline-flex items-center gap-1 text-xs font-medium text-green-600 bg-green-500/10 px-2 py-1 rounded-full">
+                        <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-full ${
+                          pharmacy._is_active 
+                            ? 'text-green-600 bg-green-500/10' 
+                            : 'text-destructive bg-destructive/10'
+                        }`}>
                           <User className="w-3 h-3" />
-                          Actif
+                          {pharmacy._is_active ? 'Actif' : 'Désactivé'}
                         </span>
                       ) : (
                         <span className="text-xs text-muted-foreground">Sans compte</span>
@@ -415,10 +516,7 @@ export default function PharmaciesPage() {
                     <TableCell className="hidden md:table-cell">
                       {pharmacy.user_id && (
                         <Switch
-                          checked={(() => {
-                            // We need to check profile is_active for this pharmacy's user
-                            return (pharmacy as any)._is_active ?? true;
-                          })()}
+                          checked={pharmacy._is_active ?? true}
                           onCheckedChange={() => handleTogglePharmacyActive(pharmacy)}
                           disabled={togglingId === pharmacy.id}
                         />

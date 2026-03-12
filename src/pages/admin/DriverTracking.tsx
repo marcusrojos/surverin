@@ -399,7 +399,7 @@ export default function DriverTrackingPage() {
                                     {[
                                       delivery.nb_cartons > 0 && `${delivery.nb_cartons} carton(s)`,
                                       delivery.nb_sachets > 0 && `${delivery.nb_sachets} sachet(s)`,
-                                      delivery.nb_barques > 0 && `${delivery.nb_barques} barque(s)`,
+                                      delivery.nb_barques > 0 && `${delivery.nb_barques} bac(s)`,
                                     ].filter(Boolean).join(', ') || 'Aucun colis'}
                                   </span>
                                 </div>
