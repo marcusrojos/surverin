@@ -58,6 +58,7 @@ export default function DriverDashboard() {
   // Filters
   const [statusFilter, setStatusFilter] = useState<'all' | 'en_attente' | 'livre'>('all');
   const [dateFilter, setDateFilter] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
 
   // Geolocation for delivery confirmation
   const pharmacyLat = (deliverDialog?.pharmacy as any)?.latitude ?? null;
