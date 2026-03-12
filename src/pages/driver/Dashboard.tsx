@@ -349,6 +349,25 @@ export default function DriverDashboard() {
           </Card>
         </div>
 
+        {/* Search bar */}
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input
+            placeholder="Rechercher par nom, code client, code-barres colis..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-9 pr-9"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+
         {/* Filters */}
         <Card>
           <CardContent className="pt-4">
@@ -373,8 +392,8 @@ export default function DriverDashboard() {
                 <Input type="date" value={dateFilter} onChange={(e) => setDateFilter(e.target.value)} />
               </div>
             </div>
-            {(statusFilter !== 'all' || dateFilter) && (
-              <Button variant="ghost" size="sm" className="mt-2 text-xs" onClick={() => { setStatusFilter('all'); setDateFilter(''); }}>
+            {(statusFilter !== 'all' || dateFilter || searchQuery) && (
+              <Button variant="ghost" size="sm" className="mt-2 text-xs" onClick={() => { setStatusFilter('all'); setDateFilter(''); setSearchQuery(''); }}>
                 Réinitialiser les filtres
               </Button>
             )}
