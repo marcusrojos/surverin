@@ -122,6 +122,29 @@ export default function DriverDashboard() {
     if (dateFilter) {
       filtered = filtered.filter(d => format(new Date(d.created_at), 'yyyy-MM-dd') === dateFilter);
     }
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase();
+      filtered = filtered.filter(d => {
+        const pharm = d.pharmacy as any;
+        // Search by pharmacy name
+        if (pharm?.name?.toLowerCase().includes(q)) return true;
+        // Search by client code
+        if (pharm?.client_code?.toLowerCase().includes(q)) return true;
+        // Search by delivery reference
+        if (d.reference?.toLowerCase().includes(q)) return true;
+        // Search by package barcode in packages JSON array
+        if (Array.isArray(d.packages)) {
+          return d.packages.some((pkg: any) => {
+            if (typeof pkg === 'string' && pkg.toLowerCase().includes(q)) return true;
+            if (typeof pkg === 'object' && pkg !== null) {
+              return Object.values(pkg).some(v => typeof v === 'string' && v.toLowerCase().includes(q));
+            }
+            return false;
+          });
+        }
+        return false;
+      });
+    }
 
     const sorted = [...filtered].sort((a, b) => {
       const posA = pharmacyOrder.get(a.pharmacy_id) ?? 9999;
