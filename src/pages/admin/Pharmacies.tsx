@@ -503,7 +503,6 @@ export default function PharmaciesPage() {
                 onLocationSelect={(loc) => {
                   setFormData({
                     ...formData,
-                    address: loc.address,
                     latitude: loc.latitude,
                     longitude: loc.longitude,
                     location_source: loc.source,
