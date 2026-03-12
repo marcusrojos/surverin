@@ -160,7 +160,7 @@ export default function DriverDashboard() {
     });
 
     return Array.from(groups.entries()).sort((a, b) => b[0].localeCompare(a[0]));
-  }, [deliveries, statusFilter, dateFilter, pharmacyOrder]);
+  }, [deliveries, statusFilter, dateFilter, searchQuery, pharmacyOrder]);
 
   const openDeliver = (d: EnrichedDelivery) => {
     setDeliverDialog(d);
