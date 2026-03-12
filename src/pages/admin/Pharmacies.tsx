@@ -510,15 +510,6 @@ export default function PharmaciesPage() {
                   });
                 }}
               />
-              <div className="space-y-2">
-                <Label htmlFor="address">Adresse (auto-remplie ou manuelle)</Label>
-                <Input
-                  id="address"
-                  value={formData.address}
-                  onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                  placeholder="Adresse complète"
-                />
-              </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="phone">Téléphone</Label>
