@@ -297,11 +297,17 @@ export default function PharmaciesPage() {
       // If pharmacy has a linked user, delete the auth user first
       if (selectedPharmacy.user_id) {
         const { data, error: fnError } = await supabase.functions.invoke('delete-user', {
-          body: { user_id: selectedPharmacy.user_id },
+          body: { userId: selectedPharmacy.user_id },
         });
         if (fnError) throw fnError;
         if (data?.error) throw new Error(data.error);
       }
+
+      // Delete axis_pharmacies links first
+      await supabase
+        .from('axis_pharmacies')
+        .delete()
+        .eq('pharmacy_id', selectedPharmacy.id);
 
       // Then delete the pharmacy record
       const { error } = await supabase
