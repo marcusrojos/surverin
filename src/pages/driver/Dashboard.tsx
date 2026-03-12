@@ -14,7 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { StatusBadge } from '@/components/ui/status-badge';
 import { SignaturePad } from '@/components/ui/signature-pad';
 import { toast } from 'sonner';
-import { Package, CheckCircle, WifiOff, Loader2, Truck, Filter, CalendarDays, MapPin, Navigation, AlertTriangle, RefreshCw, Camera, ArrowDownFromLine, X } from 'lucide-react';
+import { Package, CheckCircle, WifiOff, Loader2, Truck, Filter, CalendarDays, MapPin, Navigation, AlertTriangle, RefreshCw, Camera, ArrowDownFromLine, X, Search } from 'lucide-react';
 import { Database } from '@/integrations/supabase/types';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -58,6 +58,7 @@ export default function DriverDashboard() {
   // Filters
   const [statusFilter, setStatusFilter] = useState<'all' | 'en_attente' | 'livre'>('all');
   const [dateFilter, setDateFilter] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
 
   // Geolocation for delivery confirmation
   const pharmacyLat = (deliverDialog?.pharmacy as any)?.latitude ?? null;
@@ -121,6 +122,29 @@ export default function DriverDashboard() {
     if (dateFilter) {
       filtered = filtered.filter(d => format(new Date(d.created_at), 'yyyy-MM-dd') === dateFilter);
     }
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase();
+      filtered = filtered.filter(d => {
+        const pharm = d.pharmacy as any;
+        // Search by pharmacy name
+        if (pharm?.name?.toLowerCase().includes(q)) return true;
+        // Search by client code
+        if (pharm?.client_code?.toLowerCase().includes(q)) return true;
+        // Search by delivery reference
+        if (d.reference?.toLowerCase().includes(q)) return true;
+        // Search by package barcode in packages JSON array
+        if (Array.isArray(d.packages)) {
+          return d.packages.some((pkg: any) => {
+            if (typeof pkg === 'string' && pkg.toLowerCase().includes(q)) return true;
+            if (typeof pkg === 'object' && pkg !== null) {
+              return Object.values(pkg).some(v => typeof v === 'string' && v.toLowerCase().includes(q));
+            }
+            return false;
+          });
+        }
+        return false;
+      });
+    }
 
     const sorted = [...filtered].sort((a, b) => {
       const posA = pharmacyOrder.get(a.pharmacy_id) ?? 9999;
@@ -136,7 +160,7 @@ export default function DriverDashboard() {
     });
 
     return Array.from(groups.entries()).sort((a, b) => b[0].localeCompare(a[0]));
-  }, [deliveries, statusFilter, dateFilter, pharmacyOrder]);
+  }, [deliveries, statusFilter, dateFilter, searchQuery, pharmacyOrder]);
 
   const openDeliver = (d: EnrichedDelivery) => {
     setDeliverDialog(d);
@@ -325,6 +349,25 @@ export default function DriverDashboard() {
           </Card>
         </div>
 
+        {/* Search bar */}
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input
+            placeholder="Rechercher par nom, code client, code-barres colis..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-9 pr-9"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+
         {/* Filters */}
         <Card>
           <CardContent className="pt-4">
@@ -349,8 +392,8 @@ export default function DriverDashboard() {
                 <Input type="date" value={dateFilter} onChange={(e) => setDateFilter(e.target.value)} />
               </div>
             </div>
-            {(statusFilter !== 'all' || dateFilter) && (
-              <Button variant="ghost" size="sm" className="mt-2 text-xs" onClick={() => { setStatusFilter('all'); setDateFilter(''); }}>
+            {(statusFilter !== 'all' || dateFilter || searchQuery) && (
+              <Button variant="ghost" size="sm" className="mt-2 text-xs" onClick={() => { setStatusFilter('all'); setDateFilter(''); setSearchQuery(''); }}>
                 Réinitialiser les filtres
               </Button>
             )}
