@@ -56,6 +56,13 @@ interface Pharmacy {
   location_source: string | null;
   _is_active?: boolean;
   _axis_position?: number | null;
+  _axes?: { axis_id: string; axis_name: string; position: number }[];
+}
+
+interface AxisGroup {
+  axis_id: string;
+  axis_name: string;
+  pharmacies: Pharmacy[];
 }
 
 type AccountFilter = 'all' | 'with_active' | 'with_inactive' | 'no_account';
