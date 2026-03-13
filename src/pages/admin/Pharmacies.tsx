@@ -37,7 +37,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { Plus, Pencil, Trash2, Search, Building2, Loader2, User, Eye, EyeOff, MapPin, Filter, ArrowUpDown } from 'lucide-react';
+import { Plus, Pencil, Trash2, Search, Building2, Loader2, User, Eye, EyeOff, MapPin, Filter, ArrowUpDown, Route } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { PharmacyLocationPicker } from '@/components/PharmacyLocationPicker';
