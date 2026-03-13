@@ -37,7 +37,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { Plus, Pencil, Trash2, Search, Building2, Loader2, User, Eye, EyeOff, MapPin, Filter, ArrowUpDown } from 'lucide-react';
+import { Plus, Pencil, Trash2, Search, Building2, Loader2, User, Eye, EyeOff, MapPin, Filter, ArrowUpDown, Route } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { PharmacyLocationPicker } from '@/components/PharmacyLocationPicker';
@@ -56,6 +56,13 @@ interface Pharmacy {
   location_source: string | null;
   _is_active?: boolean;
   _axis_position?: number | null;
+  _axes?: { axis_id: string; axis_name: string; position: number }[];
+}
+
+interface AxisGroup {
+  axis_id: string;
+  axis_name: string;
+  pharmacies: Pharmacy[];
 }
 
 type AccountFilter = 'all' | 'with_active' | 'with_inactive' | 'no_account';
@@ -91,10 +98,11 @@ export default function PharmaciesPage() {
 
   const fetchPharmacies = async () => {
     try {
-      const [pharmaciesRes, profilesRes, axisPharmaciesRes] = await Promise.all([
+      const [pharmaciesRes, profilesRes, axisPharmaciesRes, axesRes] = await Promise.all([
         supabase.from('pharmacies').select('*').order('name'),
         supabase.from('profiles').select('user_id, is_active'),
-        supabase.from('axis_pharmacies').select('pharmacy_id, position'),
+        supabase.from('axis_pharmacies').select('pharmacy_id, position, axis_id'),
+        supabase.from('axes').select('id, name'),
       ]);
 
       if (pharmaciesRes.error) throw pharmaciesRes.error;
@@ -104,19 +112,27 @@ export default function PharmaciesPage() {
         profileStatuses.set(p.user_id, p.is_active ?? true);
       });
 
-      // Use lowest position across all axes for sorting
+      const axisNames = new Map<string, string>();
+      (axesRes.data || []).forEach((a: any) => axisNames.set(a.id, a.name));
+
+      // Build per-pharmacy axis info and lowest position
       const axisPositionMap = new Map<string, number>();
+      const pharmacyAxes = new Map<string, { axis_id: string; axis_name: string; position: number }[]>();
       (axisPharmaciesRes.data || []).forEach((ap: any) => {
         const existing = axisPositionMap.get(ap.pharmacy_id);
         if (existing === undefined || ap.position < existing) {
           axisPositionMap.set(ap.pharmacy_id, ap.position);
         }
+        const arr = pharmacyAxes.get(ap.pharmacy_id) || [];
+        arr.push({ axis_id: ap.axis_id, axis_name: axisNames.get(ap.axis_id) || 'Axe inconnu', position: ap.position });
+        pharmacyAxes.set(ap.pharmacy_id, arr);
       });
 
       setPharmacies((pharmaciesRes.data || []).map(p => ({
         ...p,
         _is_active: p.user_id ? (profileStatuses.get(p.user_id!) ?? true) : undefined,
         _axis_position: axisPositionMap.get(p.id) ?? null,
+        _axes: pharmacyAxes.get(p.id) || [],
       })));
     } catch (error) {
       toast.error('Erreur lors du chargement des pharmacies');
@@ -368,38 +384,126 @@ export default function PharmaciesPage() {
     }
   };
 
-  const filteredAndSortedPharmacies = pharmacies
-    .filter(p => {
-      // Text search
-      const matchesSearch =
-        p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        p.client_code.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        p.address?.toLowerCase().includes(searchQuery.toLowerCase());
-      if (!matchesSearch) return false;
+  const filteredPharmacies = pharmacies.filter(p => {
+    const matchesSearch =
+      p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      p.client_code.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      p.address?.toLowerCase().includes(searchQuery.toLowerCase());
+    if (!matchesSearch) return false;
 
-      // Account filter
-      switch (accountFilter) {
-        case 'with_active':
-          return p.user_id !== null && p._is_active === true;
-        case 'with_inactive':
-          return p.user_id !== null && p._is_active === false;
-        case 'no_account':
-          return p.user_id === null;
-        default:
-          return true;
+    switch (accountFilter) {
+      case 'with_active':
+        return p.user_id !== null && p._is_active === true;
+      case 'with_inactive':
+        return p.user_id !== null && p._is_active === false;
+      case 'no_account':
+        return p.user_id === null;
+      default:
+        return true;
+    }
+  });
+
+  const filteredAndSortedPharmacies = [...filteredPharmacies].sort((a, b) => {
+    if (sortMode === 'axis_order') {
+      if (a._axis_position !== null && b._axis_position !== null) {
+        return a._axis_position - b._axis_position;
       }
-    })
-    .sort((a, b) => {
-      if (sortMode === 'axis_order') {
-        // Pharmacies with axis position first, then by position, then alphabetical for unpositioned
-        if (a._axis_position !== null && b._axis_position !== null) {
-          return a._axis_position - b._axis_position;
+      if (a._axis_position !== null) return -1;
+      if (b._axis_position !== null) return 1;
+    }
+    return a.name.localeCompare(b.name, 'fr');
+  });
+
+  // Group pharmacies by axis when in axis_order mode
+  const axisGroups: AxisGroup[] = (() => {
+    if (sortMode !== 'axis_order') return [];
+    const groupMap = new Map<string, AxisGroup>();
+    filteredPharmacies.forEach(p => {
+      (p._axes || []).forEach(ax => {
+        if (!groupMap.has(ax.axis_id)) {
+          groupMap.set(ax.axis_id, { axis_id: ax.axis_id, axis_name: ax.axis_name, pharmacies: [] });
         }
-        if (a._axis_position !== null) return -1;
-        if (b._axis_position !== null) return 1;
-      }
-      return a.name.localeCompare(b.name, 'fr');
+        groupMap.get(ax.axis_id)!.pharmacies.push({ ...p, _axis_position: ax.position });
+      });
     });
+    // Sort pharmacies within each group by position
+    groupMap.forEach(g => g.pharmacies.sort((a, b) => (a._axis_position ?? 999) - (b._axis_position ?? 999)));
+    // Sort groups by name
+    return Array.from(groupMap.values()).sort((a, b) => a.axis_name.localeCompare(b.axis_name, 'fr'));
+  })();
+
+  const unassignedPharmacies = sortMode === 'axis_order'
+    ? filteredPharmacies.filter(p => !p._axes || p._axes.length === 0).sort((a, b) => a.name.localeCompare(b.name, 'fr'))
+    : [];
+
+  const renderPharmacyRow = (pharmacy: Pharmacy, showPosition: boolean) => (
+    <TableRow key={`${pharmacy.id}-${pharmacy._axis_position}`}>
+      {showPosition && (
+        <TableCell className="font-mono text-xs text-muted-foreground">
+          {pharmacy._axis_position !== null ? pharmacy._axis_position + 1 : '-'}
+        </TableCell>
+      )}
+      <TableCell className="font-medium">{pharmacy.name}</TableCell>
+      <TableCell className="font-mono text-sm text-primary font-semibold">{pharmacy.client_code}</TableCell>
+      <TableCell className="hidden md:table-cell text-muted-foreground">
+        {pharmacy.address || '-'}
+      </TableCell>
+      <TableCell className="hidden lg:table-cell text-muted-foreground">
+        {pharmacy.phone || '-'}
+      </TableCell>
+      <TableCell className="hidden lg:table-cell text-muted-foreground">
+        {pharmacy.email || '-'}
+      </TableCell>
+      <TableCell className="hidden md:table-cell">
+        {pharmacy.user_id ? (
+          <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-full ${
+            pharmacy._is_active
+              ? 'text-primary bg-primary/10'
+              : 'text-destructive bg-destructive/10'
+          }`}>
+            <User className="w-3 h-3" />
+            {pharmacy._is_active ? 'Actif' : 'Désactivé'}
+          </span>
+        ) : (
+          <span className="text-xs text-muted-foreground">Sans compte</span>
+        )}
+      </TableCell>
+      <TableCell className="hidden md:table-cell">
+        {pharmacy.user_id && (
+          <Switch
+            checked={pharmacy._is_active ?? true}
+            onCheckedChange={() => handleTogglePharmacyActive(pharmacy)}
+            disabled={togglingId === pharmacy.id}
+          />
+        )}
+      </TableCell>
+      <TableCell className="hidden md:table-cell">
+        {pharmacy.latitude && pharmacy.longitude ? (
+          <span className="inline-flex items-center gap-1 text-xs font-medium text-primary bg-primary/10 px-2 py-1 rounded-full">
+            <MapPin className="w-3 h-3" />
+            Oui
+          </span>
+        ) : (
+          <span className="text-xs text-muted-foreground">-</span>
+        )}
+      </TableCell>
+      <TableCell className="text-right">
+        <div className="flex items-center justify-end gap-2">
+          <Button variant="ghost" size="icon" onClick={() => handleOpenDialog(pharmacy)}>
+            <Pencil className="w-4 h-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="text-destructive hover:text-destructive"
+            onClick={() => { setSelectedPharmacy(pharmacy); setIsDeleteDialogOpen(true); }}
+          >
+            <Trash2 className="w-4 h-4" />
+          </Button>
+        </div>
+      </TableCell>
+    </TableRow>
+  );
 
   return (
     <DashboardLayout requiredRole="admin">
@@ -459,16 +563,74 @@ export default function PharmaciesPage() {
             <div className="flex items-center justify-center py-12">
               <Loader2 className="w-8 h-8 animate-spin text-primary" />
             </div>
-          ) : filteredAndSortedPharmacies.length === 0 ? (
+          ) : (sortMode === 'axis_order' ? (axisGroups.length === 0 && unassignedPharmacies.length === 0) : filteredAndSortedPharmacies.length === 0) ? (
             <div className="text-center py-12 text-muted-foreground">
               <Building2 className="w-12 h-12 mx-auto mb-3 opacity-50" />
               <p>Aucune pharmacie trouvée</p>
+            </div>
+          ) : sortMode === 'axis_order' ? (
+            <div className="divide-y">
+              {axisGroups.map(group => (
+                <div key={group.axis_id}>
+                  <div className="flex items-center gap-2 px-4 py-3 bg-muted/50 border-b">
+                    <Route className="w-4 h-4 text-primary" />
+                    <span className="font-semibold text-foreground">{group.axis_name}</span>
+                    <span className="text-xs text-muted-foreground">({group.pharmacies.length} pharmacie{group.pharmacies.length > 1 ? 's' : ''})</span>
+                  </div>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-16">Pos.</TableHead>
+                        <TableHead>Nom</TableHead>
+                        <TableHead>Code Client</TableHead>
+                        <TableHead className="hidden md:table-cell">Adresse</TableHead>
+                        <TableHead className="hidden lg:table-cell">Téléphone</TableHead>
+                        <TableHead className="hidden lg:table-cell">Email</TableHead>
+                        <TableHead className="hidden md:table-cell">Compte</TableHead>
+                        <TableHead className="hidden md:table-cell">Statut</TableHead>
+                        <TableHead className="hidden md:table-cell">GPS</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {group.pharmacies.map((pharmacy) => renderPharmacyRow(pharmacy, true))}
+                    </TableBody>
+                  </Table>
+                </div>
+              ))}
+              {unassignedPharmacies.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-2 px-4 py-3 bg-muted/30 border-b">
+                    <Building2 className="w-4 h-4 text-muted-foreground" />
+                    <span className="font-semibold text-muted-foreground">Sans axe</span>
+                    <span className="text-xs text-muted-foreground">({unassignedPharmacies.length})</span>
+                  </div>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-16">Pos.</TableHead>
+                        <TableHead>Nom</TableHead>
+                        <TableHead>Code Client</TableHead>
+                        <TableHead className="hidden md:table-cell">Adresse</TableHead>
+                        <TableHead className="hidden lg:table-cell">Téléphone</TableHead>
+                        <TableHead className="hidden lg:table-cell">Email</TableHead>
+                        <TableHead className="hidden md:table-cell">Compte</TableHead>
+                        <TableHead className="hidden md:table-cell">Statut</TableHead>
+                        <TableHead className="hidden md:table-cell">GPS</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {unassignedPharmacies.map((pharmacy) => renderPharmacyRow(pharmacy, true))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
             </div>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
-                  {sortMode === 'axis_order' && <TableHead className="w-16">Pos.</TableHead>}
                   <TableHead>Nom</TableHead>
                   <TableHead>Code Client</TableHead>
                   <TableHead className="hidden md:table-cell">Adresse</TableHead>
@@ -481,81 +643,7 @@ export default function PharmaciesPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredAndSortedPharmacies.map((pharmacy) => (
-                  <TableRow key={pharmacy.id}>
-                    {sortMode === 'axis_order' && (
-                      <TableCell className="font-mono text-xs text-muted-foreground">
-                        {pharmacy._axis_position !== null ? pharmacy._axis_position + 1 : '-'}
-                      </TableCell>
-                    )}
-                    <TableCell className="font-medium">{pharmacy.name}</TableCell>
-                    <TableCell className="font-mono text-sm text-primary font-semibold">{pharmacy.client_code}</TableCell>
-                    <TableCell className="hidden md:table-cell text-muted-foreground">
-                      {pharmacy.address || '-'}
-                    </TableCell>
-                    <TableCell className="hidden lg:table-cell text-muted-foreground">
-                      {pharmacy.phone || '-'}
-                    </TableCell>
-                    <TableCell className="hidden lg:table-cell text-muted-foreground">
-                      {pharmacy.email || '-'}
-                    </TableCell>
-                    <TableCell className="hidden md:table-cell">
-                      {pharmacy.user_id ? (
-                        <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-full ${
-                          pharmacy._is_active 
-                            ? 'text-green-600 bg-green-500/10' 
-                            : 'text-destructive bg-destructive/10'
-                        }`}>
-                          <User className="w-3 h-3" />
-                          {pharmacy._is_active ? 'Actif' : 'Désactivé'}
-                        </span>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">Sans compte</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="hidden md:table-cell">
-                      {pharmacy.user_id && (
-                        <Switch
-                          checked={pharmacy._is_active ?? true}
-                          onCheckedChange={() => handleTogglePharmacyActive(pharmacy)}
-                          disabled={togglingId === pharmacy.id}
-                        />
-                      )}
-                    </TableCell>
-                    <TableCell className="hidden md:table-cell">
-                      {pharmacy.latitude && pharmacy.longitude ? (
-                        <span className="inline-flex items-center gap-1 text-xs font-medium text-primary bg-primary/10 px-2 py-1 rounded-full">
-                          <MapPin className="w-3 h-3" />
-                          Oui
-                        </span>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">-</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleOpenDialog(pharmacy)}
-                        >
-                          <Pencil className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="text-destructive hover:text-destructive"
-                          onClick={() => {
-                            setSelectedPharmacy(pharmacy);
-                            setIsDeleteDialogOpen(true);
-                          }}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {filteredAndSortedPharmacies.map((pharmacy) => renderPharmacyRow(pharmacy, false))}
               </TableBody>
             </Table>
           )}
