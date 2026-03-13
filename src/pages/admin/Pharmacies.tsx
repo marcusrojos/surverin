@@ -98,10 +98,11 @@ export default function PharmaciesPage() {
 
   const fetchPharmacies = async () => {
     try {
-      const [pharmaciesRes, profilesRes, axisPharmaciesRes] = await Promise.all([
+      const [pharmaciesRes, profilesRes, axisPharmaciesRes, axesRes] = await Promise.all([
         supabase.from('pharmacies').select('*').order('name'),
         supabase.from('profiles').select('user_id, is_active'),
-        supabase.from('axis_pharmacies').select('pharmacy_id, position'),
+        supabase.from('axis_pharmacies').select('pharmacy_id, position, axis_id'),
+        supabase.from('axes').select('id, name'),
       ]);
 
       if (pharmaciesRes.error) throw pharmaciesRes.error;
@@ -111,19 +112,27 @@ export default function PharmaciesPage() {
         profileStatuses.set(p.user_id, p.is_active ?? true);
       });
 
-      // Use lowest position across all axes for sorting
+      const axisNames = new Map<string, string>();
+      (axesRes.data || []).forEach((a: any) => axisNames.set(a.id, a.name));
+
+      // Build per-pharmacy axis info and lowest position
       const axisPositionMap = new Map<string, number>();
+      const pharmacyAxes = new Map<string, { axis_id: string; axis_name: string; position: number }[]>();
       (axisPharmaciesRes.data || []).forEach((ap: any) => {
         const existing = axisPositionMap.get(ap.pharmacy_id);
         if (existing === undefined || ap.position < existing) {
           axisPositionMap.set(ap.pharmacy_id, ap.position);
         }
+        const arr = pharmacyAxes.get(ap.pharmacy_id) || [];
+        arr.push({ axis_id: ap.axis_id, axis_name: axisNames.get(ap.axis_id) || 'Axe inconnu', position: ap.position });
+        pharmacyAxes.set(ap.pharmacy_id, arr);
       });
 
       setPharmacies((pharmaciesRes.data || []).map(p => ({
         ...p,
         _is_active: p.user_id ? (profileStatuses.get(p.user_id!) ?? true) : undefined,
         _axis_position: axisPositionMap.get(p.id) ?? null,
+        _axes: pharmacyAxes.get(p.id) || [],
       })));
     } catch (error) {
       toast.error('Erreur lors du chargement des pharmacies');
