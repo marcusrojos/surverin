@@ -384,38 +384,57 @@ export default function PharmaciesPage() {
     }
   };
 
-  const filteredAndSortedPharmacies = pharmacies
-    .filter(p => {
-      // Text search
-      const matchesSearch =
-        p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        p.client_code.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        p.address?.toLowerCase().includes(searchQuery.toLowerCase());
-      if (!matchesSearch) return false;
+  const filteredPharmacies = pharmacies.filter(p => {
+    const matchesSearch =
+      p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      p.client_code.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      p.address?.toLowerCase().includes(searchQuery.toLowerCase());
+    if (!matchesSearch) return false;
 
-      // Account filter
-      switch (accountFilter) {
-        case 'with_active':
-          return p.user_id !== null && p._is_active === true;
-        case 'with_inactive':
-          return p.user_id !== null && p._is_active === false;
-        case 'no_account':
-          return p.user_id === null;
-        default:
-          return true;
+    switch (accountFilter) {
+      case 'with_active':
+        return p.user_id !== null && p._is_active === true;
+      case 'with_inactive':
+        return p.user_id !== null && p._is_active === false;
+      case 'no_account':
+        return p.user_id === null;
+      default:
+        return true;
+    }
+  });
+
+  const filteredAndSortedPharmacies = [...filteredPharmacies].sort((a, b) => {
+    if (sortMode === 'axis_order') {
+      if (a._axis_position !== null && b._axis_position !== null) {
+        return a._axis_position - b._axis_position;
       }
-    })
-    .sort((a, b) => {
-      if (sortMode === 'axis_order') {
-        // Pharmacies with axis position first, then by position, then alphabetical for unpositioned
-        if (a._axis_position !== null && b._axis_position !== null) {
-          return a._axis_position - b._axis_position;
+      if (a._axis_position !== null) return -1;
+      if (b._axis_position !== null) return 1;
+    }
+    return a.name.localeCompare(b.name, 'fr');
+  });
+
+  // Group pharmacies by axis when in axis_order mode
+  const axisGroups: AxisGroup[] = (() => {
+    if (sortMode !== 'axis_order') return [];
+    const groupMap = new Map<string, AxisGroup>();
+    filteredPharmacies.forEach(p => {
+      (p._axes || []).forEach(ax => {
+        if (!groupMap.has(ax.axis_id)) {
+          groupMap.set(ax.axis_id, { axis_id: ax.axis_id, axis_name: ax.axis_name, pharmacies: [] });
         }
-        if (a._axis_position !== null) return -1;
-        if (b._axis_position !== null) return 1;
-      }
-      return a.name.localeCompare(b.name, 'fr');
+        groupMap.get(ax.axis_id)!.pharmacies.push({ ...p, _axis_position: ax.position });
+      });
     });
+    // Sort pharmacies within each group by position
+    groupMap.forEach(g => g.pharmacies.sort((a, b) => (a._axis_position ?? 999) - (b._axis_position ?? 999)));
+    // Sort groups by name
+    return Array.from(groupMap.values()).sort((a, b) => a.axis_name.localeCompare(b.axis_name, 'fr'));
+  })();
+
+  const unassignedPharmacies = sortMode === 'axis_order'
+    ? filteredPharmacies.filter(p => !p._axes || p._axes.length === 0).sort((a, b) => a.name.localeCompare(b.name, 'fr'))
+    : [];
 
   return (
     <DashboardLayout requiredRole="admin">
