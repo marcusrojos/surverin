@@ -422,6 +422,7 @@ export default function DriverTrackingPage() {
                   </div>
                 </CardContent>
               </Card>
+              </>
             )}
           </>
         )}
