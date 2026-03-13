@@ -311,6 +311,16 @@ export default function DriverTrackingPage() {
                 </CardContent>
               </Card>
             ) : (
+              <>
+              {axisCompliance && (
+                <div className={`rounded-xl p-4 text-center font-bold text-lg tracking-wide ${
+                  axisCompliance.respected 
+                    ? 'bg-success/15 text-success border-2 border-success/30' 
+                    : 'bg-destructive/15 text-destructive border-2 border-destructive/30'
+                }`}>
+                  {axisCompliance.respected ? '✅ PARCOURS RESPECTÉ' : '❌ PARCOURS NON RESPECTÉ'}
+                </div>
+              )}
               <Card className="border-0 shadow-md">
                 <CardHeader>
                   <CardTitle className="text-lg">
