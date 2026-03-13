@@ -494,16 +494,74 @@ export default function PharmaciesPage() {
             <div className="flex items-center justify-center py-12">
               <Loader2 className="w-8 h-8 animate-spin text-primary" />
             </div>
-          ) : filteredAndSortedPharmacies.length === 0 ? (
+          ) : (sortMode === 'axis_order' ? (axisGroups.length === 0 && unassignedPharmacies.length === 0) : filteredAndSortedPharmacies.length === 0) ? (
             <div className="text-center py-12 text-muted-foreground">
               <Building2 className="w-12 h-12 mx-auto mb-3 opacity-50" />
               <p>Aucune pharmacie trouvée</p>
+            </div>
+          ) : sortMode === 'axis_order' ? (
+            <div className="divide-y">
+              {axisGroups.map(group => (
+                <div key={group.axis_id}>
+                  <div className="flex items-center gap-2 px-4 py-3 bg-muted/50 border-b">
+                    <Route className="w-4 h-4 text-primary" />
+                    <span className="font-semibold text-foreground">{group.axis_name}</span>
+                    <span className="text-xs text-muted-foreground">({group.pharmacies.length} pharmacie{group.pharmacies.length > 1 ? 's' : ''})</span>
+                  </div>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-16">Pos.</TableHead>
+                        <TableHead>Nom</TableHead>
+                        <TableHead>Code Client</TableHead>
+                        <TableHead className="hidden md:table-cell">Adresse</TableHead>
+                        <TableHead className="hidden lg:table-cell">Téléphone</TableHead>
+                        <TableHead className="hidden lg:table-cell">Email</TableHead>
+                        <TableHead className="hidden md:table-cell">Compte</TableHead>
+                        <TableHead className="hidden md:table-cell">Statut</TableHead>
+                        <TableHead className="hidden md:table-cell">GPS</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {group.pharmacies.map((pharmacy) => renderPharmacyRow(pharmacy, true))}
+                    </TableBody>
+                  </Table>
+                </div>
+              ))}
+              {unassignedPharmacies.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-2 px-4 py-3 bg-muted/30 border-b">
+                    <Building2 className="w-4 h-4 text-muted-foreground" />
+                    <span className="font-semibold text-muted-foreground">Sans axe</span>
+                    <span className="text-xs text-muted-foreground">({unassignedPharmacies.length})</span>
+                  </div>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-16">Pos.</TableHead>
+                        <TableHead>Nom</TableHead>
+                        <TableHead>Code Client</TableHead>
+                        <TableHead className="hidden md:table-cell">Adresse</TableHead>
+                        <TableHead className="hidden lg:table-cell">Téléphone</TableHead>
+                        <TableHead className="hidden lg:table-cell">Email</TableHead>
+                        <TableHead className="hidden md:table-cell">Compte</TableHead>
+                        <TableHead className="hidden md:table-cell">Statut</TableHead>
+                        <TableHead className="hidden md:table-cell">GPS</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {unassignedPharmacies.map((pharmacy) => renderPharmacyRow(pharmacy, true))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
             </div>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
-                  {sortMode === 'axis_order' && <TableHead className="w-16">Pos.</TableHead>}
                   <TableHead>Nom</TableHead>
                   <TableHead>Code Client</TableHead>
                   <TableHead className="hidden md:table-cell">Adresse</TableHead>
@@ -516,81 +574,7 @@ export default function PharmaciesPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredAndSortedPharmacies.map((pharmacy) => (
-                  <TableRow key={pharmacy.id}>
-                    {sortMode === 'axis_order' && (
-                      <TableCell className="font-mono text-xs text-muted-foreground">
-                        {pharmacy._axis_position !== null ? pharmacy._axis_position + 1 : '-'}
-                      </TableCell>
-                    )}
-                    <TableCell className="font-medium">{pharmacy.name}</TableCell>
-                    <TableCell className="font-mono text-sm text-primary font-semibold">{pharmacy.client_code}</TableCell>
-                    <TableCell className="hidden md:table-cell text-muted-foreground">
-                      {pharmacy.address || '-'}
-                    </TableCell>
-                    <TableCell className="hidden lg:table-cell text-muted-foreground">
-                      {pharmacy.phone || '-'}
-                    </TableCell>
-                    <TableCell className="hidden lg:table-cell text-muted-foreground">
-                      {pharmacy.email || '-'}
-                    </TableCell>
-                    <TableCell className="hidden md:table-cell">
-                      {pharmacy.user_id ? (
-                        <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-full ${
-                          pharmacy._is_active 
-                            ? 'text-green-600 bg-green-500/10' 
-                            : 'text-destructive bg-destructive/10'
-                        }`}>
-                          <User className="w-3 h-3" />
-                          {pharmacy._is_active ? 'Actif' : 'Désactivé'}
-                        </span>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">Sans compte</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="hidden md:table-cell">
-                      {pharmacy.user_id && (
-                        <Switch
-                          checked={pharmacy._is_active ?? true}
-                          onCheckedChange={() => handleTogglePharmacyActive(pharmacy)}
-                          disabled={togglingId === pharmacy.id}
-                        />
-                      )}
-                    </TableCell>
-                    <TableCell className="hidden md:table-cell">
-                      {pharmacy.latitude && pharmacy.longitude ? (
-                        <span className="inline-flex items-center gap-1 text-xs font-medium text-primary bg-primary/10 px-2 py-1 rounded-full">
-                          <MapPin className="w-3 h-3" />
-                          Oui
-                        </span>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">-</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleOpenDialog(pharmacy)}
-                        >
-                          <Pencil className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="text-destructive hover:text-destructive"
-                          onClick={() => {
-                            setSelectedPharmacy(pharmacy);
-                            setIsDeleteDialogOpen(true);
-                          }}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {filteredAndSortedPharmacies.map((pharmacy) => renderPharmacyRow(pharmacy, false))}
               </TableBody>
             </Table>
           )}
