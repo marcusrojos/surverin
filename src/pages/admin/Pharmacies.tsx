@@ -436,6 +436,75 @@ export default function PharmaciesPage() {
     ? filteredPharmacies.filter(p => !p._axes || p._axes.length === 0).sort((a, b) => a.name.localeCompare(b.name, 'fr'))
     : [];
 
+  const renderPharmacyRow = (pharmacy: Pharmacy, showPosition: boolean) => (
+    <TableRow key={`${pharmacy.id}-${pharmacy._axis_position}`}>
+      {showPosition && (
+        <TableCell className="font-mono text-xs text-muted-foreground">
+          {pharmacy._axis_position !== null ? pharmacy._axis_position + 1 : '-'}
+        </TableCell>
+      )}
+      <TableCell className="font-medium">{pharmacy.name}</TableCell>
+      <TableCell className="font-mono text-sm text-primary font-semibold">{pharmacy.client_code}</TableCell>
+      <TableCell className="hidden md:table-cell text-muted-foreground">
+        {pharmacy.address || '-'}
+      </TableCell>
+      <TableCell className="hidden lg:table-cell text-muted-foreground">
+        {pharmacy.phone || '-'}
+      </TableCell>
+      <TableCell className="hidden lg:table-cell text-muted-foreground">
+        {pharmacy.email || '-'}
+      </TableCell>
+      <TableCell className="hidden md:table-cell">
+        {pharmacy.user_id ? (
+          <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-full ${
+            pharmacy._is_active
+              ? 'text-primary bg-primary/10'
+              : 'text-destructive bg-destructive/10'
+          }`}>
+            <User className="w-3 h-3" />
+            {pharmacy._is_active ? 'Actif' : 'Désactivé'}
+          </span>
+        ) : (
+          <span className="text-xs text-muted-foreground">Sans compte</span>
+        )}
+      </TableCell>
+      <TableCell className="hidden md:table-cell">
+        {pharmacy.user_id && (
+          <Switch
+            checked={pharmacy._is_active ?? true}
+            onCheckedChange={() => handleTogglePharmacyActive(pharmacy)}
+            disabled={togglingId === pharmacy.id}
+          />
+        )}
+      </TableCell>
+      <TableCell className="hidden md:table-cell">
+        {pharmacy.latitude && pharmacy.longitude ? (
+          <span className="inline-flex items-center gap-1 text-xs font-medium text-primary bg-primary/10 px-2 py-1 rounded-full">
+            <MapPin className="w-3 h-3" />
+            Oui
+          </span>
+        ) : (
+          <span className="text-xs text-muted-foreground">-</span>
+        )}
+      </TableCell>
+      <TableCell className="text-right">
+        <div className="flex items-center justify-end gap-2">
+          <Button variant="ghost" size="icon" onClick={() => handleOpenDialog(pharmacy)}>
+            <Pencil className="w-4 h-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="text-destructive hover:text-destructive"
+            onClick={() => { setSelectedPharmacy(pharmacy); setIsDeleteDialogOpen(true); }}
+          >
+            <Trash2 className="w-4 h-4" />
+          </Button>
+        </div>
+      </TableCell>
+    </TableRow>
+  );
+
   return (
     <DashboardLayout requiredRole="admin">
       <div className="space-y-6 animate-fade-in">
