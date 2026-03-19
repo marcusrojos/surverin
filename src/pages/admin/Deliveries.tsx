@@ -712,6 +712,12 @@ export default function DeliveriesPage() {
           </DialogContent>
         </Dialog>
       </div>
+
+      <CreateParcoursWizard
+        open={isParcoursWizardOpen}
+        onOpenChange={setIsParcoursWizardOpen}
+        onCreated={() => fetchData()}
+      />
     </DashboardLayout>
   );
 }
