@@ -3,6 +3,7 @@ import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { useAuth } from '@/lib/auth';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { InventoryFlow } from '@/components/driver/InventoryFlow';
 import { toast } from 'sonner';
 import { Package, Loader2, Route, ClipboardCheck, RefreshCw, WifiOff, ArrowDownFromLine, MapPin, ChevronRight } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
