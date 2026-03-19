@@ -218,29 +218,61 @@ export function CreateParcoursWizard({ open, onOpenChange, onCreated }: CreatePa
 
     setIsSaving(true);
     try {
-      // Build deliveries for each selected pharmacy
-      const deliveries = Array.from(selectedPharmacyIds).map(pharmacyId => {
-        const items = pharmacyPackages[pharmacyId] || [];
-        const packages = items.map(c => ({ type: c.type, reference: c.barcode.trim() }));
-        return {
-          reference: `${parcoursName.trim()}-${pharmacyId.substring(0, 6)}`,
-          pharmacy_id: pharmacyId,
+      // 1. Create the parcours
+      const { data: parcours, error: parcoursError } = await supabase
+        .from('parcours')
+        .insert({
+          name: parcoursName.trim(),
+          axis_id: selectedAxis,
           driver_id: selectedDriver,
-          status: 'en_attente' as const,
-          nb_cartons: items.filter(c => c.type === 'carton').length,
-          nb_sachets: items.filter(c => c.type === 'sachet').length,
-          nb_barques: items.filter(c => c.type === 'bac').length,
-          packages,
-        };
-      });
+          status: 'en_attente_inventaire',
+        } as any)
+        .select('id')
+        .single();
 
-      const { error } = await supabase
-        .from('deliveries')
-        .insert(deliveries as any);
+      if (parcoursError) throw parcoursError;
+      const parcoursId = parcours.id;
 
-      if (error) throw error;
+      // 2. Insert parcours_pharmacies
+      const pharmacyRows = selectedPharmaciesOrdered.map((ap, index) => ({
+        parcours_id: parcoursId,
+        pharmacy_id: ap.pharmacy_id,
+        position: index,
+      }));
 
-      toast.success(`Parcours "${parcoursName}" créé avec ${deliveries.length} livraison(s)`);
+      const { data: insertedPharmacies, error: pharmError } = await supabase
+        .from('parcours_pharmacies')
+        .insert(pharmacyRows as any)
+        .select('id, pharmacy_id');
+
+      if (pharmError) throw pharmError;
+
+      // 3. Insert parcours_colis
+      const pharmIdMap = new Map((insertedPharmacies || []).map((p: any) => [p.pharmacy_id, p.id]));
+
+      const colisRows: any[] = [];
+      for (const [pharmacyId, items] of Object.entries(pharmacyPackages)) {
+        const parcoursPharmacyId = pharmIdMap.get(pharmacyId);
+        if (!parcoursPharmacyId) continue;
+        for (const colis of items) {
+          colisRows.push({
+            parcours_id: parcoursId,
+            parcours_pharmacy_id: parcoursPharmacyId,
+            type: colis.type,
+            barcode: colis.barcode.trim(),
+          });
+        }
+      }
+
+      if (colisRows.length > 0) {
+        const { error: colisError } = await supabase
+          .from('parcours_colis')
+          .insert(colisRows);
+
+        if (colisError) throw colisError;
+      }
+
+      toast.success(`Parcours "${parcoursName}" créé avec ${colisRows.length} colis pour ${pharmacyRows.length} pharmacie(s)`);
       onOpenChange(false);
       onCreated();
     } catch (error: any) {
