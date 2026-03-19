@@ -1,53 +1,47 @@
-import { useState, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { useAuth } from '@/lib/auth';
-import { useOfflineDeliveries, EnrichedDelivery } from '@/hooks/useOfflineDeliveries';
-import { useRealtimeDeliveries } from '@/hooks/use-realtime-deliveries';
-import { useGeolocation } from '@/hooks/use-geolocation';
-import { GEOFENCE_RADIUS } from '@/lib/geolocation';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { StatusBadge } from '@/components/ui/status-badge';
-import { SignaturePad } from '@/components/ui/signature-pad';
 import { toast } from 'sonner';
-import { Package, CheckCircle, WifiOff, Loader2, Truck, Filter, CalendarDays, MapPin, Navigation, AlertTriangle, RefreshCw, Camera, ArrowDownFromLine, X, Search } from 'lucide-react';
-import { Database } from '@/integrations/supabase/types';
+import { Package, Loader2, Route, ClipboardCheck, RefreshCw, WifiOff, ArrowDownFromLine, MapPin, ChevronRight } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 
-type Delivery = Database['public']['Tables']['deliveries']['Row'];
-type Pharmacy = Database['public']['Tables']['pharmacies']['Row'];
+interface Parcours {
+  id: string;
+  name: string;
+  status: string;
+  created_at: string;
+  axis: { name: string } | null;
+  colis_count: number;
+  pharmacies_count: number;
+}
+
+const statusLabels: Record<string, { label: string; className: string }> = {
+  en_attente_inventaire: {
+    label: "En attente d'inventaire",
+    className: 'bg-warning/15 text-warning border border-warning/30',
+  },
+  en_cours: {
+    label: 'En cours',
+    className: 'bg-primary/15 text-primary border border-primary/30',
+  },
+  termine: {
+    label: 'Terminé',
+    className: 'bg-green-500/15 text-green-700 dark:text-green-400 border border-green-500/30',
+  },
+};
 
 export default function DriverDashboard() {
   const { user } = useAuth();
-  const {
-    deliveries,
-    pharmacyOrder,
-    loading,
-    isOnline,
-    isSyncing,
-    syncMessage,
-    pendingCount,
-    validateDelivery,
-    refetch,
-  } = useOfflineDeliveries({ userId: user?.id });
+  const [parcoursList, setParcoursList] = useState<Parcours[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
 
-  const [deliverDialog, setDeliverDialog] = useState<EnrichedDelivery | null>(null);
-  const [recipientName, setRecipientName] = useState('');
-  const [signature, setSignature] = useState<string | null>(null);
-  const [cartonsReceived, setCartonsReceived] = useState(0);
-  const [sachetsReceived, setSachetsReceived] = useState(0);
-  const [bacsReceived, setBacsReceived] = useState(0);
-  const [verificationCode, setVerificationCode] = useState('');
-  const [offlinePhoto, setOfflinePhoto] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // Pull-to-refresh state
+  // Pull-to-refresh
   const [pullDistance, setPullDistance] = useState(0);
   const [isPulling, setIsPulling] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -55,35 +49,84 @@ export default function DriverDashboard() {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const PULL_THRESHOLD = 80;
 
-  // Filters
-  const [statusFilter, setStatusFilter] = useState<'all' | 'en_attente' | 'livre'>('all');
-  const [dateFilter, setDateFilter] = useState('');
-  const [searchQuery, setSearchQuery] = useState('');
+  useEffect(() => {
+    const onLine = () => setIsOnline(true);
+    const offLine = () => setIsOnline(false);
+    window.addEventListener('online', onLine);
+    window.addEventListener('offline', offLine);
+    return () => { window.removeEventListener('online', onLine); window.removeEventListener('offline', offLine); };
+  }, []);
 
-  // Geolocation for delivery confirmation
-  const pharmacyLat = (deliverDialog?.pharmacy as any)?.latitude ?? null;
-  const pharmacyLng = (deliverDialog?.pharmacy as any)?.longitude ?? null;
-  const hasPharmacyLocation = pharmacyLat !== null && pharmacyLng !== null;
+  const fetchParcours = useCallback(async () => {
+    if (!user?.id) return;
+    try {
+      // Fetch parcours assigned to this driver
+      const { data: parcoursData, error } = await supabase
+        .from('parcours')
+        .select('id, name, status, created_at, axis_id')
+        .eq('driver_id', user.id)
+        .order('created_at', { ascending: false });
 
-  const { driverPosition, distance, isWithinZone, error: geoError, loading: geoLoading } = useGeolocation({
-    pharmacyLat,
-    pharmacyLng,
-    enabled: !!deliverDialog && hasPharmacyLocation,
-  });
+      if (error) throw error;
 
-  // Stable refs for realtime callbacks
-  const refetchRef = useRef(refetch);
-  refetchRef.current = refetch;
-  const stableOnNew = useCallback(() => { if (navigator.onLine) refetchRef.current(); }, []);
-  const stableOnUpdate = useCallback(() => { if (navigator.onLine) refetchRef.current(); }, []);
-  const stableOnDelete = useCallback(() => { if (navigator.onLine) refetchRef.current(); }, []);
+      if (!parcoursData || parcoursData.length === 0) {
+        setParcoursList([]);
+        return;
+      }
 
-  useRealtimeDeliveries({
-    userId: user?.id,
-    onNewDelivery: stableOnNew,
-    onDeliveryUpdate: stableOnUpdate,
-    onDeliveryDelete: stableOnDelete,
-  });
+      // Fetch axes for names
+      const axisIds = [...new Set(parcoursData.map(p => p.axis_id))];
+      const { data: axesData } = await supabase
+        .from('axes')
+        .select('id, name')
+        .in('id', axisIds);
+
+      const axisMap = new Map((axesData || []).map(a => [a.id, a]));
+
+      // Fetch pharmacy counts
+      const parcoursIds = parcoursData.map(p => p.id);
+      const { data: pharmaciesData } = await supabase
+        .from('parcours_pharmacies')
+        .select('parcours_id')
+        .in('parcours_id', parcoursIds);
+
+      const pharmCounts = new Map<string, number>();
+      (pharmaciesData || []).forEach(pp => {
+        pharmCounts.set(pp.parcours_id, (pharmCounts.get(pp.parcours_id) || 0) + 1);
+      });
+
+      // Fetch colis counts
+      const { data: colisData } = await supabase
+        .from('parcours_colis')
+        .select('parcours_id')
+        .in('parcours_id', parcoursIds);
+
+      const colisCounts = new Map<string, number>();
+      (colisData || []).forEach(c => {
+        colisCounts.set(c.parcours_id, (colisCounts.get(c.parcours_id) || 0) + 1);
+      });
+
+      const mapped: Parcours[] = parcoursData.map(p => ({
+        id: p.id,
+        name: p.name,
+        status: p.status,
+        created_at: p.created_at,
+        axis: axisMap.get(p.axis_id) ? { name: axisMap.get(p.axis_id)!.name } : null,
+        colis_count: colisCounts.get(p.id) || 0,
+        pharmacies_count: pharmCounts.get(p.id) || 0,
+      }));
+
+      setParcoursList(mapped);
+    } catch (err) {
+      toast.error('Erreur lors du chargement des parcours');
+    } finally {
+      setLoading(false);
+    }
+  }, [user?.id]);
+
+  useEffect(() => {
+    fetchParcours();
+  }, [fetchParcours]);
 
   // Pull-to-refresh handlers
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
@@ -96,177 +139,24 @@ export default function DriverDashboard() {
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
     if (!isPulling) return;
     const delta = e.touches[0].clientY - touchStartY.current;
-    if (delta > 0) {
-      setPullDistance(Math.min(delta * 0.5, 120));
-    }
+    if (delta > 0) setPullDistance(Math.min(delta * 0.5, 120));
   }, [isPulling]);
 
   const handleTouchEnd = useCallback(async () => {
     if (pullDistance >= PULL_THRESHOLD && !isRefreshing) {
       setIsRefreshing(true);
       setPullDistance(0);
-      await refetch();
+      await fetchParcours();
       setIsRefreshing(false);
       toast.success('Données actualisées');
     } else {
       setPullDistance(0);
     }
     setIsPulling(false);
-  }, [pullDistance, isRefreshing, refetch]);
+  }, [pullDistance, isRefreshing, fetchParcours]);
 
-  const groupedByDate = useMemo(() => {
-    let filtered = deliveries;
-    if (statusFilter !== 'all') {
-      filtered = filtered.filter(d => d.status === statusFilter);
-    }
-    if (dateFilter) {
-      filtered = filtered.filter(d => format(new Date(d.created_at), 'yyyy-MM-dd') === dateFilter);
-    }
-    if (searchQuery.trim()) {
-      const q = searchQuery.trim().toLowerCase();
-      filtered = filtered.filter(d => {
-        const pharm = d.pharmacy as any;
-        // Search by pharmacy name
-        if (pharm?.name?.toLowerCase().includes(q)) return true;
-        // Search by client code
-        if (pharm?.client_code?.toLowerCase().includes(q)) return true;
-        // Search by delivery reference
-        if (d.reference?.toLowerCase().includes(q)) return true;
-        // Search by package barcode in packages JSON array
-        if (Array.isArray(d.packages)) {
-          return d.packages.some((pkg: any) => {
-            if (typeof pkg === 'string' && pkg.toLowerCase().includes(q)) return true;
-            if (typeof pkg === 'object' && pkg !== null) {
-              return Object.values(pkg).some(v => typeof v === 'string' && v.toLowerCase().includes(q));
-            }
-            return false;
-          });
-        }
-        return false;
-      });
-    }
-
-    const sorted = [...filtered].sort((a, b) => {
-      const posA = pharmacyOrder.get(a.pharmacy_id) ?? 9999;
-      const posB = pharmacyOrder.get(b.pharmacy_id) ?? 9999;
-      return posA - posB;
-    });
-
-    const groups = new Map<string, typeof sorted>();
-    sorted.forEach(d => {
-      const key = format(new Date(d.created_at), 'yyyy-MM-dd');
-      if (!groups.has(key)) groups.set(key, []);
-      groups.get(key)!.push(d);
-    });
-
-    return Array.from(groups.entries()).sort((a, b) => b[0].localeCompare(a[0]));
-  }, [deliveries, statusFilter, dateFilter, searchQuery, pharmacyOrder]);
-
-  const openDeliver = (d: EnrichedDelivery) => {
-    setDeliverDialog(d);
-    setRecipientName('');
-    setVerificationCode('');
-    setSignature(null);
-    setOfflinePhoto(null);
-    setCartonsReceived(d.nb_cartons);
-    setSachetsReceived(d.nb_sachets);
-    setBacsReceived(d.nb_barques);
-  };
-
-  const handlePhotoCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      setOfflinePhoto(reader.result as string);
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const handleDeliver = async () => {
-    if (!deliverDialog) return;
-
-    // Offline mode: only photo required
-    if (!isOnline) {
-      if (!offlinePhoto) {
-        toast.error('Veuillez prendre une photo du bon de livraison');
-        return;
-      }
-
-      setSubmitting(true);
-      const now = new Date().toISOString();
-
-      const payload: any = {
-        status: 'livre' as const,
-        recipient_name: 'Validation hors ligne',
-        recipient_signature: null,
-        delivered_at: now,
-        nb_cartons_received: deliverDialog.nb_cartons,
-        nb_sachets_received: deliverDialog.nb_sachets,
-        nb_barques_received: deliverDialog.nb_barques,
-        offline_photo: offlinePhoto,
-      };
-
-      await validateDelivery(deliverDialog.id, payload);
-      setDeliverDialog(null);
-      setSubmitting(false);
-      return;
-    }
-
-    // Online mode: full validation
-    if (!recipientName.trim()) return;
-
-    // Only check verification code if the delivery has one
-    const hasVerificationCode = !!deliverDialog.verification_code;
-    if (hasVerificationCode && verificationCode.trim() !== deliverDialog.verification_code) {
-      toast.error('Code de vérification incorrect');
-      return;
-    }
-
-    // Online geofence check: block if outside 20m
-    if (isOnline && hasPharmacyLocation && !isWithinZone) {
-      toast.error(`Vous devez être dans la pharmacie (${GEOFENCE_RADIUS}m maximum) pour valider la livraison.`);
-      return;
-    }
-
-    setSubmitting(true);
-    const now = new Date().toISOString();
-
-    const payload: any = {
-      status: 'livre' as const,
-      recipient_name: recipientName.trim(),
-      recipient_signature: signature,
-      delivered_at: now,
-      nb_cartons_received: cartonsReceived,
-      nb_sachets_received: sachetsReceived,
-      nb_barques_received: bacsReceived,
-    };
-
-    if (driverPosition) {
-      payload.driver_latitude = driverPosition.latitude;
-      payload.driver_longitude = driverPosition.longitude;
-    }
-
-    if (offlinePhoto) {
-      payload.offline_photo = offlinePhoto;
-    }
-
-    await validateDelivery(deliverDialog.id, payload);
-
-    setDeliverDialog(null);
-    setSubmitting(false);
-  };
-
-  const pending = deliveries.filter(d => d.status === 'en_attente');
-  const delivered = deliveries.filter(d => d.status === 'livre');
-
-  const formatDistance = (d: number | null) => {
-    if (d === null) return '';
-    if (d < 1000) return `${Math.round(d)} m`;
-    return `${(d / 1000).toFixed(1)} km`;
-  };
-
-  const canConfirm = !isOnline || !hasPharmacyLocation || isWithinZone;
+  const pendingInventory = parcoursList.filter(p => p.status === 'en_attente_inventaire');
+  const others = parcoursList.filter(p => p.status !== 'en_attente_inventaire');
 
   return (
     <DashboardLayout requiredRole="livreur">
@@ -295,17 +185,17 @@ export default function DriverDashboard() {
           </div>
         )}
 
+        {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-          <h1 className="text-xl sm:text-2xl font-bold">Mes livraisons</h1>
+          <h1 className="text-xl sm:text-2xl font-bold">Mes parcours</h1>
           <div className="flex items-center gap-3">
-            {/* Discrete refresh button */}
             <Button
               variant="ghost"
               size="icon"
               className="h-8 w-8"
               onClick={async () => {
                 setIsRefreshing(true);
-                await refetch();
+                await fetchParcours();
                 setIsRefreshing(false);
                 toast.success('Données actualisées');
               }}
@@ -313,364 +203,120 @@ export default function DriverDashboard() {
             >
               <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
             </Button>
-            {(isSyncing || syncMessage) && (
-              <div className="flex items-center gap-1 text-primary text-sm">
-                {isSyncing ? (
-                  <><RefreshCw className="w-4 h-4 animate-spin" /> Synchronisation des livraisons en cours…</>
-                ) : syncMessage ? (
-                  <><CheckCircle className="w-4 h-4" /> {syncMessage}</>
-                ) : null}
-              </div>
-            )}
             {!isOnline && (
               <div className="flex items-center gap-2 text-warning text-sm">
                 <WifiOff className="w-4 h-4" />
                 Hors-ligne
-                {pendingCount > 0 && <span className="font-medium">({pendingCount} en attente)</span>}
               </div>
             )}
           </div>
         </div>
 
+        {/* Stats */}
         <div className="grid grid-cols-2 gap-3">
           <Card>
             <CardContent className="pt-4 text-center">
-              <Package className="w-6 h-6 mx-auto mb-1 text-warning" />
-              <p className="text-2xl font-bold">{pending.length}</p>
-              <p className="text-xs text-muted-foreground">En attente</p>
+              <ClipboardCheck className="w-6 h-6 mx-auto mb-1 text-warning" />
+              <p className="text-2xl font-bold">{pendingInventory.length}</p>
+              <p className="text-xs text-muted-foreground">À inventorier</p>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="pt-4 text-center">
-              <CheckCircle className="w-6 h-6 mx-auto mb-1 text-success" />
-              <p className="text-2xl font-bold">{delivered.length}</p>
-              <p className="text-xs text-muted-foreground">Livrées</p>
+              <Route className="w-6 h-6 mx-auto mb-1 text-primary" />
+              <p className="text-2xl font-bold">{parcoursList.length}</p>
+              <p className="text-xs text-muted-foreground">Total parcours</p>
             </CardContent>
           </Card>
         </div>
 
-        {/* Search bar */}
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            placeholder="Rechercher par nom, code client, code-barres colis..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9 pr-9"
-          />
-          {searchQuery && (
-            <button
-              onClick={() => setSearchQuery('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          )}
-        </div>
-
-        {/* Filters */}
-        <Card>
-          <CardContent className="pt-4">
-            <div className="flex items-center gap-2 mb-3">
-              <Filter className="w-4 h-4 text-muted-foreground" />
-              <span className="text-sm font-medium">Filtres</span>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label className="text-xs">Statut</Label>
-                <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as any)}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Tous</SelectItem>
-                    <SelectItem value="en_attente">En attente</SelectItem>
-                    <SelectItem value="livre">Livrées</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Date</Label>
-                <Input type="date" value={dateFilter} onChange={(e) => setDateFilter(e.target.value)} />
-              </div>
-            </div>
-            {(statusFilter !== 'all' || dateFilter || searchQuery) && (
-              <Button variant="ghost" size="sm" className="mt-2 text-xs" onClick={() => { setStatusFilter('all'); setDateFilter(''); setSearchQuery(''); }}>
-                Réinitialiser les filtres
-              </Button>
-            )}
-          </CardContent>
-        </Card>
-
+        {/* Parcours list */}
         {loading ? (
-          <div className="flex justify-center py-8"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>
-        ) : groupedByDate.length === 0 ? (
-          <p className="text-center text-muted-foreground py-8">Aucune livraison trouvée</p>
-        ) : (
-          <div className="space-y-5">
-            {groupedByDate.map(([dateKey, items]) => (
-              <div key={dateKey} className="space-y-2">
-                <div className="flex items-center gap-2 sticky top-0 bg-background py-1 z-10">
-                  <CalendarDays className="w-4 h-4 text-primary" />
-                  <h2 className="font-semibold text-sm">
-                    {format(new Date(dateKey), 'EEEE dd MMMM yyyy', { locale: fr })}
-                  </h2>
-                  <span className="text-xs text-muted-foreground">({items.length})</span>
-                </div>
-                {items.map(d => {
-                  const pharm = d.pharmacy as any;
-                  const hasLoc = pharm?.latitude && pharm?.longitude;
-                  return (
-                    <Card key={d.id} className={d.status === 'livre' ? 'opacity-70' : 'card-hover'}>
-                      <CardContent className="pt-4">
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <p className="font-mono font-medium text-sm">{d.reference}</p>
-                              <StatusBadge status={d.status} />
-                              {d.pendingSync && (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-warning/20 text-warning">
-                                  <RefreshCw className="w-3 h-3 mr-1" />
-                                  Sync en attente
-                                </span>
-                              )}
-                            </div>
-                            <p className="text-sm text-muted-foreground truncate">{d.pharmacy?.name || '—'}</p>
-                            <p className="text-xs text-muted-foreground mt-1">{d.nb_cartons}C · {d.nb_sachets}S · {d.nb_barques}B</p>
-                            {hasLoc && d.status === 'en_attente' && (
-                              <div className="flex items-center gap-1 mt-1">
-                                <MapPin className="w-3 h-3 text-muted-foreground" />
-                                <span className="text-xs text-muted-foreground">GPS requis</span>
-                              </div>
-                            )}
-                          </div>
-                          {d.status === 'en_attente' && (
-                            <Button size="sm" onClick={() => openDeliver(d)} className="shrink-0">
-                              <Truck className="w-4 h-4 mr-1" />Livrer
-                            </Button>
-                          )}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  );
-                })}
-              </div>
-            ))}
+          <div className="flex justify-center py-8">
+            <Loader2 className="w-8 h-8 animate-spin text-primary" />
           </div>
-        )}
+        ) : parcoursList.length === 0 ? (
+          <div className="text-center py-12 text-muted-foreground">
+            <Route className="w-12 h-12 mx-auto mb-3 opacity-50" />
+            <p>Aucun parcours assigné</p>
+            <p className="text-xs mt-1">Vos parcours apparaîtront ici une fois créés par l'administrateur</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {parcoursList.map((parcours) => {
+              const statusInfo = statusLabels[parcours.status] || statusLabels.en_attente_inventaire;
+              const isPending = parcours.status === 'en_attente_inventaire';
 
-        {/* Delivery Confirmation Dialog */}
-        <Dialog open={!!deliverDialog} onOpenChange={(open) => { if (!open) setDeliverDialog(null); }}>
-          <DialogContent className="max-w-md w-[calc(100%-2rem)] mx-auto max-h-[90vh] overflow-y-auto">
-            <DialogHeader><DialogTitle>Confirmer la livraison</DialogTitle></DialogHeader>
-            <div className="space-y-4">
-              <p className="text-sm text-muted-foreground">Réf: <span className="font-mono font-medium text-foreground">{deliverDialog?.reference}</span></p>
-
-              {/* ── OFFLINE MODE: Photo-only form ── */}
-              {!isOnline ? (
-                <>
-                  <Card className="border-2 border-warning bg-warning/5">
-                    <CardContent className="pt-3 pb-3">
-                      <div className="flex items-center gap-2 text-sm text-warning font-medium">
-                        <WifiOff className="w-4 h-4" />
-                        Mode hors ligne
+              return (
+                <Card
+                  key={parcours.id}
+                  className={cn(
+                    'transition-all duration-200',
+                    isPending ? 'card-hover border-warning/30' : 'opacity-80'
+                  )}
+                >
+                  <CardContent className="pt-4 pb-4">
+                    <div className="flex items-start gap-3">
+                      {/* Icon */}
+                      <div className={cn(
+                        'w-10 h-10 rounded-xl flex items-center justify-center shrink-0',
+                        isPending ? 'bg-warning/15' : 'bg-muted'
+                      )}>
+                        <Route className={cn('w-5 h-5', isPending ? 'text-warning' : 'text-muted-foreground')} />
                       </div>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Prenez une photo du bon de livraison papier signé. La livraison sera synchronisée automatiquement au retour du réseau.
-                      </p>
-                    </CardContent>
-                  </Card>
 
-                  {/* Photo capture — mandatory offline */}
-                  <div className="space-y-2">
-                    <Label className="flex items-center gap-1 font-semibold">
-                      <Camera className="w-4 h-4" />
-                      Photo du bon de livraison signé <span className="text-destructive">*</span>
-                    </Label>
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept="image/*"
-                      capture="environment"
-                      onChange={handlePhotoCapture}
-                      className="hidden"
-                    />
-                    {offlinePhoto ? (
-                      <div className="relative">
-                        <img src={offlinePhoto} alt="Bon de livraison" className="w-full h-48 object-cover rounded-lg border-2 border-primary/30" />
-                        <div className="absolute top-2 right-2 flex gap-1">
-                          <Button
-                            type="button"
-                            variant="secondary"
-                            size="sm"
-                            onClick={() => setOfflinePhoto(null)}
-                          >
-                            <X className="w-3 h-3 mr-1" /> Supprimer
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="secondary"
-                            size="sm"
-                            onClick={() => fileInputRef.current?.click()}
-                          >
-                            <Camera className="w-3 h-3 mr-1" /> Reprendre
-                          </Button>
-                        </div>
-                        <div className="absolute bottom-2 left-2 bg-primary/90 text-primary-foreground text-xs px-2 py-1 rounded-md flex items-center gap-1">
-                          <CheckCircle className="w-3 h-3" /> Photo capturée
-                        </div>
-                      </div>
-                    ) : (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="w-full h-32 border-dashed border-2 flex flex-col items-center gap-3"
-                        onClick={() => fileInputRef.current?.click()}
-                      >
-                        <Camera className="w-8 h-8 text-muted-foreground" />
-                        <span className="text-sm text-muted-foreground">Appuyez pour prendre la photo</span>
-                      </Button>
-                    )}
-                  </div>
-
-                  <Button
-                    onClick={handleDeliver}
-                    className="w-full"
-                    disabled={submitting || !offlinePhoto}
-                  >
-                    {submitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <CheckCircle className="w-4 h-4 mr-2" />}
-                    Valider la livraison hors ligne
-                  </Button>
-                </>
-              ) : (
-                /* ── ONLINE MODE: Full form ── */
-                <>
-                  {/* Geolocation status — only when online */}
-                  {hasPharmacyLocation && (
-                    <Card className={`border-2 ${isWithinZone ? 'border-green-500 bg-green-500/5' : 'border-destructive bg-destructive/5'}`}>
-                      <CardContent className="pt-3 pb-3">
-                        {geoLoading ? (
-                          <div className="flex items-center gap-2 text-sm">
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                            <span>Recherche de votre position GPS...</span>
-                          </div>
-                        ) : geoError ? (
-                          <div className="flex items-center gap-2 text-sm text-destructive">
-                            <AlertTriangle className="w-4 h-4" />
-                            <span>{geoError}</span>
-                          </div>
-                        ) : (
-                          <div className="space-y-2">
-                            <div className="flex items-center gap-2">
-                              <div className={`w-3 h-3 rounded-full ${isWithinZone ? 'bg-green-500' : 'bg-destructive'} animate-pulse`} />
-                              <span className="text-sm font-medium">
-                                {isWithinZone ? 'Dans la zone autorisée' : 'Hors zone — validation bloquée'}
-                              </span>
-                            </div>
-                            {distance !== null && (
-                              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                <Navigation className="w-3 h-3" />
-                                <span>Distance: {formatDistance(distance)} / {GEOFENCE_RADIUS} m max</span>
-                              </div>
-                            )}
-                            {!isWithinZone && (
-                              <p className="text-xs text-destructive">
-                                Vous devez être dans la pharmacie ({GEOFENCE_RADIUS}m maximum) pour valider la livraison.
+                      {/* Content */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="font-semibold text-sm text-foreground truncate">{parcours.name}</p>
+                            {parcours.axis && (
+                              <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                                <MapPin className="w-3 h-3 shrink-0" />
+                                {parcours.axis.name}
                               </p>
                             )}
                           </div>
+                          <span className={cn('inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap shrink-0', statusInfo.className)}>
+                            {statusInfo.label}
+                          </span>
+                        </div>
+
+                        {/* Meta */}
+                        <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
+                          <span className="flex items-center gap-1">
+                            <Package className="w-3 h-3" />
+                            {parcours.colis_count} colis
+                          </span>
+                          <span>·</span>
+                          <span>{parcours.pharmacies_count} pharmacie{parcours.pharmacies_count > 1 ? 's' : ''}</span>
+                          <span>·</span>
+                          <span>{format(new Date(parcours.created_at), 'dd MMM', { locale: fr })}</span>
+                        </div>
+
+                        {/* Action button */}
+                        {isPending && (
+                          <Button
+                            size="sm"
+                            className="mt-3 w-full sm:w-auto"
+                            onClick={() => {
+                              // TODO: Open inventory flow
+                              toast.info("L'inventaire sera disponible prochainement");
+                            }}
+                          >
+                            <ClipboardCheck className="w-4 h-4 mr-1.5" />
+                            Faire l'inventaire
+                            <ChevronRight className="w-4 h-4 ml-1" />
+                          </Button>
                         )}
-                      </CardContent>
-                    </Card>
-                  )}
-
-                  {/* Verification code */}
-                  {deliverDialog?.verification_code ? (
-                    <div className="space-y-2">
-                      <Label>Code de vérification</Label>
-                      <Input
-                        value={verificationCode}
-                        onChange={(e) => setVerificationCode(e.target.value)}
-                        placeholder="Entrez le code à 6 chiffres"
-                        maxLength={6}
-                        className="font-mono tracking-widest text-center text-lg"
-                      />
-                      <p className="text-xs text-muted-foreground">Demandez le code de vérification au réceptionnaire de la pharmacie</p>
-                    </div>
-                  ) : (
-                    <div className="p-3 bg-muted rounded-lg text-sm text-muted-foreground">
-                      Pas de code de vérification requis pour cette pharmacie
-                    </div>
-                  )}
-
-                  <div className="space-y-2"><Label>Nom du réceptionnaire</Label><Input value={recipientName} onChange={(e) => setRecipientName(e.target.value)} placeholder="Nom et prénom" /></div>
-                  <div className="grid grid-cols-3 gap-2 sm:gap-3">
-                    <div className="space-y-1"><Label className="text-xs">Cartons reçus</Label><Input type="number" min={0} value={cartonsReceived} onChange={(e) => setCartonsReceived(Number(e.target.value))} /></div>
-                    <div className="space-y-1"><Label className="text-xs">Sachets reçus</Label><Input type="number" min={0} value={sachetsReceived} onChange={(e) => setSachetsReceived(Number(e.target.value))} /></div>
-                    <div className="space-y-1"><Label className="text-xs">Bacs reçus</Label><Input type="number" min={0} value={bacsReceived} onChange={(e) => setBacsReceived(Number(e.target.value))} /></div>
-                  </div>
-
-                  {/* Optional photo capture */}
-                  <div className="space-y-2">
-                    <Label className="flex items-center gap-1">
-                      <Camera className="w-4 h-4" />
-                      Photo du bon papier <span className="text-xs text-muted-foreground">(optionnel)</span>
-                    </Label>
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept="image/*"
-                      capture="environment"
-                      onChange={handlePhotoCapture}
-                      className="hidden"
-                    />
-                    {offlinePhoto ? (
-                      <div className="relative">
-                        <img src={offlinePhoto} alt="Bon papier" className="w-full h-40 object-cover rounded-lg border" />
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          size="sm"
-                          className="absolute bottom-2 right-2"
-                          onClick={() => fileInputRef.current?.click()}
-                        >
-                          Reprendre
-                        </Button>
                       </div>
-                    ) : (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="w-full h-24 border-dashed flex flex-col items-center gap-2"
-                        onClick={() => fileInputRef.current?.click()}
-                      >
-                        <Camera className="w-6 h-6 text-muted-foreground" />
-                        <span className="text-sm text-muted-foreground">Prendre une photo du bon papier</span>
-                      </Button>
-                    )}
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>Signature</Label>
-                    <SignaturePad onSignatureChange={setSignature} />
-                  </div>
-                  <Button
-                    onClick={handleDeliver}
-                    className="w-full"
-                    disabled={
-                      submitting ||
-                      !recipientName.trim() ||
-                      (!!deliverDialog?.verification_code && !verificationCode.trim()) ||
-                      (hasPharmacyLocation && !canConfirm) ||
-                      (hasPharmacyLocation && geoLoading)
-                    }
-                  >
-                    {submitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <CheckCircle className="w-4 h-4 mr-2" />}
-                    Confirmer la livraison
-                  </Button>
-                </>
-              )}
-            </div>
-          </DialogContent>
-        </Dialog>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        )}
       </div>
     </DashboardLayout>
   );
