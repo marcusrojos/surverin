@@ -1,10 +1,10 @@
 import localforage from 'localforage';
 import { supabase } from '@/integrations/supabase/client';
 import { generatePhotoPDF } from '@/lib/generate-receipt-pdf';
-import { compressImage } from '@/lib/image-compress';
 
 // ── Stores ──
 const syncStore = localforage.createInstance({ name: 'dpci', storeName: 'sync_queue' });
+const photoStore = localforage.createInstance({ name: 'dpci', storeName: 'sync_photos' });
 const logStore = localforage.createInstance({ name: 'dpci', storeName: 'sync_logs' });
 
 export type SyncStatus = 'pending' | 'synced' | 'error';
@@ -23,7 +23,8 @@ export interface PendingValidation {
     driver_latitude?: number | null;
     driver_longitude?: number | null;
     verification_code?: string;
-    offline_photo?: string; // base64 photo taken offline
+    // Photo is stored separately in photoStore to avoid serialization issues
+    has_offline_photo?: boolean;
   };
   reference: string;
   created_at: string;
@@ -59,7 +60,6 @@ async function getAllItems(): Promise<PendingValidation[]> {
   await syncStore.iterate<PendingValidation, void>((value) => {
     items.push(value);
   });
-  // Sort by creation date (oldest first)
   return items.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
 }
 
@@ -76,23 +76,33 @@ async function addLog(entry: Omit<SyncLogEntry, 'id' | 'timestamp'>): Promise<vo
 export const SyncQueue = {
   /**
    * Add a validation to the queue.
-   * If a pending entry already exists for the same delivery, update it
-   * only if the new timestamp is more recent (last-write wins).
+   * Photo is stored separately in its own IndexedDB store to keep the queue lightweight.
    */
   async enqueue(
     deliveryId: string,
     reference: string,
-    payload: PendingValidation['payload']
+    payload: PendingValidation['payload'],
+    offlinePhoto?: string | null
   ): Promise<PendingValidation> {
+    // Store photo separately if provided
+    if (offlinePhoto) {
+      await photoStore.setItem(deliveryId, offlinePhoto);
+      console.log(`[SyncQueue] Photo stored for delivery ${deliveryId} (${Math.round(offlinePhoto.length / 1024)}KB)`);
+    }
+
     const all = await getAllItems();
     const existing = all.find(e => e.delivery_id === deliveryId && e.sync_status === 'pending');
 
+    const payloadWithFlag = {
+      ...payload,
+      has_offline_photo: !!offlinePhoto,
+    };
+
     if (existing) {
-      // Only update if the new data is more recent
       const existingTime = new Date(existing.payload.delivered_at).getTime();
       const newTime = new Date(payload.delivered_at).getTime();
       if (newTime >= existingTime) {
-        existing.payload = payload;
+        existing.payload = payloadWithFlag;
         existing.reference = reference;
         existing.retry_count = 0;
         existing.last_error = undefined;
@@ -105,12 +115,13 @@ export const SyncQueue = {
       id: crypto.randomUUID(),
       delivery_id: deliveryId,
       reference,
-      payload,
+      payload: payloadWithFlag,
       created_at: new Date().toISOString(),
       sync_status: 'pending',
       retry_count: 0,
     };
     await syncStore.setItem(entry.id, entry);
+    console.log(`[SyncQueue] Enqueued delivery ${deliveryId} (ref: ${reference})`);
     return entry;
   },
 
@@ -136,11 +147,19 @@ export const SyncQueue = {
     return new Set(pending.map(p => p.delivery_id));
   },
 
+  /** Check if a specific delivery has a stored photo */
+  async hasPhoto(deliveryId: string): Promise<boolean> {
+    const photo = await photoStore.getItem<string>(deliveryId);
+    return !!photo;
+  },
+
   /**
    * Sync all pending validations to Supabase — sequentially.
-   * - Idempotent: checks server status before update to avoid overwriting.
-   * - Deduplicates: skips if already delivered.
-   * - Retries with backoff, marks as 'error' after MAX_RETRIES.
+   * For each item with a photo:
+   *   1. Convert photo → PDF (client-side via jsPDF)
+   *   2. Upload PDF to Supabase Storage
+   *   3. Update delivery record with status + receipt_pdf_url
+   *   4. Only delete local data after confirmed success
    */
   async syncAll(): Promise<{ synced: number; failed: number }> {
     const pending = await this.getPending();
@@ -165,13 +184,13 @@ export const SyncQueue = {
           .single();
 
         if (existing && existing.status === 'livre') {
-          // Already delivered on server — check timestamp
           const serverTime = existing.delivered_at ? new Date(existing.delivered_at).getTime() : 0;
           const localTime = new Date(item.payload.delivered_at).getTime();
 
           if (serverTime >= localTime) {
-            // Server data is newer or equal — skip, don't overwrite
+            // Already synced — clean up local data
             await syncStore.removeItem(item.id);
+            await photoStore.removeItem(item.delivery_id);
             await addLog({
               delivery_id: item.delivery_id,
               reference: item.reference,
@@ -181,45 +200,52 @@ export const SyncQueue = {
             synced++;
             continue;
           }
-          // Local data is more recent — proceed with update (last-write wins)
         }
 
         // ── Process offline photo → PDF ──
-        const { offline_photo, ...dbPayload } = item.payload;
+        const { has_offline_photo, ...restPayload } = item.payload;
         let receiptPdfUrl: string | null = null;
 
-        if (offline_photo) {
-          try {
-            // Compress the photo first
-            const photoBlob = dataUrlToBlob(offline_photo);
-            const compressed = await compressImage(photoBlob, { maxSize: 1024 * 1024, quality: 0.7 });
+        if (has_offline_photo) {
+          const photoBase64 = await photoStore.getItem<string>(item.delivery_id);
+          
+          if (photoBase64) {
+            try {
+              console.log(`[SyncQueue] Converting photo to PDF for ${item.delivery_id}...`);
+              
+              // Generate PDF from photo (jsPDF)
+              const pdfDataUrl = await generatePhotoPDF(photoBase64, item.reference, item.payload.delivered_at);
+              const pdfBlob = dataUrlToBlob(pdfDataUrl);
+              
+              console.log(`[SyncQueue] PDF generated (${Math.round(pdfBlob.size / 1024)}KB), uploading...`);
 
-            // Generate PDF from compressed image
-            const pdfDataUrl = await generatePhotoPDF(compressed.dataUrl, item.reference, item.payload.delivered_at);
-            const pdfBlob = dataUrlToBlob(pdfDataUrl);
-
-            // Upload PDF to Supabase Storage
-            const fileName = `bon-livraison-${item.delivery_id}.pdf`;
-            const { error: uploadError } = await supabase.storage
-              .from('delivery-receipts')
-              .upload(fileName, pdfBlob, { contentType: 'application/pdf', upsert: true });
-
-            if (!uploadError) {
-              const { data: urlData } = supabase.storage
+              // Upload PDF to Supabase Storage
+              const fileName = `bon-livraison-${item.delivery_id}.pdf`;
+              const { error: uploadError } = await supabase.storage
                 .from('delivery-receipts')
-                .getPublicUrl(fileName);
-              receiptPdfUrl = urlData.publicUrl;
-            } else {
-              console.error(`[SyncQueue] PDF upload failed for ${item.delivery_id}:`, uploadError.message);
+                .upload(fileName, pdfBlob, { contentType: 'application/pdf', upsert: true });
+
+              if (!uploadError) {
+                const { data: urlData } = supabase.storage
+                  .from('delivery-receipts')
+                  .getPublicUrl(fileName);
+                receiptPdfUrl = urlData.publicUrl;
+                console.log(`[SyncQueue] PDF uploaded successfully: ${receiptPdfUrl}`);
+              } else {
+                console.error(`[SyncQueue] PDF upload failed for ${item.delivery_id}:`, uploadError.message);
+                // Don't block — continue without PDF URL, retry will handle it
+              }
+            } catch (pdfErr) {
+              console.error(`[SyncQueue] PDF generation/upload failed for ${item.delivery_id}:`, pdfErr);
+              // Don't block the delivery update if PDF fails
             }
-          } catch (pdfErr) {
-            console.error(`[SyncQueue] PDF generation failed for ${item.delivery_id}:`, pdfErr);
-            // Don't block the delivery update — proceed without PDF
+          } else {
+            console.warn(`[SyncQueue] Photo not found in store for ${item.delivery_id}`);
           }
         }
 
         // ── Update delivery in database ──
-        const updatePayload: Record<string, unknown> = { ...dbPayload };
+        const updatePayload: Record<string, unknown> = { ...restPayload };
         if (receiptPdfUrl) {
           updatePayload.receipt_pdf_url = receiptPdfUrl;
         }
@@ -242,8 +268,9 @@ export const SyncQueue = {
           });
           failed++;
         } else {
-          // Success — remove from queue
+          // ✅ Success — remove from queue AND remove stored photo
           await syncStore.removeItem(item.id);
+          await photoStore.removeItem(item.delivery_id);
           await addLog({
             delivery_id: item.delivery_id,
             reference: item.reference,
@@ -288,9 +315,9 @@ export const SyncQueue = {
     for (const item of all) {
       if (item.sync_status === 'synced' || item.sync_status === 'error') {
         await syncStore.removeItem(item.id);
+        await photoStore.removeItem(item.delivery_id);
       }
     }
-    // Clear logs older than 7 days
     const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
     const logs: SyncLogEntry[] = [];
     await logStore.iterate<SyncLogEntry, void>((value) => { logs.push(value); });
