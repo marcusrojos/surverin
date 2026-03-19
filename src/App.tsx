@@ -40,6 +40,7 @@ const App = () => (
             <Route path="/admin/tracking" element={<AdminDriverTracking />} />
             <Route path="/admin/lists" element={<AdminLists />} />
             <Route path="/admin/axes" element={<AdminAxes />} />
+            <Route path="/admin/parcours" element={<AdminParcours />} />
             <Route path="/driver" element={<DriverDashboard />} />
             <Route path="/pharmacy" element={<PharmacyDashboard />} />
             <Route path="/install" element={<Install />} />
