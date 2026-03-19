@@ -317,6 +317,20 @@ export default function DriverDashboard() {
           </div>
         )}
       </div>
+
+      {inventoryParcours && user?.id && (
+        <InventoryFlow
+          open={!!inventoryParcours}
+          onOpenChange={(open) => { if (!open) setInventoryParcours(null); }}
+          parcoursId={inventoryParcours.id}
+          parcoursName={inventoryParcours.name}
+          driverId={user.id}
+          onCompleted={() => {
+            setInventoryParcours(null);
+            fetchParcours();
+          }}
+        />
+      )}
     </DashboardLayout>
   );
 }
