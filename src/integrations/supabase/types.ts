@@ -162,6 +162,10 @@ export type Database = {
           axis_id: string
           created_at: string
           driver_id: string
+          force_confirmed: boolean
+          force_confirmed_at: string | null
+          force_confirmed_by: string | null
+          force_confirmed_reason: string | null
           id: string
           name: string
           status: Database["public"]["Enums"]["parcours_status"]
@@ -171,6 +175,10 @@ export type Database = {
           axis_id: string
           created_at?: string
           driver_id: string
+          force_confirmed?: boolean
+          force_confirmed_at?: string | null
+          force_confirmed_by?: string | null
+          force_confirmed_reason?: string | null
           id?: string
           name: string
           status?: Database["public"]["Enums"]["parcours_status"]
@@ -180,6 +188,10 @@ export type Database = {
           axis_id?: string
           created_at?: string
           driver_id?: string
+          force_confirmed?: boolean
+          force_confirmed_at?: string | null
+          force_confirmed_by?: string | null
+          force_confirmed_reason?: string | null
           id?: string
           name?: string
           status?: Database["public"]["Enums"]["parcours_status"]
