@@ -271,18 +271,21 @@ export function ParcoursDeliveries({
         setSaving(false);
       }
     } else {
-      // Offline mode: queue delivery
+      // Offline mode: only photo is required
+      if (!offlinePhoto) {
+        toast.error('La photo du bon de livraison est obligatoire en mode hors-ligne');
+        return;
+      }
+
       const reference = validating.deliveryReference || `${parcoursName}-${validating.pharmacyName}`;
       if (validating.deliveryId) {
         queueDelivery({
           deliveryId: validating.deliveryId,
           reference,
-          recipientName: recipientName.trim(),
-          recipientSignature: signature || null,
+          recipientName: 'Validation hors-ligne',
+          recipientSignature: null,
           deliveredAt: new Date().toISOString(),
-          nb_cartons_received: nbCartonsReceived,
-          nb_sachets_received: nbSachetsReceived,
-          nb_barques_received: nbBarquesReceived,
+          offlinePhoto,
         });
       } else {
         toast.error('Livraison hors-ligne impossible sans connexion préalable');
@@ -292,7 +295,7 @@ export function ParcoursDeliveries({
       setValidating(null);
       setPharmacyDeliveries(prev => prev.map(pd =>
         pd.pharmacyId === validating.pharmacyId
-          ? { ...pd, deliveryStatus: 'livre', recipientName: recipientName.trim(), deliveredAt: new Date().toISOString() }
+          ? { ...pd, deliveryStatus: 'livre', recipientName: 'Validation hors-ligne', deliveredAt: new Date().toISOString() }
           : pd
       ));
     }
