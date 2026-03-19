@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Package, Building2, Users, LogOut, Truck, Route, FileText } from 'lucide-react';
+import { LayoutDashboard, Package, Building2, Users, LogOut, Truck, Route, FileText, ClipboardList } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/lib/auth';
 import dpciLogo from '@/assets/dpci-logo.png';
