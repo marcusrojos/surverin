@@ -92,6 +92,7 @@ export type Database = {
           nb_sachets: number
           nb_sachets_received: number | null
           packages: Json
+          parcours_id: string | null
           pharmacy_id: string
           receipt_pdf_url: string | null
           recipient_name: string | null
@@ -115,6 +116,7 @@ export type Database = {
           nb_sachets?: number
           nb_sachets_received?: number | null
           packages?: Json
+          parcours_id?: string | null
           pharmacy_id: string
           receipt_pdf_url?: string | null
           recipient_name?: string | null
@@ -138,6 +140,7 @@ export type Database = {
           nb_sachets?: number
           nb_sachets_received?: number | null
           packages?: Json
+          parcours_id?: string | null
           pharmacy_id?: string
           receipt_pdf_url?: string | null
           recipient_name?: string | null
@@ -148,6 +151,13 @@ export type Database = {
           verification_code?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "deliveries_parcours_id_fkey"
+            columns: ["parcours_id"]
+            isOneToOne: false
+            referencedRelation: "parcours"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "deliveries_pharmacy_id_fkey"
             columns: ["pharmacy_id"]
