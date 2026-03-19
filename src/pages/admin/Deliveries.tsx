@@ -38,7 +38,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { StatusBadge } from '@/components/ui/status-badge';
-import { Plus, Pencil, Trash2, Search, Package, Loader2, Copy, Check, X, FileDown } from 'lucide-react';
+import { Plus, Pencil, Trash2, Search, Package, Loader2, Copy, Check, X, FileDown, Route } from 'lucide-react';
 import { generateReceiptPDF, downloadPdfFromUrl } from '@/lib/generate-receipt-pdf';
 import { GEOFENCE_RADIUS } from '@/lib/geolocation';
 import { supabase } from '@/integrations/supabase/client';
