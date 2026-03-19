@@ -362,11 +362,16 @@ export function ParcoursDeliveries({
       }
       toast.success('Livraison sauvegardée hors-ligne');
       setValidating(null);
-      setPharmacyDeliveries(prev => prev.map(pd =>
-        pd.pharmacyId === validating.pharmacyId
-          ? { ...pd, deliveryStatus: 'livre', recipientName: 'Validation hors-ligne', deliveredAt: new Date().toISOString() }
-          : pd
-      ));
+      setPharmacyDeliveries(prev => {
+        const updated = prev.map(pd =>
+          pd.pharmacyId === validating.pharmacyId
+            ? { ...pd, deliveryStatus: 'livre', recipientName: 'Validation hors-ligne', deliveredAt: new Date().toISOString() }
+            : pd
+        );
+        // Update local cache with the new state
+        saveToCache(updated);
+        return updated;
+      });
     }
   };
 
