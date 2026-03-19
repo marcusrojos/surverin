@@ -392,11 +392,14 @@ export function ParcoursDeliveries({
     }
   };
 
+  const hasPendingSync = (pd: PharmacyDelivery) =>
+    pendingDeliveries.some(p => (p.delivery_id ?? `${p.parcours_id}:${p.pharmacy_id}`) === (pd.deliveryId ?? `${parcoursId}:${pd.pharmacyId}`));
+
   const pending = pharmacyDeliveries.filter(pd =>
-    pd.deliveryStatus !== 'livre' && !pendingDeliveries.some(p => p.delivery_id === pd.deliveryId)
+    pd.deliveryStatus !== 'livre' && !hasPendingSync(pd)
   );
   const delivered = pharmacyDeliveries.filter(pd =>
-    pd.deliveryStatus === 'livre' || pendingDeliveries.some(p => p.delivery_id === pd.deliveryId)
+    pd.deliveryStatus === 'livre' || hasPendingSync(pd)
   );
 
   return (
