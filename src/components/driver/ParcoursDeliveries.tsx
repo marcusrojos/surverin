@@ -693,28 +693,22 @@ export function ParcoursDeliveries({
                   </div>
                 )}
 
-                {/* Quantities received */}
+                {/* Quantities received - always show all 3 fields */}
                 <div className="space-y-2">
                   <Label>Quantités reçues</Label>
                   <div className="grid grid-cols-3 gap-2">
-                    {(validating?.nb_cartons ?? 0) > 0 && (
-                      <div>
-                        <p className="text-[10px] text-muted-foreground mb-1">Cartons</p>
-                        <Input type="number" min={0} value={nbCartonsReceived} onChange={(e) => setNbCartonsReceived(parseInt(e.target.value) || 0)} />
-                      </div>
-                    )}
-                    {(validating?.nb_sachets ?? 0) > 0 && (
-                      <div>
-                        <p className="text-[10px] text-muted-foreground mb-1">Sachets</p>
-                        <Input type="number" min={0} value={nbSachetsReceived} onChange={(e) => setNbSachetsReceived(parseInt(e.target.value) || 0)} />
-                      </div>
-                    )}
-                    {(validating?.nb_barques ?? 0) > 0 && (
-                      <div>
-                        <p className="text-[10px] text-muted-foreground mb-1">Bacs</p>
-                        <Input type="number" min={0} value={nbBarquesReceived} onChange={(e) => setNbBarquesReceived(parseInt(e.target.value) || 0)} />
-                      </div>
-                    )}
+                    <div>
+                      <p className="text-[10px] text-muted-foreground mb-1">Cartons</p>
+                      <Input type="number" min={0} value={nbCartonsReceived} onChange={(e) => setNbCartonsReceived(parseInt(e.target.value) || 0)} />
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-muted-foreground mb-1">Sachets</p>
+                      <Input type="number" min={0} value={nbSachetsReceived} onChange={(e) => setNbSachetsReceived(parseInt(e.target.value) || 0)} />
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-muted-foreground mb-1">Bacs</p>
+                      <Input type="number" min={0} value={nbBarquesReceived} onChange={(e) => setNbBarquesReceived(parseInt(e.target.value) || 0)} />
+                    </div>
                   </div>
                 </div>
 
