@@ -533,6 +533,42 @@ export function ParcoursDeliveries({
             </Card>
           )}
 
+          {/* GPS Status - online mode only */}
+          {isOnline && validating?.pharmacyLatitude != null && validating?.pharmacyLongitude != null && (
+            <Card className={cn(
+              'border',
+              geoLoading ? 'border-muted' : isWithinZone ? 'border-green-500/30 bg-green-500/5' : 'border-destructive/30 bg-destructive/5'
+            )}>
+              <CardContent className="py-2.5 flex items-center gap-2">
+                {geoLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin text-muted-foreground shrink-0" />
+                    <p className="text-xs text-muted-foreground">Localisation GPS en cours…</p>
+                  </>
+                ) : geoError ? (
+                  <>
+                    <MapPinOff className="w-4 h-4 text-destructive shrink-0" />
+                    <p className="text-xs text-destructive">{geoError}</p>
+                  </>
+                ) : isWithinZone ? (
+                  <>
+                    <LocateFixed className="w-4 h-4 text-green-600 shrink-0" />
+                    <p className="text-xs text-green-700 dark:text-green-400">
+                      Position vérifiée — {distance !== null ? `${Math.round(distance)}m` : ''} de la pharmacie
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <MapPinOff className="w-4 h-4 text-destructive shrink-0" />
+                    <p className="text-xs text-destructive">
+                      Trop loin de la pharmacie ({distance !== null ? `${Math.round(distance)}m` : '?'} / {GEOFENCE_RADIUS}m max)
+                    </p>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
           <div className="space-y-4">
             {/* Colis summary */}
             {validating && validating.colis.length > 0 && (
@@ -548,20 +584,7 @@ export function ParcoursDeliveries({
               </div>
             )}
 
-            {/* Recipient name */}
-            <div className="space-y-1.5">
-              <Label className="flex items-center gap-1.5">
-                <PenLine className="w-3.5 h-3.5" />
-                Nom du destinataire *
-              </Label>
-              <Input
-                value={recipientName}
-                onChange={(e) => setRecipientName(e.target.value)}
-                placeholder="Nom de la personne qui réceptionne"
-              />
-            </div>
-
-            {/* Verification code - only in online mode */}
+            {/* Verification code - only in online mode when code exists */}
             {isOnline && validating?.verificationCode && (
               <div className="space-y-1.5">
                 <Label className="flex items-center gap-1.5">
@@ -606,7 +629,7 @@ export function ParcoursDeliveries({
                 )}
                 {(validating?.nb_barques ?? 0) > 0 && (
                   <div>
-                    <p className="text-[10px] text-muted-foreground mb-1">Barques</p>
+                    <p className="text-[10px] text-muted-foreground mb-1">Bacs</p>
                     <Input
                       type="number"
                       min={0}
@@ -618,14 +641,29 @@ export function ParcoursDeliveries({
               </div>
             </div>
 
-            {/* Signature */}
+            {/* Recipient name */}
             <div className="space-y-1.5">
-              <Label>Signature du destinataire</Label>
-              <SignaturePad
-                onSignatureChange={setSignature}
-                className="border rounded-lg"
+              <Label className="flex items-center gap-1.5">
+                <PenLine className="w-3.5 h-3.5" />
+                Nom du destinataire *
+              </Label>
+              <Input
+                value={recipientName}
+                onChange={(e) => setRecipientName(e.target.value)}
+                placeholder="Nom de la personne qui réceptionne"
               />
             </div>
+
+            {/* Signature - online mode */}
+            {isOnline && (
+              <div className="space-y-1.5">
+                <Label>Signature du destinataire *</Label>
+                <SignaturePad
+                  onSignatureChange={setSignature}
+                  className="border rounded-lg"
+                />
+              </div>
+            )}
 
             {/* Photo - only in offline mode */}
             {!isOnline && (
@@ -659,7 +697,13 @@ export function ParcoursDeliveries({
             <Button
               className="w-full"
               onClick={handleValidateDelivery}
-              disabled={saving || !recipientName.trim()}
+              disabled={
+                saving ||
+                !recipientName.trim() ||
+                (isOnline && validating?.pharmacyLatitude != null && validating?.pharmacyLongitude != null && (!isWithinZone || geoLoading)) ||
+                (isOnline && !!validating?.verificationCode && verificationCode !== validating?.verificationCode) ||
+                (isOnline && !signature)
+              }
             >
               {saving ? (
                 <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Validation...</>
