@@ -144,6 +144,8 @@ export function ParcoursDeliveries({
           pharmacyId: pp.pharmacy_id,
           pharmacyName: pharm?.name || 'Inconnu',
           pharmacyAddress: pharm?.address || null,
+          pharmacyLatitude: pharm?.latitude ?? null,
+          pharmacyLongitude: pharm?.longitude ?? null,
           position: pp.position,
           colis,
           deliveryId: deliv?.id || null,
