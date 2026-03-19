@@ -255,7 +255,7 @@ export function useOfflineDeliveries({ userId }: UseOfflineDeliveriesOptions) {
     });
 
     // 3. Enqueue for sync (handles duplicates automatically)
-    await SyncQueue.enqueue(deliveryId, payload);
+    await SyncQueue.enqueue(deliveryId, deliveryId, payload);
     const count = await SyncQueue.getPendingCount();
     setPendingCount(count);
 

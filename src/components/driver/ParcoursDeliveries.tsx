@@ -279,13 +279,12 @@ export function ParcoursDeliveries({
 
       const reference = validating.deliveryReference || `${parcoursName}-${validating.pharmacyName}`;
       if (validating.deliveryId) {
-        queueDelivery({
-          deliveryId: validating.deliveryId,
-          reference,
-          recipientName: 'Validation hors-ligne',
-          recipientSignature: null,
-          deliveredAt: new Date().toISOString(),
-          offlinePhoto,
+        queueDelivery(validating.deliveryId, reference, {
+          status: 'livre',
+          recipient_name: 'Validation hors-ligne',
+          recipient_signature: null,
+          delivered_at: new Date().toISOString(),
+          offline_photo: offlinePhoto,
         });
       } else {
         toast.error('Livraison hors-ligne impossible sans connexion préalable');
@@ -302,10 +301,10 @@ export function ParcoursDeliveries({
   };
 
   const pending = pharmacyDeliveries.filter(pd =>
-    pd.deliveryStatus !== 'livre' && !pendingDeliveries.some(p => p.deliveryId === pd.deliveryId)
+    pd.deliveryStatus !== 'livre' && !pendingDeliveries.some(p => p.delivery_id === pd.deliveryId)
   );
   const delivered = pharmacyDeliveries.filter(pd =>
-    pd.deliveryStatus === 'livre' || pendingDeliveries.some(p => p.deliveryId === pd.deliveryId)
+    pd.deliveryStatus === 'livre' || pendingDeliveries.some(p => p.delivery_id === pd.deliveryId)
   );
 
   return (
@@ -469,7 +468,7 @@ export function ParcoursDeliveries({
                 Livrées ({delivered.length})
               </p>
               {delivered.map(pd => {
-                const isPendingSync = pendingDeliveries.some(p => p.deliveryId === pd.deliveryId);
+                const isPendingSync = pendingDeliveries.some(p => p.delivery_id === pd.deliveryId);
                 return (
                   <Card key={pd.pharmacyId} className={cn('opacity-70', isPendingSync && 'border-warning/30')}>
                     <CardContent className="pt-4 pb-4">
