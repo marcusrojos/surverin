@@ -301,10 +301,10 @@ export function ParcoursDeliveries({
   };
 
   const pending = pharmacyDeliveries.filter(pd =>
-    pd.deliveryStatus !== 'livre' && !pendingDeliveries.some(p => p.deliveryId === pd.deliveryId)
+    pd.deliveryStatus !== 'livre' && !pendingDeliveries.some(p => p.delivery_id === pd.deliveryId)
   );
   const delivered = pharmacyDeliveries.filter(pd =>
-    pd.deliveryStatus === 'livre' || pendingDeliveries.some(p => p.deliveryId === pd.deliveryId)
+    pd.deliveryStatus === 'livre' || pendingDeliveries.some(p => p.delivery_id === pd.deliveryId)
   );
 
   return (
