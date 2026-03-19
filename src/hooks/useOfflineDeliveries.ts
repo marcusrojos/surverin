@@ -15,7 +15,7 @@ interface UseOfflineDeliveriesOptions {
   userId: string | undefined;
 }
 
-const SYNC_RETRY_INTERVAL = 30_000;
+const SYNC_RETRY_INTERVAL = 120_000; // 2 minutes instead of 30s to reduce bandwidth
 
 export function useOfflineDeliveries({ userId }: UseOfflineDeliveriesOptions) {
   const [deliveries, setDeliveries] = useState<EnrichedDelivery[]>([]);
