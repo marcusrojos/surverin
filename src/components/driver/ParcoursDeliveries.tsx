@@ -365,8 +365,7 @@ export function ParcoursDeliveries({
           recipient_name: 'Validation hors-ligne',
           recipient_signature: null,
           delivered_at: new Date().toISOString(),
-          offline_photo: offlinePhoto,
-        });
+        }, offlinePhoto);
       } else {
         toast.error('Livraison hors-ligne impossible sans connexion préalable');
         return;

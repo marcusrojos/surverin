@@ -80,9 +80,10 @@ export function useOfflineSync() {
   const queueDelivery = useCallback(async (
     deliveryId: string,
     reference: string,
-    payload: PendingValidation['payload']
+    payload: PendingValidation['payload'],
+    offlinePhoto?: string | null
   ) => {
-    const entry = await SyncQueue.enqueue(deliveryId, reference, payload);
+    const entry = await SyncQueue.enqueue(deliveryId, reference, payload, offlinePhoto);
     await refreshPending();
     return entry;
   }, [refreshPending]);
