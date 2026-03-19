@@ -19,6 +19,7 @@ interface Parcours {
   axis: { name: string } | null;
   colis_count: number;
   pharmacies_count: number;
+  force_confirmed: boolean;
 }
 
 const statusLabels: Record<string, { label: string; className: string }> = {
