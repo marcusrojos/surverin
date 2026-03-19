@@ -279,13 +279,12 @@ export function ParcoursDeliveries({
 
       const reference = validating.deliveryReference || `${parcoursName}-${validating.pharmacyName}`;
       if (validating.deliveryId) {
-        queueDelivery({
-          deliveryId: validating.deliveryId,
-          reference,
-          recipientName: 'Validation hors-ligne',
-          recipientSignature: null,
-          deliveredAt: new Date().toISOString(),
-          offlinePhoto,
+        queueDelivery(validating.deliveryId, reference, {
+          status: 'livre',
+          recipient_name: 'Validation hors-ligne',
+          recipient_signature: null,
+          delivered_at: new Date().toISOString(),
+          offline_photo: offlinePhoto,
         });
       } else {
         toast.error('Livraison hors-ligne impossible sans connexion préalable');
