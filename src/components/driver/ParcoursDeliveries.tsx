@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import localforage from 'localforage';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import {
