@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
+import { CreateParcoursWizard } from '@/components/admin/CreateParcoursWizard';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -37,7 +38,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { StatusBadge } from '@/components/ui/status-badge';
-import { Plus, Pencil, Trash2, Search, Package, Loader2, Copy, Check, X, FileDown } from 'lucide-react';
+import { Plus, Pencil, Trash2, Search, Package, Loader2, Copy, Check, X, FileDown, Route } from 'lucide-react';
 import { generateReceiptPDF, downloadPdfFromUrl } from '@/lib/generate-receipt-pdf';
 import { GEOFENCE_RADIUS } from '@/lib/geolocation';
 import { supabase } from '@/integrations/supabase/client';
@@ -110,6 +111,7 @@ export default function DeliveriesPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isCodeDialogOpen, setIsCodeDialogOpen] = useState(false);
+  const [isParcoursWizardOpen, setIsParcoursWizardOpen] = useState(false);
   const [selectedDelivery, setSelectedDelivery] = useState<Delivery | null>(null);
   const [newVerificationCode, setNewVerificationCode] = useState<string>('');
   const [formData, setFormData] = useState({
@@ -316,9 +318,9 @@ export default function DeliveriesPage() {
               Gérez toutes les livraisons de colis
             </p>
           </div>
-          <Button onClick={() => handleOpenDialog()} className="shadow-primary">
-            <Plus className="w-4 h-4 mr-2" />
-            Nouvelle Livraison
+          <Button onClick={() => setIsParcoursWizardOpen(true)} className="shadow-primary">
+            <Route className="w-4 h-4 mr-2" />
+            Créer un parcours
           </Button>
         </div>
 
@@ -710,6 +712,12 @@ export default function DeliveriesPage() {
           </DialogContent>
         </Dialog>
       </div>
+
+      <CreateParcoursWizard
+        open={isParcoursWizardOpen}
+        onOpenChange={setIsParcoursWizardOpen}
+        onCreated={() => fetchData()}
+      />
     </DashboardLayout>
   );
 }
