@@ -326,6 +326,17 @@ export default function DeliveriesPage() {
           </Button>
         </div>
 
+        <Tabs defaultValue="bons" className="w-full">
+          <TabsList className="w-full sm:w-auto">
+            <TabsTrigger value="bons" className="flex-1 sm:flex-none">Bon de livraisons</TabsTrigger>
+            <TabsTrigger value="inventaire" className="flex-1 sm:flex-none">Inventaire des livreurs</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="inventaire">
+            <InventoryReport />
+          </TabsContent>
+
+          <TabsContent value="bons" className="space-y-4">
         {/* Filters */}
         <div className="flex flex-col gap-4">
           <div className="relative w-full">
