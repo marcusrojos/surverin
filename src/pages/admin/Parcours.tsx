@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from '@/components/ui/dialog';
@@ -20,7 +21,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import {
   Route, Loader2, Search, Eye, Pencil, Trash2, ShieldCheck, Package, MapPin, Barcode,
-  AlertTriangle, CheckCircle2, XCircle, Plus, ChevronDown, ChevronUp,
+  AlertTriangle, CheckCircle2, XCircle, Plus, Building2,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/lib/auth';
@@ -62,6 +63,12 @@ interface ParcoursColis {
   pharmacy_name: string;
 }
 
+interface AxisPharmacyOption {
+  pharmacy_id: string;
+  pharmacy_name: string;
+  position: number;
+}
+
 const statusLabels: Record<string, { label: string; className: string }> = {
   en_attente_inventaire: { label: "Attente inventaire", className: 'bg-warning/15 text-warning' },
   en_cours: { label: 'En cours', className: 'bg-primary/15 text-primary' },
@@ -83,15 +90,19 @@ export default function AdminParcours() {
   const [detailInventaire, setDetailInventaire] = useState<any>(null);
   const [detailScans, setDetailScans] = useState<any[]>([]);
 
-  // Edit dialog
+  // Edit dialog (full: name + pharmacies + colis)
   const [editParcours, setEditParcours] = useState<ParcoursRow | null>(null);
   const [editName, setEditName] = useState('');
   const [editSaving, setEditSaving] = useState(false);
-
-  // Edit colis dialog
-  const [editColisDialog, setEditColisDialog] = useState(false);
-  const [editableColisList, setEditableColisList] = useState<ParcoursColis[]>([]);
-  const [editColisSaving, setEditColisSaving] = useState(false);
+  const [editLoading, setEditLoading] = useState(false);
+  // Pharmacies editing
+  const [editAxisPharmacies, setEditAxisPharmacies] = useState<AxisPharmacyOption[]>([]);
+  const [editSelectedPharmacyIds, setEditSelectedPharmacyIds] = useState<Set<string>>(new Set());
+  const [editCurrentPharmacyIds, setEditCurrentPharmacyIds] = useState<Set<string>>(new Set());
+  // Colis editing
+  const [editColisList, setEditColisList] = useState<ParcoursColis[]>([]);
+  // Parcours pharmacies map (pharmacy_id -> parcours_pharmacy_id)
+  const [editPharmIdMap, setEditPharmIdMap] = useState<Map<string, string>>(new Map());
 
   // Force confirm
   const [forceDialog, setForceDialog] = useState<ParcoursRow | null>(null);
@@ -100,9 +111,6 @@ export default function AdminParcours() {
 
   // Delete
   const [deleteDialog, setDeleteDialog] = useState<ParcoursRow | null>(null);
-
-  // Expanded rows
-  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   useEffect(() => { fetchParcours(); }, []);
 
@@ -197,44 +205,124 @@ export default function AdminParcours() {
     finally { setDetailLoading(false); }
   };
 
+  // ===== EDIT: Open edit dialog with full data =====
+  const openEditDialog = async (p: ParcoursRow) => {
+    setEditParcours(p);
+    setEditName(p.name);
+    setEditLoading(true);
+    try {
+      // Fetch current parcours pharmacies
+      const [ppRes, colisRes, axisPharmRes] = await Promise.all([
+        supabase.from('parcours_pharmacies').select('id, pharmacy_id, position, pharmacy:pharmacies(name)').eq('parcours_id', p.id).order('position'),
+        supabase.from('parcours_colis').select('id, barcode, type, parcours_pharmacy_id').eq('parcours_id', p.id),
+        supabase.from('axis_pharmacies').select('pharmacy_id, position, pharmacy:pharmacies(name)').eq('axis_id', p.axis_id).order('position'),
+      ]);
+
+      // Current parcours pharmacies
+      const currentPP = (ppRes.data || []).map((pp: any) => ({
+        id: pp.id,
+        pharmacy_id: pp.pharmacy_id,
+        position: pp.position,
+        pharmacy_name: Array.isArray(pp.pharmacy) ? pp.pharmacy[0]?.name : pp.pharmacy?.name || 'Inconnu',
+      }));
+      const currentIds = new Set(currentPP.map((pp: any) => pp.pharmacy_id));
+      setEditCurrentPharmacyIds(currentIds);
+      setEditSelectedPharmacyIds(new Set(currentIds));
+
+      // Map pharmacy_id -> parcours_pharmacy_id
+      const idMap = new Map(currentPP.map((pp: any) => [pp.pharmacy_id, pp.id]));
+      setEditPharmIdMap(idMap);
+
+      // All axis pharmacies
+      const axisPharms: AxisPharmacyOption[] = (axisPharmRes.data || []).map((ap: any) => ({
+        pharmacy_id: ap.pharmacy_id,
+        pharmacy_name: Array.isArray(ap.pharmacy) ? ap.pharmacy[0]?.name : ap.pharmacy?.name || 'Inconnu',
+        position: ap.position,
+      }));
+      setEditAxisPharmacies(axisPharms);
+
+      // Colis
+      const pharmNameMap = new Map(currentPP.map((pp: any) => [pp.id, pp.pharmacy_name]));
+      const colis: ParcoursColis[] = (colisRes.data || []).map((c: any) => ({
+        ...c,
+        pharmacy_name: pharmNameMap.get(c.parcours_pharmacy_id) || 'Inconnu',
+      }));
+      setEditColisList(colis);
+    } catch { toast.error('Erreur de chargement'); }
+    finally { setEditLoading(false); }
+  };
+
   const handleEditSave = async () => {
     if (!editParcours || !editName.trim()) return;
     setEditSaving(true);
     try {
+      // 1. Update name
       const { error } = await supabase.from('parcours').update({ name: editName.trim() } as any).eq('id', editParcours.id);
       if (error) throw error;
-      toast.success('Parcours modifié');
-      setEditParcours(null);
-      fetchParcours();
-    } catch { toast.error('Erreur lors de la modification'); }
-    finally { setEditSaving(false); }
-  };
 
-  const handleEditColis = async () => {
-    if (!detailParcours) return;
-    setEditColisSaving(true);
-    try {
-      // Delete all existing colis and re-insert
-      await supabase.from('parcours_colis').delete().eq('parcours_id', detailParcours.id);
+      // 2. Handle pharmacy changes
+      const addedPharmIds = [...editSelectedPharmacyIds].filter(id => !editCurrentPharmacyIds.has(id));
+      const removedPharmIds = [...editCurrentPharmacyIds].filter(id => !editSelectedPharmacyIds.has(id));
 
-      const rows = editableColisList.map(c => ({
-        parcours_id: detailParcours.id,
-        parcours_pharmacy_id: c.parcours_pharmacy_id,
-        type: c.type,
-        barcode: c.barcode.trim(),
-      }));
-
-      if (rows.length > 0) {
-        const { error } = await supabase.from('parcours_colis').insert(rows as any);
-        if (error) throw error;
+      // Remove pharmacies (and their colis)
+      if (removedPharmIds.length > 0) {
+        const removedPPIds = removedPharmIds.map(pid => editPharmIdMap.get(pid)).filter(Boolean) as string[];
+        if (removedPPIds.length > 0) {
+          await supabase.from('parcours_colis').delete().in('parcours_pharmacy_id', removedPPIds);
+          await supabase.from('parcours_pharmacies').delete().in('id', removedPPIds);
+        }
       }
 
-      toast.success('Colis mis à jour');
-      setEditColisDialog(false);
-      fetchDetail(detailParcours);
+      // Add new pharmacies
+      if (addedPharmIds.length > 0) {
+        const maxPos = editAxisPharmacies.length;
+        const newPPRows = addedPharmIds.map((pid, i) => ({
+          parcours_id: editParcours.id,
+          pharmacy_id: pid,
+          position: maxPos + i,
+        }));
+        const { data: insertedPP } = await supabase.from('parcours_pharmacies').insert(newPPRows as any).select('id, pharmacy_id');
+        // Update the map for new colis assignment
+        (insertedPP || []).forEach((pp: any) => editPharmIdMap.set(pp.pharmacy_id, pp.id));
+      }
+
+      // 3. Handle colis changes - delete all and re-insert for remaining pharmacies
+      await supabase.from('parcours_colis').delete().eq('parcours_id', editParcours.id);
+
+      // Re-fetch the updated parcours_pharmacies to get correct IDs
+      const { data: updatedPP } = await supabase.from('parcours_pharmacies').select('id, pharmacy_id').eq('parcours_id', editParcours.id);
+      const freshPharmIdMap = new Map((updatedPP || []).map((pp: any) => [pp.pharmacy_id, pp.id]));
+
+      // Build pharmacy_name -> pharmacy_id map from axis pharmacies
+      const pharmNameToId = new Map(editAxisPharmacies.map(ap => [ap.pharmacy_name, ap.pharmacy_id]));
+
+      const colisRows = editColisList
+        .filter(c => {
+          // Only keep colis for selected pharmacies
+          const pharmId = pharmNameToId.get(c.pharmacy_name);
+          return pharmId && editSelectedPharmacyIds.has(pharmId) && freshPharmIdMap.has(pharmId);
+        })
+        .map(c => {
+          const pharmId = pharmNameToId.get(c.pharmacy_name)!;
+          return {
+            parcours_id: editParcours.id,
+            parcours_pharmacy_id: freshPharmIdMap.get(pharmId)!,
+            type: c.type,
+            barcode: c.barcode.trim(),
+          };
+        })
+        .filter(c => c.barcode);
+
+      if (colisRows.length > 0) {
+        const { error: colisError } = await supabase.from('parcours_colis').insert(colisRows as any);
+        if (colisError) throw colisError;
+      }
+
+      toast.success('Parcours modifié avec succès');
+      setEditParcours(null);
       fetchParcours();
-    } catch (err: any) { toast.error(err?.message || 'Erreur'); }
-    finally { setEditColisSaving(false); }
+    } catch (err: any) { toast.error(err?.message || 'Erreur lors de la modification'); }
+    finally { setEditSaving(false); }
   };
 
   const handleForceConfirm = async () => {
@@ -266,6 +354,35 @@ export default function AdminParcours() {
       setDeleteDialog(null);
       fetchParcours();
     } catch { toast.error('Erreur lors de la suppression'); }
+  };
+
+  const toggleEditPharmacy = (pharmacyId: string) => {
+    setEditSelectedPharmacyIds(prev => {
+      const next = new Set(prev);
+      if (next.has(pharmacyId)) {
+        next.delete(pharmacyId);
+        // Remove colis for this pharmacy
+        const pharmName = editAxisPharmacies.find(ap => ap.pharmacy_id === pharmacyId)?.pharmacy_name;
+        if (pharmName) {
+          setEditColisList(prev => prev.filter(c => c.pharmacy_name !== pharmName));
+        }
+      } else {
+        next.add(pharmacyId);
+      }
+      return next;
+    });
+  };
+
+  const addEditColis = (pharmacyId: string) => {
+    const pharm = editAxisPharmacies.find(ap => ap.pharmacy_id === pharmacyId);
+    const ppId = editPharmIdMap.get(pharmacyId) || `new-pp-${pharmacyId}`;
+    setEditColisList(prev => [...prev, {
+      id: `new-${Date.now()}-${Math.random()}`,
+      barcode: '',
+      type: 'carton',
+      parcours_pharmacy_id: ppId,
+      pharmacy_name: pharm?.pharmacy_name || 'Inconnu',
+    }]);
   };
 
   const filtered = parcoursList.filter(p => {
@@ -355,7 +472,7 @@ export default function AdminParcours() {
                           <Button variant="ghost" size="icon" onClick={() => fetchDetail(p)} title="Détails">
                             <Eye className="w-4 h-4" />
                           </Button>
-                          <Button variant="ghost" size="icon" onClick={() => { setEditParcours(p); setEditName(p.name); }} title="Modifier">
+                          <Button variant="ghost" size="icon" onClick={() => openEditDialog(p)} title="Modifier">
                             <Pencil className="w-4 h-4" />
                           </Button>
                           {p.status === 'en_attente_inventaire' && (
@@ -432,7 +549,6 @@ export default function AdminParcours() {
                       <div><p className="font-bold text-lg text-warning">{detailInventaire.total_extra}</p><p className="text-muted-foreground">En trop</p></div>
                     </div>
 
-                    {/* Scan details */}
                     {detailScans.length > 0 && (
                       <div className="space-y-1 max-h-[20vh] overflow-y-auto mt-2">
                         {detailScans.map((s: any) => (
@@ -466,12 +582,7 @@ export default function AdminParcours() {
 
               {/* Colis */}
               <div>
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-sm font-semibold flex items-center gap-1"><Package className="w-4 h-4 text-primary" /> Colis ({detailColis.length})</p>
-                  <Button variant="outline" size="sm" onClick={() => { setEditableColisList([...detailColis]); setEditColisDialog(true); }}>
-                    <Pencil className="w-3 h-3 mr-1" /> Modifier
-                  </Button>
-                </div>
+                <p className="text-sm font-semibold mb-2 flex items-center gap-1"><Package className="w-4 h-4 text-primary" /> Colis ({detailColis.length})</p>
                 <div className="space-y-1 max-h-[25vh] overflow-y-auto">
                   {detailColis.map(c => (
                     <div key={c.id} className="flex items-center gap-2 py-1.5 px-3 rounded-lg bg-muted/50 text-sm">
@@ -488,72 +599,119 @@ export default function AdminParcours() {
         </DialogContent>
       </Dialog>
 
-      {/* ===== EDIT NAME DIALOG ===== */}
+      {/* ===== EDIT DIALOG (Name + Pharmacies + Colis) ===== */}
       <Dialog open={!!editParcours} onOpenChange={open => { if (!open) setEditParcours(null); }}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader><DialogTitle>Modifier le parcours</DialogTitle></DialogHeader>
-          <div className="space-y-3">
-            <div className="space-y-1">
-              <Label>Nom du parcours</Label>
-              <Input value={editName} onChange={e => setEditName(e.target.value)} maxLength={100} />
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Pencil className="w-5 h-5 text-primary" />
+              Modifier le parcours
+            </DialogTitle>
+            <DialogDescription>Modifiez le nom, les pharmacies et les colis de ce parcours</DialogDescription>
+          </DialogHeader>
+
+          {editLoading ? (
+            <div className="flex items-center justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>
+          ) : editParcours && (
+            <div className="space-y-5">
+              {/* Name */}
+              <div className="space-y-1.5">
+                <Label className="flex items-center gap-1.5">
+                  <Route className="w-3.5 h-3.5 text-primary" />
+                  Nom du parcours
+                </Label>
+                <Input value={editName} onChange={e => setEditName(e.target.value)} maxLength={100} />
+              </div>
+
+              {/* Pharmacies */}
+              <div className="space-y-2">
+                <Label className="flex items-center gap-1.5">
+                  <Building2 className="w-3.5 h-3.5 text-primary" />
+                  Pharmacies ({editSelectedPharmacyIds.size}/{editAxisPharmacies.length})
+                </Label>
+                <div className="space-y-1 max-h-[25vh] overflow-y-auto border rounded-lg p-2">
+                  {editAxisPharmacies.length === 0 ? (
+                    <p className="text-xs text-muted-foreground text-center py-4">Aucune pharmacie sur cet axe</p>
+                  ) : editAxisPharmacies.map((ap, i) => (
+                    <label
+                      key={ap.pharmacy_id}
+                      className={cn(
+                        'flex items-center gap-3 py-2 px-3 rounded-lg cursor-pointer transition-colors',
+                        editSelectedPharmacyIds.has(ap.pharmacy_id) ? 'bg-primary/5' : 'hover:bg-muted/50'
+                      )}
+                    >
+                      <Checkbox
+                        checked={editSelectedPharmacyIds.has(ap.pharmacy_id)}
+                        onCheckedChange={() => toggleEditPharmacy(ap.pharmacy_id)}
+                      />
+                      <span className="w-5 h-5 rounded-full bg-muted flex items-center justify-center text-[10px] font-bold shrink-0">{i + 1}</span>
+                      <span className="text-sm flex-1 truncate">{ap.pharmacy_name}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* Colis per pharmacy */}
+              <div className="space-y-3">
+                <Label className="flex items-center gap-1.5">
+                  <Package className="w-3.5 h-3.5 text-primary" />
+                  Colis ({editColisList.length})
+                </Label>
+
+                {editAxisPharmacies.filter(ap => editSelectedPharmacyIds.has(ap.pharmacy_id)).map(ap => {
+                  const pharmColis = editColisList.filter(c => c.pharmacy_name === ap.pharmacy_name);
+                  return (
+                    <div key={ap.pharmacy_id} className="border rounded-lg p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm font-medium flex items-center gap-1.5">
+                          <MapPin className="w-3.5 h-3.5 text-muted-foreground" />
+                          {ap.pharmacy_name}
+                          <span className="text-xs text-muted-foreground ml-1">({pharmColis.length} colis)</span>
+                        </p>
+                        <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => addEditColis(ap.pharmacy_id)}>
+                          <Plus className="w-3 h-3 mr-1" /> Ajouter
+                        </Button>
+                      </div>
+                      {pharmColis.length === 0 ? (
+                        <p className="text-xs text-muted-foreground text-center py-2">Aucun colis — cliquez sur Ajouter</p>
+                      ) : pharmColis.map(c => (
+                        <div key={c.id} className="flex items-center gap-2">
+                          <Select value={c.type} onValueChange={v => {
+                            setEditColisList(prev => prev.map(x => x.id === c.id ? { ...x, type: v } : x));
+                          }}>
+                            <SelectTrigger className="w-[90px] h-8 text-xs"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="carton">Carton</SelectItem>
+                              <SelectItem value="sachet">Sachet</SelectItem>
+                              <SelectItem value="bac">Bac</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <Input
+                            value={c.barcode}
+                            onChange={e => {
+                              setEditColisList(prev => prev.map(x => x.id === c.id ? { ...x, barcode: e.target.value } : x));
+                            }}
+                            className="h-8 text-xs flex-1"
+                            placeholder="Code-barres"
+                          />
+                          <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => {
+                            setEditColisList(prev => prev.filter(x => x.id !== c.id));
+                          }}>
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
-          </div>
+          )}
+
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditParcours(null)}>Annuler</Button>
-            <Button onClick={handleEditSave} disabled={editSaving || !editName.trim()}>
+            <Button onClick={handleEditSave} disabled={editSaving || !editName.trim() || editSelectedPharmacyIds.size === 0}>
               {editSaving ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
-              Enregistrer
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* ===== EDIT COLIS DIALOG ===== */}
-      <Dialog open={editColisDialog} onOpenChange={setEditColisDialog}>
-        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Modifier les colis</DialogTitle>
-            <DialogDescription>Ajoutez, modifiez ou supprimez les colis du parcours</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-2 max-h-[50vh] overflow-y-auto">
-            {editableColisList.map((c, i) => (
-              <div key={c.id || i} className="flex items-center gap-2">
-                <Select value={c.type} onValueChange={v => {
-                  const next = [...editableColisList];
-                  next[i] = { ...next[i], type: v };
-                  setEditableColisList(next);
-                }}>
-                  <SelectTrigger className="w-[100px] h-9 text-xs"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="carton">Carton</SelectItem>
-                    <SelectItem value="sachet">Sachet</SelectItem>
-                    <SelectItem value="bac">Bac</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Input
-                  value={c.barcode}
-                  onChange={e => {
-                    const next = [...editableColisList];
-                    next[i] = { ...next[i], barcode: e.target.value };
-                    setEditableColisList(next);
-                  }}
-                  className="h-9 text-xs flex-1"
-                  placeholder="Code-barres"
-                  maxLength={100}
-                />
-                <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-destructive" onClick={() => setEditableColisList(prev => prev.filter((_, j) => j !== i))}>
-                  <Trash2 className="w-3.5 h-3.5" />
-                </Button>
-              </div>
-            ))}
-          </div>
-          <Button variant="outline" size="sm" className="w-full border-dashed" onClick={() => setEditableColisList(prev => [...prev, { id: `new-${Date.now()}`, barcode: '', type: 'carton', parcours_pharmacy_id: detailPharmacies[0]?.id || '', pharmacy_name: detailPharmacies[0]?.pharmacy_name || '' }])}>
-            <Plus className="w-3.5 h-3.5 mr-1" /> Ajouter un colis
-          </Button>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditColisDialog(false)}>Annuler</Button>
-            <Button onClick={handleEditColis} disabled={editColisSaving}>
-              {editColisSaving ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
               Enregistrer
             </Button>
           </DialogFooter>

@@ -10,7 +10,6 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import {
   ArrowLeft,
   Package,
@@ -22,6 +21,9 @@ import {
   ShieldCheck,
   PenLine,
   Hash,
+  Navigation,
+  WifiOff,
+  Camera,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -29,6 +31,7 @@ import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { SignaturePad } from '@/components/ui/signature-pad';
+import { useOfflineSync } from '@/hooks/use-offline-sync';
 
 interface ParcoursDeliveriesProps {
   parcoursId: string;
@@ -63,6 +66,7 @@ export function ParcoursDeliveries({
 }: ParcoursDeliveriesProps) {
   const [deliveries, setDeliveries] = useState<Delivery[]>([]);
   const [loading, setLoading] = useState(true);
+  const { isOnline, queueDelivery, pendingDeliveries, syncPending } = useOfflineSync();
 
   // Validation dialog
   const [validatingDelivery, setValidatingDelivery] = useState<Delivery | null>(null);
@@ -72,12 +76,12 @@ export function ParcoursDeliveries({
   const [nbCartonsReceived, setNbCartonsReceived] = useState(0);
   const [nbSachetsReceived, setNbSachetsReceived] = useState(0);
   const [nbBarquesReceived, setNbBarquesReceived] = useState(0);
+  const [offlinePhoto, setOfflinePhoto] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   const fetchDeliveries = useCallback(async () => {
     setLoading(true);
     try {
-      // Get pharmacy IDs for this parcours
       const { data: ppData, error: ppError } = await supabase
         .from('parcours_pharmacies')
         .select('pharmacy_id')
@@ -92,7 +96,6 @@ export function ParcoursDeliveries({
         return;
       }
 
-      // Fetch deliveries for these pharmacies assigned to this driver
       const { data: delData, error: delError } = await supabase
         .from('deliveries')
         .select('*')
@@ -102,7 +105,6 @@ export function ParcoursDeliveries({
 
       if (delError) throw delError;
 
-      // Get pharmacy names
       const { data: pharmData } = await supabase
         .from('pharmacies')
         .select('id, name, address')
@@ -143,9 +145,18 @@ export function ParcoursDeliveries({
     setRecipientName('');
     setVerificationCode('');
     setSignature('');
+    setOfflinePhoto(null);
     setNbCartonsReceived(delivery.nb_cartons);
     setNbSachetsReceived(delivery.nb_sachets);
     setNbBarquesReceived(delivery.nb_barques);
+  };
+
+  const handlePhotoCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => setOfflinePhoto(reader.result as string);
+    reader.readAsDataURL(file);
   };
 
   const handleValidateDelivery = async () => {
@@ -154,53 +165,77 @@ export function ParcoursDeliveries({
       toast.error('Le nom du destinataire est requis');
       return;
     }
-    if (validatingDelivery.verification_code && verificationCode !== validatingDelivery.verification_code) {
-      toast.error('Code de vérification incorrect');
-      return;
-    }
 
-    setSaving(true);
-    try {
-      const { error } = await supabase
-        .from('deliveries')
-        .update({
-          status: 'livre',
-          recipient_name: recipientName.trim(),
-          recipient_signature: signature || null,
-          nb_cartons_received: nbCartonsReceived,
-          nb_sachets_received: nbSachetsReceived,
-          nb_barques_received: nbBarquesReceived,
-          delivered_at: new Date().toISOString(),
-        } as any)
-        .eq('id', validatingDelivery.id);
-
-      if (error) throw error;
-
-      toast.success('Livraison validée avec succès ✓');
-      setValidatingDelivery(null);
-      fetchDeliveries();
-
-      // Check if all deliveries are done to mark parcours as "termine"
-      const updatedDeliveries = deliveries.map(d =>
-        d.id === validatingDelivery.id ? { ...d, status: 'livre' } : d
-      );
-      const allDone = updatedDeliveries.every(d => d.status === 'livre');
-      if (allDone) {
-        await supabase
-          .from('parcours')
-          .update({ status: 'termine' } as any)
-          .eq('id', parcoursId);
-        toast.success('🎉 Toutes les livraisons sont terminées ! Parcours terminé.');
+    // Online mode
+    if (isOnline) {
+      if (validatingDelivery.verification_code && verificationCode !== validatingDelivery.verification_code) {
+        toast.error('Code de vérification incorrect');
+        return;
       }
-    } catch {
-      toast.error('Erreur lors de la validation');
-    } finally {
-      setSaving(false);
+
+      setSaving(true);
+      try {
+        const { error } = await supabase
+          .from('deliveries')
+          .update({
+            status: 'livre',
+            recipient_name: recipientName.trim(),
+            recipient_signature: signature || null,
+            nb_cartons_received: nbCartonsReceived,
+            nb_sachets_received: nbSachetsReceived,
+            nb_barques_received: nbBarquesReceived,
+            delivered_at: new Date().toISOString(),
+          } as any)
+          .eq('id', validatingDelivery.id);
+
+        if (error) throw error;
+
+        toast.success('Livraison validée ✓');
+        setValidatingDelivery(null);
+        fetchDeliveries();
+
+        // Check if all deliveries are done
+        const updatedDeliveries = deliveries.map(d =>
+          d.id === validatingDelivery.id ? { ...d, status: 'livre' } : d
+        );
+        const allDone = updatedDeliveries.every(d => d.status === 'livre');
+        if (allDone) {
+          await supabase
+            .from('parcours')
+            .update({ status: 'termine' } as any)
+            .eq('id', parcoursId);
+          toast.success('🎉 Toutes les livraisons terminées ! Parcours terminé.');
+        }
+      } catch {
+        toast.error('Erreur lors de la validation');
+      } finally {
+        setSaving(false);
+      }
+    } else {
+      // Offline mode - queue delivery
+      queueDelivery({
+        deliveryId: validatingDelivery.id,
+        reference: validatingDelivery.reference,
+        recipientName: recipientName.trim(),
+        recipientSignature: signature || null,
+        deliveredAt: new Date().toISOString(),
+        nb_cartons_received: nbCartonsReceived,
+        nb_sachets_received: nbSachetsReceived,
+        nb_barques_received: nbBarquesReceived,
+      });
+
+      toast.success('Livraison sauvegardée hors-ligne — sera synchronisée automatiquement');
+      setValidatingDelivery(null);
+
+      // Optimistically update local state
+      setDeliveries(prev => prev.map(d =>
+        d.id === validatingDelivery.id ? { ...d, status: 'livre', recipient_name: recipientName.trim(), delivered_at: new Date().toISOString() } : d
+      ));
     }
   };
 
-  const pending = deliveries.filter(d => d.status === 'en_attente');
-  const delivered = deliveries.filter(d => d.status === 'livre');
+  const pending = deliveries.filter(d => d.status === 'en_attente' && !pendingDeliveries.some(pd => pd.deliveryId === d.id));
+  const delivered = deliveries.filter(d => d.status === 'livre' || pendingDeliveries.some(pd => pd.deliveryId === d.id));
 
   return (
     <div className="space-y-4 animate-fade-in">
@@ -215,11 +250,18 @@ export function ParcoursDeliveries({
             {deliveries.length} livraison{deliveries.length > 1 ? 's' : ''} · {delivered.length} effectuée{delivered.length > 1 ? 's' : ''}
           </p>
         </div>
-        {forceConfirmed && (
-          <span className="inline-flex items-center gap-1 text-[10px] text-warning ml-auto shrink-0">
-            <ShieldCheck className="w-3 h-3" /> Forcé
-          </span>
-        )}
+        <div className="ml-auto flex items-center gap-2 shrink-0">
+          {!isOnline && (
+            <span className="inline-flex items-center gap-1 text-[10px] text-warning">
+              <WifiOff className="w-3 h-3" /> Hors-ligne
+            </span>
+          )}
+          {forceConfirmed && (
+            <span className="inline-flex items-center gap-1 text-[10px] text-warning">
+              <ShieldCheck className="w-3 h-3" /> Forcé
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Progress */}
@@ -236,6 +278,23 @@ export function ParcoursDeliveries({
             />
           </div>
         </div>
+      )}
+
+      {/* Pending offline sync indicator */}
+      {pendingDeliveries.length > 0 && (
+        <Card className="border-warning/30 bg-warning/5">
+          <CardContent className="py-2 flex items-center gap-2">
+            <WifiOff className="w-4 h-4 text-warning shrink-0" />
+            <p className="text-xs text-warning">
+              {pendingDeliveries.length} livraison{pendingDeliveries.length > 1 ? 's' : ''} en attente de synchronisation
+            </p>
+            {isOnline && (
+              <Button variant="ghost" size="sm" className="ml-auto h-7 text-xs" onClick={syncPending}>
+                Synchroniser
+              </Button>
+            )}
+          </CardContent>
+        </Card>
       )}
 
       {loading ? (
@@ -265,28 +324,36 @@ export function ParcoursDeliveries({
                       <div className="flex-1 min-w-0">
                         <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0">
-                            <p className="font-semibold text-sm truncate">{delivery.reference}</p>
-                            <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-                              <MapPin className="w-3 h-3 shrink-0" />
-                              {delivery.pharmacy_name}
-                            </p>
+                            <p className="font-semibold text-sm truncate">{delivery.pharmacy_name}</p>
+                            <p className="text-xs text-muted-foreground mt-0.5">{delivery.reference}</p>
                           </div>
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-warning/15 text-warning border border-warning/30 shrink-0">
                             <Clock className="w-3 h-3" /> En attente
                           </span>
                         </div>
-                        <div className="flex items-center gap-3 mt-1.5 text-xs text-muted-foreground">
-                          {delivery.nb_cartons > 0 && <span>{delivery.nb_cartons} carton{delivery.nb_cartons > 1 ? 's' : ''}</span>}
+
+                        {/* Destination address */}
+                        {delivery.pharmacy_address && (
+                          <div className="flex items-start gap-1.5 mt-2 p-2 rounded-lg bg-muted/50">
+                            <Navigation className="w-3.5 h-3.5 text-primary mt-0.5 shrink-0" />
+                            <p className="text-xs text-foreground leading-relaxed">{delivery.pharmacy_address}</p>
+                          </div>
+                        )}
+
+                        {/* Package counts */}
+                        <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
+                          {delivery.nb_cartons > 0 && <span className="flex items-center gap-1"><Package className="w-3 h-3" />{delivery.nb_cartons} carton{delivery.nb_cartons > 1 ? 's' : ''}</span>}
                           {delivery.nb_sachets > 0 && <span>{delivery.nb_sachets} sachet{delivery.nb_sachets > 1 ? 's' : ''}</span>}
                           {delivery.nb_barques > 0 && <span>{delivery.nb_barques} barque{delivery.nb_barques > 1 ? 's' : ''}</span>}
                         </div>
+
                         <Button
                           size="sm"
                           className="mt-3 w-full"
                           onClick={() => openValidation(delivery)}
                         >
-                          <CheckCircle2 className="w-4 h-4 mr-1.5" />
-                          Valider la livraison
+                          <Truck className="w-4 h-4 mr-1.5" />
+                          Livrer
                         </Button>
                       </div>
                     </div>
@@ -302,30 +369,37 @@ export function ParcoursDeliveries({
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mt-4">
                 Livrées ({delivered.length})
               </p>
-              {delivered.map(delivery => (
-                <Card key={delivery.id} className="opacity-70">
-                  <CardContent className="pt-4 pb-4">
-                    <div className="flex items-start gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-green-500/10 flex items-center justify-center shrink-0">
-                        <CheckCircle2 className="w-5 h-5 text-green-600 dark:text-green-400" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-semibold text-sm truncate">{delivery.reference}</p>
-                        <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-                          <MapPin className="w-3 h-3 shrink-0" />
-                          {delivery.pharmacy_name}
-                        </p>
-                        <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
-                          {delivery.recipient_name && <span>Reçu par : {delivery.recipient_name}</span>}
-                          {delivery.delivered_at && (
-                            <span>· {format(new Date(delivery.delivered_at), 'dd MMM HH:mm', { locale: fr })}</span>
+              {delivered.map(delivery => {
+                const isPendingSync = pendingDeliveries.some(pd => pd.deliveryId === delivery.id);
+                return (
+                  <Card key={delivery.id} className={cn('opacity-70', isPendingSync && 'border-warning/30')}>
+                    <CardContent className="pt-4 pb-4">
+                      <div className="flex items-start gap-3">
+                        <div className={cn('w-10 h-10 rounded-xl flex items-center justify-center shrink-0', isPendingSync ? 'bg-warning/10' : 'bg-green-500/10')}>
+                          {isPendingSync ? <WifiOff className="w-5 h-5 text-warning" /> : <CheckCircle2 className="w-5 h-5 text-green-600 dark:text-green-400" />}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-semibold text-sm truncate">{delivery.pharmacy_name}</p>
+                          <p className="text-xs text-muted-foreground mt-0.5">{delivery.reference}</p>
+                          {delivery.pharmacy_address && (
+                            <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                              <MapPin className="w-3 h-3 shrink-0" />
+                              {delivery.pharmacy_address}
+                            </p>
                           )}
+                          <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
+                            {delivery.recipient_name && <span>Reçu par : {delivery.recipient_name}</span>}
+                            {delivery.delivered_at && (
+                              <span>· {format(new Date(delivery.delivered_at), 'dd MMM HH:mm', { locale: fr })}</span>
+                            )}
+                            {isPendingSync && <span className="text-warning">· En attente sync</span>}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
+                    </CardContent>
+                  </Card>
+                );
+              })}
             </>
           )}
         </div>
@@ -333,16 +407,31 @@ export function ParcoursDeliveries({
 
       {/* Validation Dialog */}
       <Dialog open={!!validatingDelivery} onOpenChange={(open) => { if (!open) setValidatingDelivery(null); }}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <CheckCircle2 className="w-5 h-5 text-primary" />
-              Valider la livraison
+              <Truck className="w-5 h-5 text-primary" />
+              Livrer
             </DialogTitle>
             <DialogDescription>
-              {validatingDelivery?.reference} — {validatingDelivery?.pharmacy_name}
+              {validatingDelivery?.pharmacy_name}
+              {validatingDelivery?.pharmacy_address && (
+                <span className="block text-xs mt-0.5">{validatingDelivery.pharmacy_address}</span>
+              )}
             </DialogDescription>
           </DialogHeader>
+
+          {/* Offline indicator */}
+          {!isOnline && (
+            <Card className="border-warning/30 bg-warning/5">
+              <CardContent className="py-2 flex items-center gap-2">
+                <WifiOff className="w-4 h-4 text-warning shrink-0" />
+                <p className="text-xs text-warning">
+                  Mode hors-ligne — la livraison sera synchronisée automatiquement
+                </p>
+              </CardContent>
+            </Card>
+          )}
 
           <div className="space-y-4">
             {/* Recipient name */}
@@ -358,8 +447,8 @@ export function ParcoursDeliveries({
               />
             </div>
 
-            {/* Verification code */}
-            {validatingDelivery?.verification_code && (
+            {/* Verification code - only in online mode */}
+            {isOnline && validatingDelivery?.verification_code && (
               <div className="space-y-1.5">
                 <Label className="flex items-center gap-1.5">
                   <Hash className="w-3.5 h-3.5" />
@@ -424,6 +513,35 @@ export function ParcoursDeliveries({
               />
             </div>
 
+            {/* Photo - only in offline mode */}
+            {!isOnline && (
+              <div className="space-y-1.5">
+                <Label className="flex items-center gap-1.5">
+                  <Camera className="w-3.5 h-3.5" />
+                  Photo du bon de livraison (optionnelle)
+                </Label>
+                <Input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  onChange={handlePhotoCapture}
+                  className="text-xs"
+                />
+                {offlinePhoto && (
+                  <div className="relative">
+                    <img src={offlinePhoto} alt="Photo bon" className="w-full h-32 object-cover rounded-lg border" />
+                    <button
+                      type="button"
+                      onClick={() => setOfflinePhoto(null)}
+                      className="absolute top-1 right-1 bg-background/80 rounded-full p-1 text-xs text-muted-foreground hover:text-destructive"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
             <Button
               className="w-full"
               onClick={handleValidateDelivery}
@@ -432,7 +550,7 @@ export function ParcoursDeliveries({
               {saving ? (
                 <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Validation...</>
               ) : (
-                <><CheckCircle2 className="w-4 h-4 mr-2" /> Confirmer la livraison</>
+                <><Truck className="w-4 h-4 mr-2" /> {isOnline ? 'Confirmer la livraison' : 'Sauvegarder hors-ligne'}</>
               )}
             </Button>
           </div>
