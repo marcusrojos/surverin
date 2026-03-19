@@ -109,7 +109,7 @@ export function ParcoursDeliveries({
 
       // 2. Fetch pharmacy details, colis, and existing deliveries in parallel
       const [pharmRes, colisRes, delivRes] = await Promise.all([
-        supabase.from('pharmacies').select('id, name, address').in('id', pharmacyIds),
+        supabase.from('pharmacies').select('id, name, address, latitude, longitude').in('id', pharmacyIds),
         supabase.from('parcours_colis').select('id, barcode, type, parcours_pharmacy_id').in('parcours_pharmacy_id', ppIds),
         supabase.from('deliveries').select('*').eq('parcours_id', parcoursId),
       ]);
