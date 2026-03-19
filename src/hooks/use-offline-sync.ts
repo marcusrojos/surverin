@@ -78,12 +78,17 @@ export function useOfflineSync() {
   }, [isOnline, syncPending]);
 
   const queueDelivery = useCallback(async (
-    deliveryId: string,
+    deliveryId: string | null,
     reference: string,
     payload: PendingValidation['payload'],
-    offlinePhoto?: string | null
+    offlinePhoto?: string | null,
+    metadata?: {
+      pharmacy_id: string;
+      parcours_id: string;
+      driver_id: string;
+    }
   ) => {
-    const entry = await SyncQueue.enqueue(deliveryId, reference, payload, offlinePhoto);
+    const entry = await SyncQueue.enqueue(deliveryId, reference, payload, offlinePhoto, metadata);
     await refreshPending();
     return entry;
   }, [refreshPending]);
