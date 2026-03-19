@@ -587,113 +587,99 @@ export function ParcoursDeliveries({
               </div>
             )}
 
-            {/* Verification code - only in online mode when code exists */}
-            {isOnline && validating?.verificationCode && (
-              <div className="space-y-1.5">
-                <Label className="flex items-center gap-1.5">
-                  <Hash className="w-3.5 h-3.5" />
-                  Code de vérification *
-                </Label>
-                <Input
-                  value={verificationCode}
-                  onChange={(e) => setVerificationCode(e.target.value)}
-                  placeholder="Code à 6 chiffres"
-                  maxLength={6}
-                />
-                <p className="text-[10px] text-muted-foreground">Demandez le code au pharmacien</p>
-              </div>
-            )}
-
-            {/* Quantities received */}
-            <div className="space-y-2">
-              <Label>Quantités reçues</Label>
-              <div className="grid grid-cols-3 gap-2">
-                {(validating?.nb_cartons ?? 0) > 0 && (
-                  <div>
-                    <p className="text-[10px] text-muted-foreground mb-1">Cartons</p>
-                    <Input
-                      type="number"
-                      min={0}
-                      value={nbCartonsReceived}
-                      onChange={(e) => setNbCartonsReceived(parseInt(e.target.value) || 0)}
-                    />
-                  </div>
-                )}
-                {(validating?.nb_sachets ?? 0) > 0 && (
-                  <div>
-                    <p className="text-[10px] text-muted-foreground mb-1">Sachets</p>
-                    <Input
-                      type="number"
-                      min={0}
-                      value={nbSachetsReceived}
-                      onChange={(e) => setNbSachetsReceived(parseInt(e.target.value) || 0)}
-                    />
-                  </div>
-                )}
-                {(validating?.nb_barques ?? 0) > 0 && (
-                  <div>
-                    <p className="text-[10px] text-muted-foreground mb-1">Bacs</p>
-                    <Input
-                      type="number"
-                      min={0}
-                      value={nbBarquesReceived}
-                      onChange={(e) => setNbBarquesReceived(parseInt(e.target.value) || 0)}
-                    />
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Recipient name */}
-            <div className="space-y-1.5">
-              <Label className="flex items-center gap-1.5">
-                <PenLine className="w-3.5 h-3.5" />
-                Nom du destinataire *
-              </Label>
-              <Input
-                value={recipientName}
-                onChange={(e) => setRecipientName(e.target.value)}
-                placeholder="Nom de la personne qui réceptionne"
-              />
-            </div>
-
-            {/* Signature - online mode */}
+            {/* ─── ONLINE MODE FIELDS ─── */}
             {isOnline && (
-              <div className="space-y-1.5">
-                <Label>Signature du destinataire *</Label>
-                <SignaturePad
-                  onSignatureChange={setSignature}
-                  className="border rounded-lg"
-                />
-              </div>
-            )}
-
-            {/* Photo - only in offline mode */}
-            {!isOnline && (
-              <div className="space-y-1.5">
-                <Label className="flex items-center gap-1.5">
-                  <Camera className="w-3.5 h-3.5" />
-                  Photo du bon de livraison (optionnelle)
-                </Label>
-                <Input
-                  type="file"
-                  accept="image/*"
-                  capture="environment"
-                  onChange={handlePhotoCapture}
-                  className="text-xs"
-                />
-                {offlinePhoto && (
-                  <div className="relative">
-                    <img src={offlinePhoto} alt="Photo bon" className="w-full h-32 object-cover rounded-lg border" />
-                    <button
-                      type="button"
-                      onClick={() => setOfflinePhoto(null)}
-                      className="absolute top-1 right-1 bg-background/80 rounded-full p-1 text-xs text-muted-foreground hover:text-destructive"
-                    >
-                      ✕
-                    </button>
+              <>
+                {/* Verification code */}
+                {validating?.verificationCode && (
+                  <div className="space-y-1.5">
+                    <Label className="flex items-center gap-1.5">
+                      <Hash className="w-3.5 h-3.5" />
+                      Code de vérification *
+                    </Label>
+                    <Input
+                      value={verificationCode}
+                      onChange={(e) => setVerificationCode(e.target.value)}
+                      placeholder="Code à 6 chiffres"
+                      maxLength={6}
+                    />
+                    <p className="text-[10px] text-muted-foreground">Demandez le code au pharmacien</p>
                   </div>
                 )}
+
+                {/* Quantities received */}
+                <div className="space-y-2">
+                  <Label>Quantités reçues</Label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {(validating?.nb_cartons ?? 0) > 0 && (
+                      <div>
+                        <p className="text-[10px] text-muted-foreground mb-1">Cartons</p>
+                        <Input type="number" min={0} value={nbCartonsReceived} onChange={(e) => setNbCartonsReceived(parseInt(e.target.value) || 0)} />
+                      </div>
+                    )}
+                    {(validating?.nb_sachets ?? 0) > 0 && (
+                      <div>
+                        <p className="text-[10px] text-muted-foreground mb-1">Sachets</p>
+                        <Input type="number" min={0} value={nbSachetsReceived} onChange={(e) => setNbSachetsReceived(parseInt(e.target.value) || 0)} />
+                      </div>
+                    )}
+                    {(validating?.nb_barques ?? 0) > 0 && (
+                      <div>
+                        <p className="text-[10px] text-muted-foreground mb-1">Bacs</p>
+                        <Input type="number" min={0} value={nbBarquesReceived} onChange={(e) => setNbBarquesReceived(parseInt(e.target.value) || 0)} />
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Recipient name */}
+                <div className="space-y-1.5">
+                  <Label className="flex items-center gap-1.5">
+                    <PenLine className="w-3.5 h-3.5" />
+                    Nom du destinataire *
+                  </Label>
+                  <Input value={recipientName} onChange={(e) => setRecipientName(e.target.value)} placeholder="Nom de la personne qui réceptionne" />
+                </div>
+
+                {/* Signature */}
+                <div className="space-y-1.5">
+                  <Label>Signature du destinataire *</Label>
+                  <SignaturePad onSignatureChange={setSignature} className="border rounded-lg" />
+                </div>
+              </>
+            )}
+
+            {/* ─── OFFLINE MODE: PHOTO ONLY ─── */}
+            {!isOnline && (
+              <div className="space-y-3">
+                <p className="text-sm text-muted-foreground text-center">
+                  Prenez une photo du bon de livraison papier pour valider.
+                </p>
+                <div className="space-y-1.5">
+                  <Label className="flex items-center gap-1.5">
+                    <Camera className="w-3.5 h-3.5" />
+                    Photo du bon de livraison *
+                  </Label>
+                  <Input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    onChange={handlePhotoCapture}
+                    className="text-xs"
+                  />
+                  {offlinePhoto && (
+                    <div className="relative">
+                      <img src={offlinePhoto} alt="Photo bon" className="w-full h-40 object-cover rounded-lg border" />
+                      <button
+                        type="button"
+                        onClick={() => setOfflinePhoto(null)}
+                        className="absolute top-1 right-1 bg-background/80 rounded-full p-1 text-xs text-muted-foreground hover:text-destructive"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 
@@ -702,10 +688,11 @@ export function ParcoursDeliveries({
               onClick={handleValidateDelivery}
               disabled={
                 saving ||
-                !recipientName.trim() ||
+                (isOnline && !recipientName.trim()) ||
                 (isOnline && validating?.pharmacyLatitude != null && validating?.pharmacyLongitude != null && (!isWithinZone || geoLoading)) ||
                 (isOnline && !!validating?.verificationCode && verificationCode !== validating?.verificationCode) ||
-                (isOnline && !signature)
+                (isOnline && !signature) ||
+                (!isOnline && !offlinePhoto)
               }
             >
               {saving ? (
