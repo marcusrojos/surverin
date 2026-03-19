@@ -41,20 +41,22 @@ interface ParcoursDeliveriesProps {
   onBack: () => void;
 }
 
-interface Delivery {
-  id: string;
-  reference: string;
-  status: string;
-  pharmacy_id: string;
-  pharmacy_name: string;
-  pharmacy_address: string | null;
+interface PharmacyDelivery {
+  pharmacyId: string;
+  pharmacyName: string;
+  pharmacyAddress: string | null;
+  position: number;
+  colis: { id: string; barcode: string; type: string }[];
+  // Existing delivery record (if any)
+  deliveryId: string | null;
+  deliveryStatus: string | null;
+  deliveryReference: string | null;
+  deliveredAt: string | null;
+  recipientName: string | null;
+  verificationCode: string | null;
   nb_cartons: number;
   nb_sachets: number;
   nb_barques: number;
-  verification_code: string | null;
-  delivered_at: string | null;
-  recipient_name: string | null;
-  created_at: string;
 }
 
 export function ParcoursDeliveries({
@@ -64,12 +66,12 @@ export function ParcoursDeliveries({
   forceConfirmed,
   onBack,
 }: ParcoursDeliveriesProps) {
-  const [deliveries, setDeliveries] = useState<Delivery[]>([]);
+  const [pharmacyDeliveries, setPharmacyDeliveries] = useState<PharmacyDelivery[]>([]);
   const [loading, setLoading] = useState(true);
   const { isOnline, queueDelivery, pendingDeliveries, syncPending } = useOfflineSync();
 
   // Validation dialog
-  const [validatingDelivery, setValidatingDelivery] = useState<Delivery | null>(null);
+  const [validating, setValidating] = useState<PharmacyDelivery | null>(null);
   const [recipientName, setRecipientName] = useState('');
   const [verificationCode, setVerificationCode] = useState('');
   const [signature, setSignature] = useState<string | null>('');
@@ -79,65 +81,78 @@ export function ParcoursDeliveries({
   const [offlinePhoto, setOfflinePhoto] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const fetchDeliveries = useCallback(async () => {
+  const fetchData = useCallback(async () => {
     setLoading(true);
     try {
+      // 1. Fetch parcours_pharmacies with position
       const { data: ppData, error: ppError } = await supabase
         .from('parcours_pharmacies')
-        .select('pharmacy_id, position')
+        .select('id, pharmacy_id, position')
         .eq('parcours_id', parcoursId)
         .order('position', { ascending: true });
 
       if (ppError) throw ppError;
-
-      const pharmacyIds = (ppData || []).map(pp => pp.pharmacy_id);
-      const positionMap = new Map((ppData || []).map(pp => [pp.pharmacy_id, pp.position]));
-
-      if (pharmacyIds.length === 0) {
-        setDeliveries([]);
+      if (!ppData || ppData.length === 0) {
+        setPharmacyDeliveries([]);
         setLoading(false);
         return;
       }
 
-      const { data: delData, error: delError } = await supabase
-        .from('deliveries')
-        .select('*')
-        .eq('driver_id', driverId)
-        .in('pharmacy_id', pharmacyIds);
+      const pharmacyIds = ppData.map(pp => pp.pharmacy_id);
+      const ppIds = ppData.map(pp => pp.id);
 
-      if (delError) throw delError;
+      // 2. Fetch pharmacy details, colis, and existing deliveries in parallel
+      const [pharmRes, colisRes, delivRes] = await Promise.all([
+        supabase.from('pharmacies').select('id, name, address').in('id', pharmacyIds),
+        supabase.from('parcours_colis').select('id, barcode, type, parcours_pharmacy_id').in('parcours_pharmacy_id', ppIds),
+        supabase.from('deliveries').select('*').eq('driver_id', driverId).in('pharmacy_id', pharmacyIds),
+      ]);
 
-      const { data: pharmData } = await supabase
-        .from('pharmacies')
-        .select('id, name, address')
-        .in('id', pharmacyIds);
+      const pharmMap = new Map((pharmRes.data || []).map(p => [p.id, p]));
 
-      const pharmMap = new Map((pharmData || []).map(p => [p.id, p]));
-
-      const mapped: Delivery[] = (delData || []).map(d => ({
-        id: d.id,
-        reference: d.reference,
-        status: d.status,
-        pharmacy_id: d.pharmacy_id,
-        pharmacy_name: pharmMap.get(d.pharmacy_id)?.name || 'Inconnu',
-        pharmacy_address: pharmMap.get(d.pharmacy_id)?.address || null,
-        nb_cartons: d.nb_cartons,
-        nb_sachets: d.nb_sachets,
-        nb_barques: d.nb_barques,
-        verification_code: d.verification_code,
-        delivered_at: d.delivered_at,
-        recipient_name: d.recipient_name,
-        created_at: d.created_at,
-      }));
-
-      // Sort by pharmacy position in the axis
-      mapped.sort((a, b) => {
-        const posA = positionMap.get(a.pharmacy_id) ?? 999;
-        const posB = positionMap.get(b.pharmacy_id) ?? 999;
-        return posA - posB;
+      // Group colis by parcours_pharmacy_id
+      const colisMap = new Map<string, { id: string; barcode: string; type: string }[]>();
+      (colisRes.data || []).forEach(c => {
+        const list = colisMap.get(c.parcours_pharmacy_id) || [];
+        list.push({ id: c.id, barcode: c.barcode, type: c.type });
+        colisMap.set(c.parcours_pharmacy_id, list);
       });
 
-      setDeliveries(mapped);
+      // Map deliveries by pharmacy_id
+      const delivMap = new Map<string, typeof delivRes.data extends (infer T)[] ? T : never>();
+      (delivRes.data || []).forEach(d => {
+        delivMap.set(d.pharmacy_id, d);
+      });
+
+      const mapped: PharmacyDelivery[] = ppData.map(pp => {
+        const pharm = pharmMap.get(pp.pharmacy_id);
+        const colis = colisMap.get(pp.id) || [];
+        const deliv = delivMap.get(pp.pharmacy_id);
+
+        // Count colis by type
+        const nbCartons = colis.filter(c => c.type === 'carton').length;
+        const nbSachets = colis.filter(c => c.type === 'sachet').length;
+        const nbBarques = colis.filter(c => c.type === 'barque').length;
+
+        return {
+          pharmacyId: pp.pharmacy_id,
+          pharmacyName: pharm?.name || 'Inconnu',
+          pharmacyAddress: pharm?.address || null,
+          position: pp.position,
+          colis,
+          deliveryId: deliv?.id || null,
+          deliveryStatus: deliv?.status || null,
+          deliveryReference: deliv?.reference || null,
+          deliveredAt: deliv?.delivered_at || null,
+          recipientName: deliv?.recipient_name || null,
+          verificationCode: deliv?.verification_code || null,
+          nb_cartons: nbCartons,
+          nb_sachets: nbSachets,
+          nb_barques: nbBarques,
+        };
+      });
+
+      setPharmacyDeliveries(mapped);
     } catch {
       toast.error('Erreur lors du chargement des livraisons');
     } finally {
@@ -146,18 +161,18 @@ export function ParcoursDeliveries({
   }, [parcoursId, driverId]);
 
   useEffect(() => {
-    fetchDeliveries();
-  }, [fetchDeliveries]);
+    fetchData();
+  }, [fetchData]);
 
-  const openValidation = (delivery: Delivery) => {
-    setValidatingDelivery(delivery);
+  const openValidation = (pd: PharmacyDelivery) => {
+    setValidating(pd);
     setRecipientName('');
     setVerificationCode('');
     setSignature('');
     setOfflinePhoto(null);
-    setNbCartonsReceived(delivery.nb_cartons);
-    setNbSachetsReceived(delivery.nb_sachets);
-    setNbBarquesReceived(delivery.nb_barques);
+    setNbCartonsReceived(pd.nb_cartons);
+    setNbSachetsReceived(pd.nb_sachets);
+    setNbBarquesReceived(pd.nb_barques);
   };
 
   const handlePhotoCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -169,45 +184,51 @@ export function ParcoursDeliveries({
   };
 
   const handleValidateDelivery = async () => {
-    if (!validatingDelivery) return;
+    if (!validating) return;
     if (!recipientName.trim()) {
       toast.error('Le nom du destinataire est requis');
       return;
     }
 
-    // Online mode
     if (isOnline) {
-      if (validatingDelivery.verification_code && verificationCode !== validatingDelivery.verification_code) {
+      if (validating.verificationCode && verificationCode !== validating.verificationCode) {
         toast.error('Code de vérification incorrect');
         return;
       }
 
       setSaving(true);
       try {
-        const { error } = await supabase
-          .from('deliveries')
-          .update({
-            status: 'livre',
-            recipient_name: recipientName.trim(),
-            recipient_signature: signature || null,
-            nb_cartons_received: nbCartonsReceived,
-            nb_sachets_received: nbSachetsReceived,
-            nb_barques_received: nbBarquesReceived,
-            delivered_at: new Date().toISOString(),
-          } as any)
-          .eq('id', validatingDelivery.id);
-
-        if (error) throw error;
+        if (validating.deliveryId) {
+          // Update existing delivery
+          const { error } = await supabase
+            .from('deliveries')
+            .update({
+              status: 'livre',
+              recipient_name: recipientName.trim(),
+              recipient_signature: signature || null,
+              nb_cartons_received: nbCartonsReceived,
+              nb_sachets_received: nbSachetsReceived,
+              nb_barques_received: nbBarquesReceived,
+              delivered_at: new Date().toISOString(),
+            } as any)
+            .eq('id', validating.deliveryId);
+          if (error) throw error;
+        } else {
+          // No delivery record exists — shouldn't happen if admin created deliveries
+          toast.error('Aucun enregistrement de livraison trouvé pour cette pharmacie');
+          setSaving(false);
+          return;
+        }
 
         toast.success('Livraison validée ✓');
-        setValidatingDelivery(null);
-        fetchDeliveries();
+        setValidating(null);
+        fetchData();
 
         // Check if all deliveries are done
-        const updatedDeliveries = deliveries.map(d =>
-          d.id === validatingDelivery.id ? { ...d, status: 'livre' } : d
+        const updatedList = pharmacyDeliveries.map(pd =>
+          pd.pharmacyId === validating.pharmacyId ? { ...pd, deliveryStatus: 'livre' } : pd
         );
-        const allDone = updatedDeliveries.every(d => d.status === 'livre');
+        const allDone = updatedList.every(pd => pd.deliveryStatus === 'livre');
         if (allDone) {
           await supabase
             .from('parcours')
@@ -221,10 +242,13 @@ export function ParcoursDeliveries({
         setSaving(false);
       }
     } else {
-      // Offline mode - queue delivery
+      if (!validating.deliveryId) {
+        toast.error('Impossible de livrer hors-ligne sans enregistrement existant');
+        return;
+      }
       queueDelivery({
-        deliveryId: validatingDelivery.id,
-        reference: validatingDelivery.reference,
+        deliveryId: validating.deliveryId,
+        reference: validating.deliveryReference || '',
         recipientName: recipientName.trim(),
         recipientSignature: signature || null,
         deliveredAt: new Date().toISOString(),
@@ -232,19 +256,22 @@ export function ParcoursDeliveries({
         nb_sachets_received: nbSachetsReceived,
         nb_barques_received: nbBarquesReceived,
       });
-
-      toast.success('Livraison sauvegardée hors-ligne — sera synchronisée automatiquement');
-      setValidatingDelivery(null);
-
-      // Optimistically update local state
-      setDeliveries(prev => prev.map(d =>
-        d.id === validatingDelivery.id ? { ...d, status: 'livre', recipient_name: recipientName.trim(), delivered_at: new Date().toISOString() } : d
+      toast.success('Livraison sauvegardée hors-ligne');
+      setValidating(null);
+      setPharmacyDeliveries(prev => prev.map(pd =>
+        pd.pharmacyId === validating.pharmacyId
+          ? { ...pd, deliveryStatus: 'livre', recipientName: recipientName.trim(), deliveredAt: new Date().toISOString() }
+          : pd
       ));
     }
   };
 
-  const pending = deliveries.filter(d => d.status === 'en_attente' && !pendingDeliveries.some(pd => pd.deliveryId === d.id));
-  const delivered = deliveries.filter(d => d.status === 'livre' || pendingDeliveries.some(pd => pd.deliveryId === d.id));
+  const pending = pharmacyDeliveries.filter(pd =>
+    pd.deliveryStatus !== 'livre' && !pendingDeliveries.some(p => p.deliveryId === pd.deliveryId)
+  );
+  const delivered = pharmacyDeliveries.filter(pd =>
+    pd.deliveryStatus === 'livre' || pendingDeliveries.some(p => p.deliveryId === pd.deliveryId)
+  );
 
   return (
     <div className="space-y-4 animate-fade-in">
@@ -256,7 +283,7 @@ export function ParcoursDeliveries({
         <div className="min-w-0">
           <h2 className="text-lg font-bold truncate">{parcoursName}</h2>
           <p className="text-xs text-muted-foreground">
-            {deliveries.length} livraison{deliveries.length > 1 ? 's' : ''} · {delivered.length} effectuée{delivered.length > 1 ? 's' : ''}
+            {pharmacyDeliveries.length} pharmacie{pharmacyDeliveries.length > 1 ? 's' : ''} · {delivered.length} livrée{delivered.length > 1 ? 's' : ''}
           </p>
         </div>
         <div className="ml-auto flex items-center gap-2 shrink-0">
@@ -274,16 +301,16 @@ export function ParcoursDeliveries({
       </div>
 
       {/* Progress */}
-      {deliveries.length > 0 && (
+      {pharmacyDeliveries.length > 0 && (
         <div className="space-y-1">
           <div className="flex justify-between text-xs text-muted-foreground">
-            <span>{delivered.length}/{deliveries.length} livrées</span>
-            <span>{Math.round((delivered.length / deliveries.length) * 100)}%</span>
+            <span>{delivered.length}/{pharmacyDeliveries.length} livrées</span>
+            <span>{Math.round((delivered.length / pharmacyDeliveries.length) * 100)}%</span>
           </div>
           <div className="h-2 bg-muted rounded-full overflow-hidden">
             <div
-              className={cn('h-full rounded-full transition-all duration-500', delivered.length === deliveries.length ? 'bg-green-500' : 'bg-primary')}
-              style={{ width: `${(delivered.length / deliveries.length) * 100}%` }}
+              className={cn('h-full rounded-full transition-all duration-500', delivered.length === pharmacyDeliveries.length ? 'bg-green-500' : 'bg-primary')}
+              style={{ width: `${(delivered.length / pharmacyDeliveries.length) * 100}%` }}
             />
           </div>
         </div>
@@ -310,10 +337,10 @@ export function ParcoursDeliveries({
         <div className="flex justify-center py-8">
           <Loader2 className="w-8 h-8 animate-spin text-primary" />
         </div>
-      ) : deliveries.length === 0 ? (
+      ) : pharmacyDeliveries.length === 0 ? (
         <div className="text-center py-12 text-muted-foreground">
           <Package className="w-12 h-12 mx-auto mb-3 opacity-50" />
-          <p>Aucune livraison pour ce parcours</p>
+          <p>Aucune pharmacie dans ce parcours</p>
         </div>
       ) : (
         <div className="space-y-3">
@@ -323,8 +350,8 @@ export function ParcoursDeliveries({
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                 À livrer ({pending.length})
               </p>
-              {pending.map(delivery => (
-                <Card key={delivery.id} className="card-hover border-primary/20">
+              {pending.map(pd => (
+                <Card key={pd.pharmacyId} className="card-hover border-primary/20">
                   <CardContent className="pt-4 pb-4">
                     <div className="flex items-start gap-3">
                       <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
@@ -333,8 +360,10 @@ export function ParcoursDeliveries({
                       <div className="flex-1 min-w-0">
                         <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0">
-                            <p className="font-semibold text-sm truncate">{delivery.pharmacy_name}</p>
-                            <p className="text-xs text-muted-foreground mt-0.5">{delivery.reference}</p>
+                            <p className="font-semibold text-sm truncate">{pd.pharmacyName}</p>
+                            {pd.deliveryReference && (
+                              <p className="text-xs text-muted-foreground mt-0.5">{pd.deliveryReference}</p>
+                            )}
                           </div>
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-warning/15 text-warning border border-warning/30 shrink-0">
                             <Clock className="w-3 h-3" /> En attente
@@ -342,28 +371,58 @@ export function ParcoursDeliveries({
                         </div>
 
                         {/* Destination address */}
-                        {delivery.pharmacy_address && (
+                        {pd.pharmacyAddress && (
                           <div className="flex items-start gap-1.5 mt-2 p-2 rounded-lg bg-muted/50">
                             <Navigation className="w-3.5 h-3.5 text-primary mt-0.5 shrink-0" />
-                            <p className="text-xs text-foreground leading-relaxed">{delivery.pharmacy_address}</p>
+                            <p className="text-xs text-foreground leading-relaxed">{pd.pharmacyAddress}</p>
                           </div>
                         )}
 
-                        {/* Package counts */}
-                        <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
-                          {delivery.nb_cartons > 0 && <span className="flex items-center gap-1"><Package className="w-3 h-3" />{delivery.nb_cartons} carton{delivery.nb_cartons > 1 ? 's' : ''}</span>}
-                          {delivery.nb_sachets > 0 && <span>{delivery.nb_sachets} sachet{delivery.nb_sachets > 1 ? 's' : ''}</span>}
-                          {delivery.nb_barques > 0 && <span>{delivery.nb_barques} barque{delivery.nb_barques > 1 ? 's' : ''}</span>}
+                        {/* Colis list */}
+                        <div className="mt-2 space-y-1">
+                          <p className="text-[10px] font-semibold text-muted-foreground uppercase">
+                            Colis ({pd.colis.length})
+                          </p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {pd.nb_cartons > 0 && (
+                              <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                                <Package className="w-3 h-3" />{pd.nb_cartons} carton{pd.nb_cartons > 1 ? 's' : ''}
+                              </span>
+                            )}
+                            {pd.nb_sachets > 0 && (
+                              <span className="text-xs text-muted-foreground">
+                                {pd.nb_sachets} sachet{pd.nb_sachets > 1 ? 's' : ''}
+                              </span>
+                            )}
+                            {pd.nb_barques > 0 && (
+                              <span className="text-xs text-muted-foreground">
+                                {pd.nb_barques} barque{pd.nb_barques > 1 ? 's' : ''}
+                              </span>
+                            )}
+                          </div>
+                          {pd.colis.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {pd.colis.map(c => (
+                                <span key={c.id} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-muted text-[10px] font-mono text-muted-foreground">
+                                  {c.barcode}
+                                </span>
+                              ))}
+                            </div>
+                          )}
                         </div>
 
                         <Button
                           size="sm"
                           className="mt-3 w-full"
-                          onClick={() => openValidation(delivery)}
+                          onClick={() => openValidation(pd)}
+                          disabled={!pd.deliveryId}
                         >
                           <Truck className="w-4 h-4 mr-1.5" />
                           Livrer
                         </Button>
+                        {!pd.deliveryId && (
+                          <p className="text-[10px] text-destructive mt-1">Aucune livraison créée pour cette pharmacie</p>
+                        )}
                       </div>
                     </div>
                   </CardContent>
@@ -378,30 +437,35 @@ export function ParcoursDeliveries({
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mt-4">
                 Livrées ({delivered.length})
               </p>
-              {delivered.map(delivery => {
-                const isPendingSync = pendingDeliveries.some(pd => pd.deliveryId === delivery.id);
+              {delivered.map(pd => {
+                const isPendingSync = pendingDeliveries.some(p => p.deliveryId === pd.deliveryId);
                 return (
-                  <Card key={delivery.id} className={cn('opacity-70', isPendingSync && 'border-warning/30')}>
+                  <Card key={pd.pharmacyId} className={cn('opacity-70', isPendingSync && 'border-warning/30')}>
                     <CardContent className="pt-4 pb-4">
                       <div className="flex items-start gap-3">
                         <div className={cn('w-10 h-10 rounded-xl flex items-center justify-center shrink-0', isPendingSync ? 'bg-warning/10' : 'bg-green-500/10')}>
                           {isPendingSync ? <WifiOff className="w-5 h-5 text-warning" /> : <CheckCircle2 className="w-5 h-5 text-green-600 dark:text-green-400" />}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="font-semibold text-sm truncate">{delivery.pharmacy_name}</p>
-                          <p className="text-xs text-muted-foreground mt-0.5">{delivery.reference}</p>
-                          {delivery.pharmacy_address && (
+                          <p className="font-semibold text-sm truncate">{pd.pharmacyName}</p>
+                          {pd.deliveryReference && (
+                            <p className="text-xs text-muted-foreground mt-0.5">{pd.deliveryReference}</p>
+                          )}
+                          {pd.pharmacyAddress && (
                             <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
                               <MapPin className="w-3 h-3 shrink-0" />
-                              {delivery.pharmacy_address}
+                              {pd.pharmacyAddress}
                             </p>
                           )}
                           <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
-                            {delivery.recipient_name && <span>Reçu par : {delivery.recipient_name}</span>}
-                            {delivery.delivered_at && (
-                              <span>· {format(new Date(delivery.delivered_at), 'dd MMM HH:mm', { locale: fr })}</span>
+                            {pd.recipientName && <span>Reçu par : {pd.recipientName}</span>}
+                            {pd.deliveredAt && (
+                              <span>· {format(new Date(pd.deliveredAt), 'dd MMM HH:mm', { locale: fr })}</span>
                             )}
                             {isPendingSync && <span className="text-warning">· En attente sync</span>}
+                          </div>
+                          <div className="flex flex-wrap gap-1.5 mt-1 text-xs text-muted-foreground">
+                            <span>{pd.colis.length} colis</span>
                           </div>
                         </div>
                       </div>
@@ -415,7 +479,7 @@ export function ParcoursDeliveries({
       )}
 
       {/* Validation Dialog */}
-      <Dialog open={!!validatingDelivery} onOpenChange={(open) => { if (!open) setValidatingDelivery(null); }}>
+      <Dialog open={!!validating} onOpenChange={(open) => { if (!open) setValidating(null); }}>
         <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -423,14 +487,13 @@ export function ParcoursDeliveries({
               Livrer
             </DialogTitle>
             <DialogDescription>
-              {validatingDelivery?.pharmacy_name}
-              {validatingDelivery?.pharmacy_address && (
-                <span className="block text-xs mt-0.5">{validatingDelivery.pharmacy_address}</span>
+              {validating?.pharmacyName}
+              {validating?.pharmacyAddress && (
+                <span className="block text-xs mt-0.5">{validating.pharmacyAddress}</span>
               )}
             </DialogDescription>
           </DialogHeader>
 
-          {/* Offline indicator */}
           {!isOnline && (
             <Card className="border-warning/30 bg-warning/5">
               <CardContent className="py-2 flex items-center gap-2">
@@ -443,6 +506,20 @@ export function ParcoursDeliveries({
           )}
 
           <div className="space-y-4">
+            {/* Colis summary */}
+            {validating && validating.colis.length > 0 && (
+              <div className="p-2 rounded-lg bg-muted/50">
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase mb-1">Colis à livrer</p>
+                <div className="flex flex-wrap gap-1">
+                  {validating.colis.map(c => (
+                    <span key={c.id} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-background text-[10px] font-mono text-muted-foreground border">
+                      {c.type}: {c.barcode}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Recipient name */}
             <div className="space-y-1.5">
               <Label className="flex items-center gap-1.5">
@@ -457,7 +534,7 @@ export function ParcoursDeliveries({
             </div>
 
             {/* Verification code - only in online mode */}
-            {isOnline && validatingDelivery?.verification_code && (
+            {isOnline && validating?.verificationCode && (
               <div className="space-y-1.5">
                 <Label className="flex items-center gap-1.5">
                   <Hash className="w-3.5 h-3.5" />
@@ -477,7 +554,7 @@ export function ParcoursDeliveries({
             <div className="space-y-2">
               <Label>Quantités reçues</Label>
               <div className="grid grid-cols-3 gap-2">
-                {(validatingDelivery?.nb_cartons ?? 0) > 0 && (
+                {(validating?.nb_cartons ?? 0) > 0 && (
                   <div>
                     <p className="text-[10px] text-muted-foreground mb-1">Cartons</p>
                     <Input
@@ -488,7 +565,7 @@ export function ParcoursDeliveries({
                     />
                   </div>
                 )}
-                {(validatingDelivery?.nb_sachets ?? 0) > 0 && (
+                {(validating?.nb_sachets ?? 0) > 0 && (
                   <div>
                     <p className="text-[10px] text-muted-foreground mb-1">Sachets</p>
                     <Input
@@ -499,7 +576,7 @@ export function ParcoursDeliveries({
                     />
                   </div>
                 )}
-                {(validatingDelivery?.nb_barques ?? 0) > 0 && (
+                {(validating?.nb_barques ?? 0) > 0 && (
                   <div>
                     <p className="text-[10px] text-muted-foreground mb-1">Barques</p>
                     <Input
