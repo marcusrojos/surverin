@@ -24,6 +24,8 @@ import {
   Navigation,
   WifiOff,
   Camera,
+  MapPinOff,
+  LocateFixed,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -32,6 +34,8 @@ import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { SignaturePad } from '@/components/ui/signature-pad';
 import { useOfflineSync } from '@/hooks/use-offline-sync';
+import { useGeolocation } from '@/hooks/use-geolocation';
+import { GEOFENCE_RADIUS } from '@/lib/geolocation';
 
 interface ParcoursDeliveriesProps {
   parcoursId: string;
@@ -45,6 +49,8 @@ interface PharmacyDelivery {
   pharmacyId: string;
   pharmacyName: string;
   pharmacyAddress: string | null;
+  pharmacyLatitude: number | null;
+  pharmacyLongitude: number | null;
   position: number;
   colis: { id: string; barcode: string; type: string }[];
   // Existing delivery record (if any)
