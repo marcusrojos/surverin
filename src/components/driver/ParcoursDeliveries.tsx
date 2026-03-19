@@ -205,8 +205,22 @@ export function ParcoursDeliveries({
     }
 
     if (isOnline) {
+      // GPS check - block if pharmacy has coordinates and driver is not within zone
+      const pharmacyHasCoords = validating.pharmacyLatitude != null && validating.pharmacyLongitude != null;
+      if (pharmacyHasCoords && !isWithinZone) {
+        toast.error(`Vous devez être à moins de ${GEOFENCE_RADIUS}m de la pharmacie pour valider`);
+        return;
+      }
+
+      // Verification code check
       if (validating.verificationCode && verificationCode !== validating.verificationCode) {
         toast.error('Code de vérification incorrect');
+        return;
+      }
+
+      // Signature check
+      if (!signature) {
+        toast.error('La signature est requise');
         return;
       }
 
@@ -224,11 +238,13 @@ export function ParcoursDeliveries({
           .update({
             status: 'livre',
             recipient_name: recipientName.trim(),
-            recipient_signature: signature || null,
+            recipient_signature: signature,
             nb_cartons_received: nbCartonsReceived,
             nb_sachets_received: nbSachetsReceived,
             nb_barques_received: nbBarquesReceived,
             delivered_at: new Date().toISOString(),
+            driver_latitude: driverPosition?.latitude ?? null,
+            driver_longitude: driverPosition?.longitude ?? null,
           } as any)
           .eq('id', deliveryId);
         if (error) throw error;
