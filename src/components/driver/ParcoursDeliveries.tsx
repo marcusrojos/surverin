@@ -437,7 +437,18 @@ export function ParcoursDeliveries({
         </Card>
       )}
 
-      {loading ? (
+      {/* Using cached data indicator */}
+      {usingCache && (
+        <Card className="border-muted bg-muted/30">
+          <CardContent className="py-2 flex items-center gap-2">
+            <Database className="w-4 h-4 text-muted-foreground shrink-0" />
+            <p className="text-xs text-muted-foreground">
+              Données locales utilisées — les modifications seront synchronisées au retour en ligne
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
         <div className="flex justify-center py-8">
           <Loader2 className="w-8 h-8 animate-spin text-primary" />
         </div>
