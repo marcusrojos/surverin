@@ -235,22 +235,24 @@ export function ParcoursDeliveries({
     fetchData();
   }, [fetchData]);
 
-  // Apply pending offline validations on top of current data (without re-fetching)
   useEffect(() => {
     if (pendingDeliveries.length === 0) return;
     setPharmacyDeliveries(prev => {
-      const pendingIds = new Set(pendingDeliveries.map(p => p.delivery_id));
+      const pendingKeys = new Set(
+        pendingDeliveries.map(p => p.delivery_id ?? `${p.parcours_id}:${p.pharmacy_id}`)
+      );
       let changed = false;
       const updated = prev.map(pd => {
-        if (pd.deliveryId && pendingIds.has(pd.deliveryId) && pd.deliveryStatus !== 'livre') {
+        const deliveryKey = pd.deliveryId ?? `${parcoursId}:${pd.pharmacyId}`;
+        if (pendingKeys.has(deliveryKey) && pd.deliveryStatus !== 'livre') {
           changed = true;
-          return { ...pd, deliveryStatus: 'livre', recipientName: 'Validation hors-ligne' };
+          return { ...pd, deliveryStatus: 'livre', recipientName: 'Validation hors-ligne', deliveredAt: new Date().toISOString() };
         }
         return pd;
       });
       return changed ? updated : prev;
     });
-  }, [pendingDeliveries]);
+  }, [pendingDeliveries, parcoursId]);
 
   // Re-fetch when coming back online
   useEffect(() => {
