@@ -269,7 +269,7 @@ export function ParcoursDeliveries({
 
   const handleValidateDelivery = async () => {
     if (!validating) return;
-    if (!recipientName.trim()) {
+    if (isOnline && !recipientName.trim()) {
       toast.error('Le nom du destinataire est requis');
       return;
     }
