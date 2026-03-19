@@ -301,10 +301,7 @@ export default function DriverDashboard() {
                           <Button
                             size="sm"
                             className="mt-3 w-full sm:w-auto"
-                            onClick={() => {
-                              // TODO: Open inventory flow
-                              toast.info("L'inventaire sera disponible prochainement");
-                            }}
+                            onClick={() => setInventoryParcours(parcours)}
                           >
                             <ClipboardCheck className="w-4 h-4 mr-1.5" />
                             Faire l'inventaire
