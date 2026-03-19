@@ -157,6 +157,125 @@ export type Database = {
           },
         ]
       }
+      parcours: {
+        Row: {
+          axis_id: string
+          created_at: string
+          driver_id: string
+          id: string
+          name: string
+          status: Database["public"]["Enums"]["parcours_status"]
+          updated_at: string
+        }
+        Insert: {
+          axis_id: string
+          created_at?: string
+          driver_id: string
+          id?: string
+          name: string
+          status?: Database["public"]["Enums"]["parcours_status"]
+          updated_at?: string
+        }
+        Update: {
+          axis_id?: string
+          created_at?: string
+          driver_id?: string
+          id?: string
+          name?: string
+          status?: Database["public"]["Enums"]["parcours_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "parcours_axis_id_fkey"
+            columns: ["axis_id"]
+            isOneToOne: false
+            referencedRelation: "axes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      parcours_colis: {
+        Row: {
+          barcode: string
+          created_at: string
+          id: string
+          parcours_id: string
+          parcours_pharmacy_id: string
+          type: string
+        }
+        Insert: {
+          barcode: string
+          created_at?: string
+          id?: string
+          parcours_id: string
+          parcours_pharmacy_id: string
+          type: string
+        }
+        Update: {
+          barcode?: string
+          created_at?: string
+          id?: string
+          parcours_id?: string
+          parcours_pharmacy_id?: string
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "parcours_colis_parcours_id_fkey"
+            columns: ["parcours_id"]
+            isOneToOne: false
+            referencedRelation: "parcours"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "parcours_colis_parcours_pharmacy_id_fkey"
+            columns: ["parcours_pharmacy_id"]
+            isOneToOne: false
+            referencedRelation: "parcours_pharmacies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      parcours_pharmacies: {
+        Row: {
+          created_at: string
+          id: string
+          parcours_id: string
+          pharmacy_id: string
+          position: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          parcours_id: string
+          pharmacy_id: string
+          position?: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          parcours_id?: string
+          pharmacy_id?: string
+          position?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "parcours_pharmacies_parcours_id_fkey"
+            columns: ["parcours_id"]
+            isOneToOne: false
+            referencedRelation: "parcours"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "parcours_pharmacies_pharmacy_id_fkey"
+            columns: ["pharmacy_id"]
+            isOneToOne: false
+            referencedRelation: "pharmacies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pharmacies: {
         Row: {
           address: string | null
@@ -282,6 +401,7 @@ export type Database = {
     Enums: {
       app_role: "admin" | "livreur" | "pharmacie"
       delivery_status: "en_attente" | "livre"
+      parcours_status: "en_attente_inventaire" | "en_cours" | "termine"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -411,6 +531,7 @@ export const Constants = {
     Enums: {
       app_role: ["admin", "livreur", "pharmacie"],
       delivery_status: ["en_attente", "livre"],
+      parcours_status: ["en_attente_inventaire", "en_cours", "termine"],
     },
   },
 } as const
