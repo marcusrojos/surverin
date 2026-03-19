@@ -724,7 +724,6 @@ export default function DeliveriesPage() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
-      </div>
 
           </TabsContent>
         </Tabs>
