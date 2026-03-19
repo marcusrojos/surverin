@@ -76,8 +76,7 @@ export function ParcoursDeliveries({
   const [loading, setLoading] = useState(true);
   const { isOnline, queueDelivery, pendingDeliveries, syncPending } = useOfflineSync();
 
-  // Validation dialog
-  const [validating, setValidating] = useState<PharmacyDelivery | null>(null);
+   const [validating, setValidating] = useState<PharmacyDelivery | null>(null);
   const [recipientName, setRecipientName] = useState('');
   const [verificationCode, setVerificationCode] = useState('');
   const [signature, setSignature] = useState<string | null>('');
@@ -86,6 +85,13 @@ export function ParcoursDeliveries({
   const [nbBarquesReceived, setNbBarquesReceived] = useState(0);
   const [offlinePhoto, setOfflinePhoto] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  // GPS verification for online mode
+  const { driverPosition, distance, isWithinZone, error: geoError, loading: geoLoading } = useGeolocation({
+    pharmacyLat: validating?.pharmacyLatitude,
+    pharmacyLng: validating?.pharmacyLongitude,
+    enabled: !!validating && isOnline,
+  });
 
   const fetchData = useCallback(async () => {
     setLoading(true);
