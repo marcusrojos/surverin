@@ -196,31 +196,14 @@ export function ParcoursDeliveries({
         return;
       }
 
+      if (!validating.deliveryId) {
+        toast.error('Aucune livraison associée à cette pharmacie');
+        return;
+      }
+
       setSaving(true);
       try {
-        let deliveryId = validating.deliveryId;
-
-        if (!deliveryId) {
-          // Create delivery record from parcours_colis data
-          const reference = `${parcoursName}-${validating.pharmacyName}-${Date.now()}`.substring(0, 50);
-          const { data: newDelivery, error: insertError } = await supabase
-            .from('deliveries')
-            .insert({
-              pharmacy_id: validating.pharmacyId,
-              driver_id: driverId,
-              reference,
-              nb_cartons: validating.nb_cartons,
-              nb_sachets: validating.nb_sachets,
-              nb_barques: validating.nb_barques,
-              packages: validating.colis.map(c => ({ barcode: c.barcode, type: c.type })),
-              status: 'en_attente' as const,
-              verification_code: null,
-            })
-            .select('id')
-            .single();
-          if (insertError) throw insertError;
-          deliveryId = newDelivery.id;
-        }
+        const deliveryId = validating.deliveryId;
 
         const { error } = await supabase
           .from('deliveries')
