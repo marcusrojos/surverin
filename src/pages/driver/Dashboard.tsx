@@ -5,7 +5,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { InventoryFlow } from '@/components/driver/InventoryFlow';
 import { toast } from 'sonner';
-import { Package, Loader2, Route, ClipboardCheck, RefreshCw, WifiOff, ArrowDownFromLine, MapPin, ChevronRight } from 'lucide-react';
+import { Package, Loader2, Route, ClipboardCheck, RefreshCw, WifiOff, ArrowDownFromLine, MapPin, ChevronRight, ShieldCheck } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
