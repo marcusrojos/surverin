@@ -111,6 +111,7 @@ export default function DeliveriesPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isCodeDialogOpen, setIsCodeDialogOpen] = useState(false);
+  const [isParcoursWizardOpen, setIsParcoursWizardOpen] = useState(false);
   const [selectedDelivery, setSelectedDelivery] = useState<Delivery | null>(null);
   const [newVerificationCode, setNewVerificationCode] = useState<string>('');
   const [formData, setFormData] = useState({
