@@ -49,6 +49,7 @@ export default function DriverDashboard() {
   const touchStartY = useRef(0);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const PULL_THRESHOLD = 80;
+  const [inventoryParcours, setInventoryParcours] = useState<Parcours | null>(null);
 
   useEffect(() => {
     const onLine = () => setIsOnline(true);
