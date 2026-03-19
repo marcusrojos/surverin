@@ -67,6 +67,9 @@ interface PharmacyDelivery {
   nb_barques: number;
 }
 
+// Stable cache store — created once outside component renders
+const parcoursCacheStore = localforage.createInstance({ name: 'dpci', storeName: 'parcours_deliveries_cache' });
+
 export function ParcoursDeliveries({
   parcoursId,
   parcoursName,
@@ -97,12 +100,11 @@ export function ParcoursDeliveries({
   });
 
   // ── IndexedDB cache for parcours deliveries ──
-  const cacheStore = localforage.createInstance({ name: 'dpci', storeName: 'parcours_deliveries_cache' });
   const CACHE_KEY = `parcours_${parcoursId}`;
 
   const saveToCache = useCallback(async (data: PharmacyDelivery[]) => {
     try {
-      await cacheStore.setItem(CACHE_KEY, { data, cachedAt: Date.now() });
+      await parcoursCacheStore.setItem(CACHE_KEY, { data, cachedAt: Date.now() });
     } catch (e) {
       console.warn('[Cache] Failed to save:', e);
     }
@@ -110,7 +112,7 @@ export function ParcoursDeliveries({
 
   const loadFromCache = useCallback(async (): Promise<PharmacyDelivery[] | null> => {
     try {
-      const cached = await cacheStore.getItem<{ data: PharmacyDelivery[]; cachedAt: number }>(CACHE_KEY);
+      const cached = await parcoursCacheStore.getItem<{ data: PharmacyDelivery[]; cachedAt: number }>(CACHE_KEY);
       return cached?.data || null;
     } catch { return null; }
   }, [CACHE_KEY]);
