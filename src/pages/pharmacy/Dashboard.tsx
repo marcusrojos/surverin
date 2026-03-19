@@ -7,7 +7,7 @@ import { StatusBadge } from '@/components/ui/status-badge';
 import { Button } from '@/components/ui/button';
 import { generateReceiptPDF, downloadPdfFromUrl } from '@/lib/generate-receipt-pdf';
 import { GEOFENCE_RADIUS } from '@/lib/geolocation';
-import { Package, CheckCircle, FileText, Loader2, KeyRound } from 'lucide-react';
+import { Package, CheckCircle, FileText, Loader2, KeyRound, Barcode, Clock } from 'lucide-react';
 import { Database } from '@/integrations/supabase/types';
 
 type Delivery = Database['public']['Tables']['deliveries']['Row'];
