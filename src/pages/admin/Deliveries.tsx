@@ -726,6 +726,10 @@ export default function DeliveriesPage() {
         </Dialog>
       </div>
 
+          </TabsContent>
+        </Tabs>
+      </div>
+
       <CreateParcoursWizard
         open={isParcoursWizardOpen}
         onOpenChange={setIsParcoursWizardOpen}
