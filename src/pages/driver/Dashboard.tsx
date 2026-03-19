@@ -298,8 +298,16 @@ export default function DriverDashboard() {
                           <span>{format(new Date(parcours.created_at), 'dd MMM', { locale: fr })}</span>
                         </div>
 
+                        {/* Force confirmed badge */}
+                        {parcours.force_confirmed && (
+                          <div className="flex items-center gap-1 mt-1.5 text-[10px] text-warning">
+                            <ShieldCheck className="w-3 h-3" />
+                            <span>Confirmé par l'administrateur</span>
+                          </div>
+                        )}
+
                         {/* Action button */}
-                        {isPending && (
+                        {isPending && !parcours.force_confirmed && (
                           <Button
                             size="sm"
                             className="mt-3 w-full sm:w-auto"
