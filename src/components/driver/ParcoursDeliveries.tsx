@@ -166,15 +166,7 @@ export function ParcoursDeliveries({
     if (!navigator.onLine) {
       const cached = await loadFromCache();
       if (cached && cached.length > 0) {
-        // Apply any pending offline validations on top of cache
-        const pendingIds = new Set(pendingDeliveries.map(p => p.delivery_id));
-        const updated = cached.map(pd => {
-          if (pd.deliveryId && pendingIds.has(pd.deliveryId)) {
-            return { ...pd, deliveryStatus: 'livre', recipientName: 'Validation hors-ligne' };
-          }
-          return pd;
-        });
-        setPharmacyDeliveries(updated);
+        setPharmacyDeliveries(cached);
         setUsingCache(true);
       } else {
         setPharmacyDeliveries([]);
@@ -237,11 +229,28 @@ export function ParcoursDeliveries({
     } finally {
       setLoading(false);
     }
-  }, [parcoursId, driverId, pendingDeliveries, loadFromCache, saveToCache]);
+  }, [parcoursId, driverId, loadFromCache, saveToCache]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // Apply pending offline validations on top of current data (without re-fetching)
+  useEffect(() => {
+    if (pendingDeliveries.length === 0) return;
+    setPharmacyDeliveries(prev => {
+      const pendingIds = new Set(pendingDeliveries.map(p => p.delivery_id));
+      let changed = false;
+      const updated = prev.map(pd => {
+        if (pd.deliveryId && pendingIds.has(pd.deliveryId) && pd.deliveryStatus !== 'livre') {
+          changed = true;
+          return { ...pd, deliveryStatus: 'livre', recipientName: 'Validation hors-ligne' };
+        }
+        return pd;
+      });
+      return changed ? updated : prev;
+    });
+  }, [pendingDeliveries]);
 
   // Re-fetch when coming back online
   useEffect(() => {
