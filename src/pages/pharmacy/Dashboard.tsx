@@ -103,33 +103,19 @@ export default function PharmacyDashboard() {
           <p className="text-muted-foreground text-center py-8">Aucune livraison</p>
         ) : (
           <div className="space-y-3">
-            {deliveries.map(d => (
-              <Card key={d.id} className="card-hover">
-                <CardContent className="pt-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-mono font-medium">{d.reference}</p>
-                      <p className="text-xs text-muted-foreground mt-1">{d.nb_cartons}C · {d.nb_sachets}S · {d.nb_barques}B</p>
-                      <p className="text-xs text-muted-foreground">{new Date(d.created_at).toLocaleDateString('fr-FR')}</p>
-                      {d.status === 'en_attente' && d.verification_code && (
-                        <div className="flex items-center gap-1.5 mt-2 bg-primary/10 rounded-md px-2 py-1.5 w-fit">
-                          <KeyRound className="w-3.5 h-3.5 text-primary" />
-                          <span className="text-xs font-medium text-primary">Code de vérification :</span>
-                          <span className="font-mono font-bold text-sm text-primary tracking-widest">{d.verification_code}</span>
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <StatusBadge status={d.status} />
-                      {d.status === 'livre' && (
-                        <Button variant="ghost" size="icon" onClick={() => handleReceipt(d)} title="Bon de livraison">
-                          <FileText className="w-4 h-4" />
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+            {/* Pending deliveries first */}
+            {pending.length > 0 && (
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">En attente ({pending.length})</p>
+            )}
+            {pending.map(d => (
+              <DeliveryCard key={d.id} d={d} onReceipt={handleReceipt} />
+            ))}
+
+            {delivered.length > 0 && (
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mt-4">Reçues ({delivered.length})</p>
+            )}
+            {delivered.map(d => (
+              <DeliveryCard key={d.id} d={d} onReceipt={handleReceipt} />
             ))}
           </div>
         )}
