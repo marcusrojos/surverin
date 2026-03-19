@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Package, Building2, Users, LogOut, Truck, Route, FileText } from 'lucide-react';
+import { LayoutDashboard, Package, Building2, Users, LogOut, Truck, Route, FileText, ClipboardList } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/lib/auth';
 import dpciLogo from '@/assets/dpci-logo.png';
@@ -9,6 +9,7 @@ interface NavItem { icon: React.ElementType; label: string; href: string; }
 const adminNavItems: NavItem[] = [
   { icon: LayoutDashboard, label: 'Tableau de bord', href: '/admin' },
   { icon: Package, label: 'Livraisons', href: '/admin/deliveries' },
+  { icon: ClipboardList, label: 'Parcours', href: '/admin/parcours' },
   { icon: Route, label: 'Suivi chauffeurs', href: '/admin/tracking' },
   { icon: Building2, label: 'Pharmacies', href: '/admin/pharmacies' },
   { icon: Users, label: 'Utilisateurs', href: '/admin/users' },

@@ -14,6 +14,7 @@ import AdminUsers from "./pages/admin/Users";
 import AdminDriverTracking from "./pages/admin/DriverTracking";
 import AdminLists from "./pages/admin/Lists";
 import AdminAxes from "./pages/admin/Axes";
+import AdminParcours from "./pages/admin/Parcours";
 import DriverDashboard from "./pages/driver/Dashboard";
 import PharmacyDashboard from "./pages/pharmacy/Dashboard";
 import NotFound from "./pages/NotFound";
@@ -39,6 +40,7 @@ const App = () => (
             <Route path="/admin/tracking" element={<AdminDriverTracking />} />
             <Route path="/admin/lists" element={<AdminLists />} />
             <Route path="/admin/axes" element={<AdminAxes />} />
+            <Route path="/admin/parcours" element={<AdminParcours />} />
             <Route path="/driver" element={<DriverDashboard />} />
             <Route path="/pharmacy" element={<PharmacyDashboard />} />
             <Route path="/install" element={<Install />} />
