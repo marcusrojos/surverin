@@ -272,13 +272,40 @@ export function CreateParcoursWizard({ open, onOpenChange, onCreated }: CreatePa
         if (colisError) throw colisError;
       }
 
-      // 4. Create deliveries for each pharmacy
+      // 4. Check which pharmacies have active accounts (for verification codes)
+      const pharmacyIdsSelected = selectedPharmaciesOrdered.map(ap => ap.pharmacy_id);
+      const { data: pharmaciesWithAccounts } = await supabase
+        .from('pharmacies')
+        .select('id, user_id')
+        .in('id', pharmacyIdsSelected)
+        .not('user_id', 'is', null);
+
+      // Check active profiles for those pharmacies
+      const activePharmacyIds = new Set<string>();
+      if (pharmaciesWithAccounts && pharmaciesWithAccounts.length > 0) {
+        const userIds = pharmaciesWithAccounts.map(p => p.user_id!);
+        const { data: activeProfiles } = await supabase
+          .from('profiles')
+          .select('user_id')
+          .in('user_id', userIds)
+          .eq('is_active', true);
+        const activeUserIds = new Set((activeProfiles || []).map(p => p.user_id));
+        pharmaciesWithAccounts.forEach(p => {
+          if (activeUserIds.has(p.user_id!)) activePharmacyIds.add(p.id);
+        });
+      }
+
+      // Generate a 6-digit verification code
+      const generateCode = () => String(Math.floor(100000 + Math.random() * 900000));
+
+      // 5. Create deliveries for each pharmacy
       const deliveryRows = selectedPharmaciesOrdered.map((ap) => {
         const items = pharmacyPackages[ap.pharmacy_id] || [];
         const nbCartons = items.filter(c => c.type === 'carton').length;
         const nbSachets = items.filter(c => c.type === 'sachet').length;
         const nbBarques = items.filter(c => c.type === 'bac').length;
         const reference = `${parcoursName.trim()}-${ap.pharmacy.name}`.substring(0, 50);
+        const hasActiveAccount = activePharmacyIds.has(ap.pharmacy_id);
 
         return {
           parcours_id: parcoursId,
@@ -290,6 +317,7 @@ export function CreateParcoursWizard({ open, onOpenChange, onCreated }: CreatePa
           nb_barques: nbBarques,
           packages: items.map(c => ({ barcode: c.barcode.trim(), type: c.type })),
           status: 'en_attente' as const,
+          verification_code: hasActiveAccount ? generateCode() : null,
         };
       });
 
