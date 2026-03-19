@@ -164,6 +164,24 @@ export default function DriverDashboard() {
   const pendingInventory = parcoursList.filter(p => p.status === 'en_attente_inventaire');
   const others = parcoursList.filter(p => p.status !== 'en_attente_inventaire');
 
+  // If viewing deliveries for a parcours
+  if (activeParcours && user?.id) {
+    return (
+      <DashboardLayout requiredRole="livreur">
+        <ParcoursDeliveries
+          parcoursId={activeParcours.id}
+          parcoursName={activeParcours.name}
+          driverId={user.id}
+          forceConfirmed={activeParcours.force_confirmed}
+          onBack={() => {
+            setActiveParcours(null);
+            fetchParcours();
+          }}
+        />
+      </DashboardLayout>
+    );
+  }
+
   return (
     <DashboardLayout requiredRole="livreur">
       <div
@@ -219,7 +237,7 @@ export default function DriverDashboard() {
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-3 gap-3">
           <Card>
             <CardContent className="pt-4 text-center">
               <ClipboardCheck className="w-6 h-6 mx-auto mb-1 text-warning" />
@@ -229,9 +247,16 @@ export default function DriverDashboard() {
           </Card>
           <Card>
             <CardContent className="pt-4 text-center">
-              <Route className="w-6 h-6 mx-auto mb-1 text-primary" />
+              <Truck className="w-6 h-6 mx-auto mb-1 text-primary" />
+              <p className="text-2xl font-bold">{parcoursList.filter(p => p.status === 'en_cours').length}</p>
+              <p className="text-xs text-muted-foreground">En cours</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-4 text-center">
+              <Route className="w-6 h-6 mx-auto mb-1 text-muted-foreground" />
               <p className="text-2xl font-bold">{parcoursList.length}</p>
-              <p className="text-xs text-muted-foreground">Total parcours</p>
+              <p className="text-xs text-muted-foreground">Total</p>
             </CardContent>
           </Card>
         </div>
@@ -252,13 +277,14 @@ export default function DriverDashboard() {
             {parcoursList.map((parcours) => {
               const statusInfo = statusLabels[parcours.status] || statusLabels.en_attente_inventaire;
               const isPending = parcours.status === 'en_attente_inventaire';
+              const isActive = parcours.status === 'en_cours';
 
               return (
                 <Card
                   key={parcours.id}
                   className={cn(
                     'transition-all duration-200',
-                    isPending ? 'card-hover border-warning/30' : 'opacity-80'
+                    isPending ? 'card-hover border-warning/30' : isActive ? 'card-hover border-primary/30' : 'opacity-80'
                   )}
                 >
                   <CardContent className="pt-4 pb-4">
@@ -266,9 +292,9 @@ export default function DriverDashboard() {
                       {/* Icon */}
                       <div className={cn(
                         'w-10 h-10 rounded-xl flex items-center justify-center shrink-0',
-                        isPending ? 'bg-warning/15' : 'bg-muted'
+                        isPending ? 'bg-warning/15' : isActive ? 'bg-primary/15' : 'bg-muted'
                       )}>
-                        <Route className={cn('w-5 h-5', isPending ? 'text-warning' : 'text-muted-foreground')} />
+                        <Route className={cn('w-5 h-5', isPending ? 'text-warning' : isActive ? 'text-primary' : 'text-muted-foreground')} />
                       </div>
 
                       {/* Content */}
@@ -308,7 +334,7 @@ export default function DriverDashboard() {
                           </div>
                         )}
 
-                        {/* Action button */}
+                        {/* Action buttons */}
                         {isPending && !parcours.force_confirmed && (
                           <Button
                             size="sm"
@@ -317,6 +343,18 @@ export default function DriverDashboard() {
                           >
                             <ClipboardCheck className="w-4 h-4 mr-1.5" />
                             Faire l'inventaire
+                            <ChevronRight className="w-4 h-4 ml-1" />
+                          </Button>
+                        )}
+
+                        {isActive && (
+                          <Button
+                            size="sm"
+                            className="mt-3 w-full sm:w-auto"
+                            onClick={() => setActiveParcours(parcours)}
+                          >
+                            <Truck className="w-4 h-4 mr-1.5" />
+                            Voir les livraisons
                             <ChevronRight className="w-4 h-4 ml-1" />
                           </Button>
                         )}
