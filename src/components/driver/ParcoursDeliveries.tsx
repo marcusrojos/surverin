@@ -68,7 +68,7 @@ export function ParcoursDeliveries({
   const [validatingDelivery, setValidatingDelivery] = useState<Delivery | null>(null);
   const [recipientName, setRecipientName] = useState('');
   const [verificationCode, setVerificationCode] = useState('');
-  const [signature, setSignature] = useState('');
+  const [signature, setSignature] = useState<string | null>('');
   const [nbCartonsReceived, setNbCartonsReceived] = useState(0);
   const [nbSachetsReceived, setNbSachetsReceived] = useState(0);
   const [nbBarquesReceived, setNbBarquesReceived] = useState(0);
