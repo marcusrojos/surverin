@@ -3,6 +3,7 @@ import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { useAuth } from '@/lib/auth';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { InventoryFlow } from '@/components/driver/InventoryFlow';
 import { toast } from 'sonner';
 import { Package, Loader2, Route, ClipboardCheck, RefreshCw, WifiOff, ArrowDownFromLine, MapPin, ChevronRight } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
@@ -48,6 +49,7 @@ export default function DriverDashboard() {
   const touchStartY = useRef(0);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const PULL_THRESHOLD = 80;
+  const [inventoryParcours, setInventoryParcours] = useState<Parcours | null>(null);
 
   useEffect(() => {
     const onLine = () => setIsOnline(true);
@@ -299,10 +301,7 @@ export default function DriverDashboard() {
                           <Button
                             size="sm"
                             className="mt-3 w-full sm:w-auto"
-                            onClick={() => {
-                              // TODO: Open inventory flow
-                              toast.info("L'inventaire sera disponible prochainement");
-                            }}
+                            onClick={() => setInventoryParcours(parcours)}
                           >
                             <ClipboardCheck className="w-4 h-4 mr-1.5" />
                             Faire l'inventaire
@@ -318,6 +317,20 @@ export default function DriverDashboard() {
           </div>
         )}
       </div>
+
+      {inventoryParcours && user?.id && (
+        <InventoryFlow
+          open={!!inventoryParcours}
+          onOpenChange={(open) => { if (!open) setInventoryParcours(null); }}
+          parcoursId={inventoryParcours.id}
+          parcoursName={inventoryParcours.name}
+          driverId={user.id}
+          onCompleted={() => {
+            setInventoryParcours(null);
+            fetchParcours();
+          }}
+        />
+      )}
     </DashboardLayout>
   );
 }

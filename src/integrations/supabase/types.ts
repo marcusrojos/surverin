@@ -237,6 +237,97 @@ export type Database = {
           },
         ]
       }
+      parcours_inventaire: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          driver_id: string
+          id: string
+          notes: string | null
+          parcours_id: string
+          status: string
+          total_expected: number
+          total_extra: number
+          total_missing: number
+          total_scanned: number
+          updated_at: string
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          driver_id: string
+          id?: string
+          notes?: string | null
+          parcours_id: string
+          status?: string
+          total_expected?: number
+          total_extra?: number
+          total_missing?: number
+          total_scanned?: number
+          updated_at?: string
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          driver_id?: string
+          id?: string
+          notes?: string | null
+          parcours_id?: string
+          status?: string
+          total_expected?: number
+          total_extra?: number
+          total_missing?: number
+          total_scanned?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "parcours_inventaire_parcours_id_fkey"
+            columns: ["parcours_id"]
+            isOneToOne: false
+            referencedRelation: "parcours"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      parcours_inventaire_scans: {
+        Row: {
+          barcode: string
+          created_at: string
+          id: string
+          inventaire_id: string
+          pharmacy_name: string | null
+          status: string
+          type: string | null
+        }
+        Insert: {
+          barcode: string
+          created_at?: string
+          id?: string
+          inventaire_id: string
+          pharmacy_name?: string | null
+          status?: string
+          type?: string | null
+        }
+        Update: {
+          barcode?: string
+          created_at?: string
+          id?: string
+          inventaire_id?: string
+          pharmacy_name?: string | null
+          status?: string
+          type?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "parcours_inventaire_scans_inventaire_id_fkey"
+            columns: ["inventaire_id"]
+            isOneToOne: false
+            referencedRelation: "parcours_inventaire"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       parcours_pharmacies: {
         Row: {
           created_at: string
