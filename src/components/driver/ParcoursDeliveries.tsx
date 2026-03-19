@@ -76,6 +76,7 @@ export function ParcoursDeliveries({
 }: ParcoursDeliveriesProps) {
   const [pharmacyDeliveries, setPharmacyDeliveries] = useState<PharmacyDelivery[]>([]);
   const [loading, setLoading] = useState(true);
+  const [usingCache, setUsingCache] = useState(false);
   const { isOnline, queueDelivery, pendingDeliveries, syncPending } = useOfflineSync();
 
    const [validating, setValidating] = useState<PharmacyDelivery | null>(null);
@@ -95,10 +96,92 @@ export function ParcoursDeliveries({
     enabled: !!validating && isOnline,
   });
 
+  // ── IndexedDB cache for parcours deliveries ──
+  const cacheStore = localforage.createInstance({ name: 'dpci', storeName: 'parcours_deliveries_cache' });
+  const CACHE_KEY = `parcours_${parcoursId}`;
+
+  const saveToCache = useCallback(async (data: PharmacyDelivery[]) => {
+    try {
+      await cacheStore.setItem(CACHE_KEY, { data, cachedAt: Date.now() });
+    } catch (e) {
+      console.warn('[Cache] Failed to save:', e);
+    }
+  }, [CACHE_KEY]);
+
+  const loadFromCache = useCallback(async (): Promise<PharmacyDelivery[] | null> => {
+    try {
+      const cached = await cacheStore.getItem<{ data: PharmacyDelivery[]; cachedAt: number }>(CACHE_KEY);
+      return cached?.data || null;
+    } catch { return null; }
+  }, [CACHE_KEY]);
+
+  const buildMappedData = (
+    ppData: { id: string; pharmacy_id: string; position: number }[],
+    pharmData: { id: string; name: string; address: string | null; latitude: number | null; longitude: number | null }[],
+    colisData: { id: string; barcode: string; type: string; parcours_pharmacy_id: string }[],
+    delivData: { id: string; pharmacy_id: string; status: string; reference: string; delivered_at: string | null; recipient_name: string | null; verification_code: string | null }[],
+  ): PharmacyDelivery[] => {
+    const pharmMap = new Map(pharmData.map(p => [p.id, p]));
+    const colisMap = new Map<string, { id: string; barcode: string; type: string }[]>();
+    colisData.forEach(c => {
+      const list = colisMap.get(c.parcours_pharmacy_id) || [];
+      list.push({ id: c.id, barcode: c.barcode, type: c.type });
+      colisMap.set(c.parcours_pharmacy_id, list);
+    });
+    const delivMap = new Map<string, (typeof delivData)[number]>();
+    delivData.forEach(d => delivMap.set(d.pharmacy_id, d));
+
+    return ppData.map(pp => {
+      const pharm = pharmMap.get(pp.pharmacy_id);
+      const colis = colisMap.get(pp.id) || [];
+      const deliv = delivMap.get(pp.pharmacy_id);
+      return {
+        pharmacyId: pp.pharmacy_id,
+        pharmacyName: pharm?.name || 'Inconnu',
+        pharmacyAddress: pharm?.address || null,
+        pharmacyLatitude: pharm?.latitude ?? null,
+        pharmacyLongitude: pharm?.longitude ?? null,
+        position: pp.position,
+        colis,
+        deliveryId: deliv?.id || null,
+        deliveryStatus: deliv?.status || null,
+        deliveryReference: deliv?.reference || null,
+        deliveredAt: deliv?.delivered_at || null,
+        recipientName: deliv?.recipient_name || null,
+        verificationCode: deliv?.verification_code || null,
+        nb_cartons: colis.filter(c => c.type === 'carton').length,
+        nb_sachets: colis.filter(c => c.type === 'sachet').length,
+        nb_barques: colis.filter(c => c.type === 'barque').length,
+      };
+    });
+  };
+
   const fetchData = useCallback(async () => {
     setLoading(true);
+    setUsingCache(false);
+
+    // If offline, load from cache immediately
+    if (!navigator.onLine) {
+      const cached = await loadFromCache();
+      if (cached && cached.length > 0) {
+        // Apply any pending offline validations on top of cache
+        const pendingIds = new Set(pendingDeliveries.map(p => p.delivery_id));
+        const updated = cached.map(pd => {
+          if (pd.deliveryId && pendingIds.has(pd.deliveryId)) {
+            return { ...pd, deliveryStatus: 'livre', recipientName: 'Validation hors-ligne' };
+          }
+          return pd;
+        });
+        setPharmacyDeliveries(updated);
+        setUsingCache(true);
+      } else {
+        setPharmacyDeliveries([]);
+      }
+      setLoading(false);
+      return;
+    }
+
     try {
-      // 1. Fetch parcours_pharmacies with position
       const { data: ppData, error: ppError } = await supabase
         .from('parcours_pharmacies')
         .select('id, pharmacy_id, position')
@@ -115,70 +198,55 @@ export function ParcoursDeliveries({
       const pharmacyIds = ppData.map(pp => pp.pharmacy_id);
       const ppIds = ppData.map(pp => pp.id);
 
-      // 2. Fetch pharmacy details, colis, and existing deliveries in parallel
       const [pharmRes, colisRes, delivRes] = await Promise.all([
         supabase.from('pharmacies').select('id, name, address, latitude, longitude').in('id', pharmacyIds),
         supabase.from('parcours_colis').select('id, barcode, type, parcours_pharmacy_id').in('parcours_pharmacy_id', ppIds),
         supabase.from('deliveries').select('*').eq('parcours_id', parcoursId),
       ]);
 
-      const pharmMap = new Map((pharmRes.data || []).map(p => [p.id, p]));
-
-      // Group colis by parcours_pharmacy_id
-      const colisMap = new Map<string, { id: string; barcode: string; type: string }[]>();
-      (colisRes.data || []).forEach(c => {
-        const list = colisMap.get(c.parcours_pharmacy_id) || [];
-        list.push({ id: c.id, barcode: c.barcode, type: c.type });
-        colisMap.set(c.parcours_pharmacy_id, list);
-      });
-
-      // Map deliveries by pharmacy_id
-      const delivMap = new Map<string, typeof delivRes.data extends (infer T)[] ? T : never>();
-      (delivRes.data || []).forEach(d => {
-        delivMap.set(d.pharmacy_id, d);
-      });
-
-      const mapped: PharmacyDelivery[] = ppData.map(pp => {
-        const pharm = pharmMap.get(pp.pharmacy_id);
-        const colis = colisMap.get(pp.id) || [];
-        const deliv = delivMap.get(pp.pharmacy_id);
-
-        // Count colis by type
-        const nbCartons = colis.filter(c => c.type === 'carton').length;
-        const nbSachets = colis.filter(c => c.type === 'sachet').length;
-        const nbBarques = colis.filter(c => c.type === 'barque').length;
-
-        return {
-          pharmacyId: pp.pharmacy_id,
-          pharmacyName: pharm?.name || 'Inconnu',
-          pharmacyAddress: pharm?.address || null,
-          pharmacyLatitude: pharm?.latitude ?? null,
-          pharmacyLongitude: pharm?.longitude ?? null,
-          position: pp.position,
-          colis,
-          deliveryId: deliv?.id || null,
-          deliveryStatus: deliv?.status || null,
-          deliveryReference: deliv?.reference || null,
-          deliveredAt: deliv?.delivered_at || null,
-          recipientName: deliv?.recipient_name || null,
-          verificationCode: deliv?.verification_code || null,
-          nb_cartons: nbCartons,
-          nb_sachets: nbSachets,
-          nb_barques: nbBarques,
-        };
-      });
+      const mapped = buildMappedData(
+        ppData,
+        pharmRes.data || [],
+        colisRes.data || [],
+        (delivRes.data || []).map(d => ({
+          id: d.id,
+          pharmacy_id: d.pharmacy_id,
+          status: d.status,
+          reference: d.reference,
+          delivered_at: d.delivered_at,
+          recipient_name: d.recipient_name,
+          verification_code: d.verification_code,
+        })),
+      );
 
       setPharmacyDeliveries(mapped);
+      // Save to cache for offline use
+      saveToCache(mapped);
     } catch {
-      toast.error('Erreur lors du chargement des livraisons');
+      // Network error — try cache fallback
+      const cached = await loadFromCache();
+      if (cached && cached.length > 0) {
+        setPharmacyDeliveries(cached);
+        setUsingCache(true);
+        toast.warning('Données chargées depuis le cache local');
+      } else {
+        toast.error('Erreur lors du chargement des livraisons');
+      }
     } finally {
       setLoading(false);
     }
-  }, [parcoursId, driverId]);
+  }, [parcoursId, driverId, pendingDeliveries, loadFromCache, saveToCache]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // Re-fetch when coming back online
+  useEffect(() => {
+    if (isOnline && usingCache) {
+      fetchData();
+    }
+  }, [isOnline]);
 
   const openValidation = (pd: PharmacyDelivery) => {
     setValidating(pd);
