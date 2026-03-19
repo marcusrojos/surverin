@@ -14,6 +14,7 @@ import AdminUsers from "./pages/admin/Users";
 import AdminDriverTracking from "./pages/admin/DriverTracking";
 import AdminLists from "./pages/admin/Lists";
 import AdminAxes from "./pages/admin/Axes";
+import AdminParcours from "./pages/admin/Parcours";
 import DriverDashboard from "./pages/driver/Dashboard";
 import PharmacyDashboard from "./pages/pharmacy/Dashboard";
 import NotFound from "./pages/NotFound";
