@@ -198,27 +198,43 @@ export function ParcoursDeliveries({
 
       setSaving(true);
       try {
-        if (validating.deliveryId) {
-          // Update existing delivery
-          const { error } = await supabase
+        let deliveryId = validating.deliveryId;
+
+        if (!deliveryId) {
+          // Create delivery record from parcours_colis data
+          const reference = `${parcoursName}-${validating.pharmacyName}-${Date.now()}`.substring(0, 50);
+          const { data: newDelivery, error: insertError } = await supabase
             .from('deliveries')
-            .update({
-              status: 'livre',
-              recipient_name: recipientName.trim(),
-              recipient_signature: signature || null,
-              nb_cartons_received: nbCartonsReceived,
-              nb_sachets_received: nbSachetsReceived,
-              nb_barques_received: nbBarquesReceived,
-              delivered_at: new Date().toISOString(),
-            } as any)
-            .eq('id', validating.deliveryId);
-          if (error) throw error;
-        } else {
-          // No delivery record exists — shouldn't happen if admin created deliveries
-          toast.error('Aucun enregistrement de livraison trouvé pour cette pharmacie');
-          setSaving(false);
-          return;
+            .insert({
+              pharmacy_id: validating.pharmacyId,
+              driver_id: driverId,
+              reference,
+              nb_cartons: validating.nb_cartons,
+              nb_sachets: validating.nb_sachets,
+              nb_barques: validating.nb_barques,
+              packages: validating.colis.map(c => ({ barcode: c.barcode, type: c.type })),
+              status: 'en_attente' as const,
+              verification_code: null,
+            })
+            .select('id')
+            .single();
+          if (insertError) throw insertError;
+          deliveryId = newDelivery.id;
         }
+
+        const { error } = await supabase
+          .from('deliveries')
+          .update({
+            status: 'livre',
+            recipient_name: recipientName.trim(),
+            recipient_signature: signature || null,
+            nb_cartons_received: nbCartonsReceived,
+            nb_sachets_received: nbSachetsReceived,
+            nb_barques_received: nbBarquesReceived,
+            delivered_at: new Date().toISOString(),
+          } as any)
+          .eq('id', deliveryId);
+        if (error) throw error;
 
         toast.success('Livraison validée ✓');
         setValidating(null);
@@ -242,20 +258,23 @@ export function ParcoursDeliveries({
         setSaving(false);
       }
     } else {
-      if (!validating.deliveryId) {
-        toast.error('Impossible de livrer hors-ligne sans enregistrement existant');
+      // Offline mode: queue delivery
+      const reference = validating.deliveryReference || `${parcoursName}-${validating.pharmacyName}`;
+      if (validating.deliveryId) {
+        queueDelivery({
+          deliveryId: validating.deliveryId,
+          reference,
+          recipientName: recipientName.trim(),
+          recipientSignature: signature || null,
+          deliveredAt: new Date().toISOString(),
+          nb_cartons_received: nbCartonsReceived,
+          nb_sachets_received: nbSachetsReceived,
+          nb_barques_received: nbBarquesReceived,
+        });
+      } else {
+        toast.error('Livraison hors-ligne impossible sans connexion préalable');
         return;
       }
-      queueDelivery({
-        deliveryId: validating.deliveryId,
-        reference: validating.deliveryReference || '',
-        recipientName: recipientName.trim(),
-        recipientSignature: signature || null,
-        deliveredAt: new Date().toISOString(),
-        nb_cartons_received: nbCartonsReceived,
-        nb_sachets_received: nbSachetsReceived,
-        nb_barques_received: nbBarquesReceived,
-      });
       toast.success('Livraison sauvegardée hors-ligne');
       setValidating(null);
       setPharmacyDeliveries(prev => prev.map(pd =>
