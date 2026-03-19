@@ -117,6 +117,7 @@ export default function DriverDashboard() {
         axis: axisMap.get(p.axis_id) ? { name: axisMap.get(p.axis_id)!.name } : null,
         colis_count: colisCounts.get(p.id) || 0,
         pharmacies_count: pharmCounts.get(p.id) || 0,
+        force_confirmed: (p as any).force_confirmed || false,
       }));
 
       setParcoursList(mapped);
