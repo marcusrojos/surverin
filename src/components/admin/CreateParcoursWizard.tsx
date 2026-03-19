@@ -272,7 +272,36 @@ export function CreateParcoursWizard({ open, onOpenChange, onCreated }: CreatePa
         if (colisError) throw colisError;
       }
 
-      toast.success(`Parcours "${parcoursName}" créé avec ${colisRows.length} colis pour ${pharmacyRows.length} pharmacie(s)`);
+      // 4. Create deliveries for each pharmacy
+      const deliveryRows = selectedPharmaciesOrdered.map((ap) => {
+        const items = pharmacyPackages[ap.pharmacy_id] || [];
+        const nbCartons = items.filter(c => c.type === 'carton').length;
+        const nbSachets = items.filter(c => c.type === 'sachet').length;
+        const nbBarques = items.filter(c => c.type === 'bac').length;
+        const reference = `${parcoursName.trim()}-${ap.pharmacy.name}`.substring(0, 50);
+
+        return {
+          parcours_id: parcoursId,
+          pharmacy_id: ap.pharmacy_id,
+          driver_id: selectedDriver,
+          reference,
+          nb_cartons: nbCartons,
+          nb_sachets: nbSachets,
+          nb_barques: nbBarques,
+          packages: items.map(c => ({ barcode: c.barcode.trim(), type: c.type })),
+          status: 'en_attente' as const,
+        };
+      });
+
+      if (deliveryRows.length > 0) {
+        const { error: delivError } = await supabase
+          .from('deliveries')
+          .insert(deliveryRows as any);
+
+        if (delivError) throw delivError;
+      }
+
+      toast.success(`Parcours "${parcoursName}" créé avec ${colisRows.length} colis et ${deliveryRows.length} livraison(s)`);
       onOpenChange(false);
       onCreated();
     } catch (error: any) {

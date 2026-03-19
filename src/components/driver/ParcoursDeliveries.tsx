@@ -105,7 +105,7 @@ export function ParcoursDeliveries({
       const [pharmRes, colisRes, delivRes] = await Promise.all([
         supabase.from('pharmacies').select('id, name, address').in('id', pharmacyIds),
         supabase.from('parcours_colis').select('id, barcode, type, parcours_pharmacy_id').in('parcours_pharmacy_id', ppIds),
-        supabase.from('deliveries').select('*').eq('driver_id', driverId).in('pharmacy_id', pharmacyIds),
+        supabase.from('deliveries').select('*').eq('parcours_id', parcoursId),
       ]);
 
       const pharmMap = new Map((pharmRes.data || []).map(p => [p.id, p]));
