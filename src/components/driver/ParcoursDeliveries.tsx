@@ -235,22 +235,24 @@ export function ParcoursDeliveries({
     fetchData();
   }, [fetchData]);
 
-  // Apply pending offline validations on top of current data (without re-fetching)
   useEffect(() => {
     if (pendingDeliveries.length === 0) return;
     setPharmacyDeliveries(prev => {
-      const pendingIds = new Set(pendingDeliveries.map(p => p.delivery_id));
+      const pendingKeys = new Set(
+        pendingDeliveries.map(p => p.delivery_id ?? `${p.parcours_id}:${p.pharmacy_id}`)
+      );
       let changed = false;
       const updated = prev.map(pd => {
-        if (pd.deliveryId && pendingIds.has(pd.deliveryId) && pd.deliveryStatus !== 'livre') {
+        const deliveryKey = pd.deliveryId ?? `${parcoursId}:${pd.pharmacyId}`;
+        if (pendingKeys.has(deliveryKey) && pd.deliveryStatus !== 'livre') {
           changed = true;
-          return { ...pd, deliveryStatus: 'livre', recipientName: 'Validation hors-ligne' };
+          return { ...pd, deliveryStatus: 'livre', recipientName: 'Validation hors-ligne', deliveredAt: new Date().toISOString() };
         }
         return pd;
       });
       return changed ? updated : prev;
     });
-  }, [pendingDeliveries]);
+  }, [pendingDeliveries, parcoursId]);
 
   // Re-fetch when coming back online
   useEffect(() => {
@@ -352,44 +354,52 @@ export function ParcoursDeliveries({
         setSaving(false);
       }
     } else {
-      // Offline mode: only photo is required
+      // Offline mode: only local validation is required
       if (!offlinePhoto) {
         toast.error('La photo du bon de livraison est obligatoire en mode hors-ligne');
         return;
       }
 
+      const deliveredAt = new Date().toISOString();
       const reference = validating.deliveryReference || `${parcoursName}-${validating.pharmacyName}`;
-      if (validating.deliveryId) {
-        queueDelivery(validating.deliveryId, reference, {
+      await queueDelivery(
+        validating.deliveryId,
+        reference,
+        {
           status: 'livre',
           recipient_name: 'Validation hors-ligne',
           recipient_signature: null,
-          delivered_at: new Date().toISOString(),
-        }, offlinePhoto);
-      } else {
-        toast.error('Livraison hors-ligne impossible sans connexion préalable');
-        return;
-      }
+          delivered_at: deliveredAt,
+        },
+        offlinePhoto,
+        {
+          pharmacy_id: validating.pharmacyId,
+          parcours_id: parcoursId,
+          driver_id: driverId,
+        }
+      );
       toast.success('Livraison sauvegardée hors-ligne');
       setValidating(null);
       setPharmacyDeliveries(prev => {
         const updated = prev.map(pd =>
           pd.pharmacyId === validating.pharmacyId
-            ? { ...pd, deliveryStatus: 'livre', recipientName: 'Validation hors-ligne', deliveredAt: new Date().toISOString() }
+            ? { ...pd, deliveryStatus: 'livre', recipientName: 'Validation hors-ligne', deliveredAt }
             : pd
         );
-        // Update local cache with the new state
-        saveToCache(updated);
+        void saveToCache(updated);
         return updated;
       });
     }
   };
 
+  const hasPendingSync = (pd: PharmacyDelivery) =>
+    pendingDeliveries.some(p => (p.delivery_id ?? `${p.parcours_id}:${p.pharmacy_id}`) === (pd.deliveryId ?? `${parcoursId}:${pd.pharmacyId}`));
+
   const pending = pharmacyDeliveries.filter(pd =>
-    pd.deliveryStatus !== 'livre' && !pendingDeliveries.some(p => p.delivery_id === pd.deliveryId)
+    pd.deliveryStatus !== 'livre' && !hasPendingSync(pd)
   );
   const delivered = pharmacyDeliveries.filter(pd =>
-    pd.deliveryStatus === 'livre' || pendingDeliveries.some(p => p.delivery_id === pd.deliveryId)
+    pd.deliveryStatus === 'livre' || hasPendingSync(pd)
   );
 
   return (
@@ -565,7 +575,7 @@ export function ParcoursDeliveries({
                 Livrées ({delivered.length})
               </p>
               {delivered.map(pd => {
-                const isPendingSync = pendingDeliveries.some(p => p.delivery_id === pd.deliveryId);
+                const isPendingSync = hasPendingSync(pd);
                 return (
                   <Card key={pd.pharmacyId} className={cn('opacity-70', isPendingSync && 'border-warning/30')}>
                     <CardContent className="pt-4 pb-4">
