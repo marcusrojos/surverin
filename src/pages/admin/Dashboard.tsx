@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { supabase } from '@/integrations/supabase/client';
+import { apiMonitor } from '@/lib/api-monitor';
 import { Package, Building2, Users, Truck, Clock, CheckCircle, TrendingUp, MapPin, CalendarDays, BarChart3 } from 'lucide-react';
 import { format, subDays, startOfDay, isToday, isYesterday } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -36,6 +37,25 @@ interface DailyData {
   livrées: number;
 }
 
+const CACHE_KEY = 'dpci_admin_dashboard';
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+function getCachedData() {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (Date.now() - parsed.timestamp > CACHE_TTL) return null;
+    return parsed.data;
+  } catch { return null; }
+}
+
+function setCachedData(data: any) {
+  try {
+    localStorage.setItem(CACHE_KEY, JSON.stringify({ data, timestamp: Date.now() }));
+  } catch {}
+}
+
 export default function AdminDashboard() {
   const [stats, setStats] = useState<Stats>({
     totalDeliveries: 0, pending: 0, delivered: 0, pharmacies: 0, pharmaciesWithGps: 0,
@@ -45,44 +65,88 @@ export default function AdminDashboard() {
   const [dailyData, setDailyData] = useState<DailyData[]>([]);
   const [topPharmacies, setTopPharmacies] = useState<{ name: string; count: number }[]>([]);
   const [loading, setLoading] = useState(true);
+  const fetchedRef = useRef(false);
 
-  useEffect(() => {
-    const fetchStats = async () => {
-      const [deliveriesRes, pharmaciesRes, driversRes, usersRes, profilesRes] = await Promise.all([
-        supabase.from('deliveries').select('*'),
-        supabase.from('pharmacies').select('id, name, latitude, longitude'),
-        supabase.from('user_roles').select('id, user_id', { count: 'exact' }).eq('role', 'livreur'),
+  const fetchStats = useCallback(async (forceRefresh = false) => {
+    // Use cache if available and not forcing refresh
+    if (!forceRefresh) {
+      const cached = getCachedData();
+      if (cached) {
+        setStats(cached.stats);
+        setRecentDeliveries(cached.recentDeliveries);
+        setDailyData(cached.dailyData);
+        setTopPharmacies(cached.topPharmacies);
+        setLoading(false);
+        return;
+      }
+    }
+
+    try {
+      // Use count queries instead of fetching all rows
+      const todayStart = startOfDay(new Date()).toISOString();
+      const sevenDaysAgo = subDays(new Date(), 7).toISOString();
+
+      const [
+        totalRes, pendingRes, deliveredRes,
+        pharmaciesRes, pharmaciesGpsRes,
+        driversRes, usersRes,
+        todayCreatedRes, todayDeliveredRes,
+        recentRes, last7daysRes, profilesRes,
+      ] = await Promise.all([
+        supabase.from('deliveries').select('id', { count: 'exact', head: true }),
+        supabase.from('deliveries').select('id', { count: 'exact', head: true }).eq('status', 'en_attente'),
+        supabase.from('deliveries').select('id', { count: 'exact', head: true }).eq('status', 'livre'),
+        supabase.from('pharmacies').select('id', { count: 'exact', head: true }),
+        supabase.from('pharmacies').select('id', { count: 'exact', head: true }).not('latitude', 'is', null),
+        supabase.from('user_roles').select('id', { count: 'exact', head: true }).eq('role', 'livreur'),
         supabase.from('user_roles').select('id', { count: 'exact', head: true }),
+        supabase.from('deliveries').select('id', { count: 'exact', head: true }).gte('created_at', todayStart),
+        supabase.from('deliveries').select('id', { count: 'exact', head: true }).eq('status', 'livre').gte('delivered_at', todayStart),
+        // Only fetch last 5 deliveries for the recent list
+        supabase.from('deliveries').select('id, reference, status, created_at, delivered_at, pharmacy_id, driver_id').order('created_at', { ascending: false }).limit(5),
+        // Only fetch last 7 days of deliveries for the chart (minimal fields)
+        supabase.from('deliveries').select('created_at, delivered_at, status, pharmacy_id').gte('created_at', sevenDaysAgo),
         supabase.from('profiles').select('user_id, full_name'),
       ]);
 
-      const deliveries = deliveriesRes.data || [];
-      const pharmacies = pharmaciesRes.data || [];
-      const profiles = profilesRes.data || [];
-      const todayStart = startOfDay(new Date()).toISOString();
+      apiMonitor.record('/rest/v1/deliveries', 'GET', 200);
 
-      const todayDeliveries = deliveries.filter(d => d.created_at >= todayStart);
-      const todayDelivered = todayDeliveries.filter(d => d.status === 'livre');
-      const totalDelivered = deliveries.filter(d => d.status === 'livre').length;
-      const deliveryRate = deliveries.length > 0 ? Math.round((totalDelivered / deliveries.length) * 100) : 0;
+      const total = totalRes.count || 0;
+      const pendingCount = pendingRes.count || 0;
+      const deliveredCount = deliveredRes.count || 0;
+      const pharmaciesCount = pharmaciesRes.count || 0;
+      const pharmaciesGpsCount = pharmaciesGpsRes.count || 0;
+      const driversCount = driversRes.count || 0;
+      const usersCount = usersRes.count || 0;
+      const todayCreated = todayCreatedRes.count || 0;
+      const todayDelivered = todayDeliveredRes.count || 0;
+      const deliveryRate = total > 0 ? Math.round((deliveredCount / total) * 100) : 0;
 
-      setStats({
-        totalDeliveries: deliveries.length,
-        pending: deliveries.filter(d => d.status === 'en_attente').length,
-        delivered: totalDelivered,
-        pharmacies: pharmacies.length,
-        pharmaciesWithGps: pharmacies.filter(p => p.latitude && p.longitude).length,
-        drivers: driversRes.count || 0,
-        users: usersRes.count || 0,
-        todayDeliveries: todayDeliveries.length,
-        todayDelivered: todayDelivered.length,
+      const newStats: Stats = {
+        totalDeliveries: total,
+        pending: pendingCount,
+        delivered: deliveredCount,
+        pharmacies: pharmaciesCount,
+        pharmaciesWithGps: pharmaciesGpsCount,
+        drivers: driversCount,
+        users: usersCount,
+        todayDeliveries: todayCreated,
+        todayDelivered: todayDelivered,
         deliveryRate,
-      });
+      };
+      setStats(newStats);
 
-      // Recent deliveries (last 5)
-      const pharMap = new Map(pharmacies.map(p => [p.id, p.name]));
-      const profileMap = new Map(profiles.map(p => [p.user_id, p.full_name]));
-      const recent = deliveries.slice(0, 5).map(d => ({
+      // Recent deliveries - need pharmacy names
+      const recentDels = recentRes.data || [];
+      const recentPharmIds = [...new Set(recentDels.map(d => d.pharmacy_id))];
+      let pharMap = new Map<string, string>();
+      if (recentPharmIds.length > 0) {
+        const { data: pharData } = await supabase.from('pharmacies').select('id, name').in('id', recentPharmIds);
+        pharMap = new Map((pharData || []).map(p => [p.id, p.name]));
+      }
+      const profileMap = new Map((profilesRes.data || []).map(p => [p.user_id, p.full_name]));
+
+      const recent: RecentDelivery[] = recentDels.map(d => ({
         id: d.id,
         reference: d.reference,
         status: d.status,
@@ -93,34 +157,66 @@ export default function AdminDashboard() {
       }));
       setRecentDeliveries(recent);
 
-      // Daily chart data (last 7 days)
+      // Daily chart from last 7 days data only
+      const last7 = last7daysRes.data || [];
       const days: DailyData[] = [];
       for (let i = 6; i >= 0; i--) {
         const date = subDays(new Date(), i);
         const dayStr = format(date, 'yyyy-MM-dd');
         const label = isToday(date) ? "Auj." : isYesterday(date) ? "Hier" : format(date, 'EEE', { locale: fr });
-        const created = deliveries.filter(d => format(new Date(d.created_at), 'yyyy-MM-dd') === dayStr).length;
-        const delivered = deliveries.filter(d => d.delivered_at && format(new Date(d.delivered_at), 'yyyy-MM-dd') === dayStr).length;
-        days.push({ day: label, créées: created, livrées: delivered });
+        const created = last7.filter(d => format(new Date(d.created_at), 'yyyy-MM-dd') === dayStr).length;
+        const deliveredDay = last7.filter(d => d.delivered_at && format(new Date(d.delivered_at), 'yyyy-MM-dd') === dayStr).length;
+        days.push({ day: label, créées: created, livrées: deliveredDay });
       }
       setDailyData(days);
 
-      // Top pharmacies by delivery count
+      // Top pharmacies from last 7 days
       const pharmaCounts = new Map<string, number>();
-      deliveries.forEach(d => {
+      last7.forEach(d => {
         const name = pharMap.get(d.pharmacy_id) || 'Inconnue';
         pharmaCounts.set(name, (pharmaCounts.get(name) || 0) + 1);
       });
+      // If we need more pharmacy names, fetch them
+      const missingPharmIds = [...new Set(last7.map(d => d.pharmacy_id).filter(id => !pharMap.has(id)))];
+      if (missingPharmIds.length > 0) {
+        const { data: morePhar } = await supabase.from('pharmacies').select('id, name').in('id', missingPharmIds);
+        (morePhar || []).forEach(p => pharMap.set(p.id, p.name));
+        // Rebuild counts
+        pharmaCounts.clear();
+        last7.forEach(d => {
+          const name = pharMap.get(d.pharmacy_id) || 'Inconnue';
+          pharmaCounts.set(name, (pharmaCounts.get(name) || 0) + 1);
+        });
+      }
+
       const sorted = Array.from(pharmaCounts.entries())
         .sort((a, b) => b[1] - a[1])
         .slice(0, 5)
         .map(([name, count]) => ({ name, count }));
       setTopPharmacies(sorted);
 
+      // Cache results
+      setCachedData({ stats: newStats, recentDeliveries: recent, dailyData: days, topPharmacies: sorted });
+    } catch {
+      // Use cached data as fallback
+      const cached = getCachedData();
+      if (cached) {
+        setStats(cached.stats);
+        setRecentDeliveries(cached.recentDeliveries);
+        setDailyData(cached.dailyData);
+        setTopPharmacies(cached.topPharmacies);
+      }
+    } finally {
       setLoading(false);
-    };
-    fetchStats();
+    }
   }, []);
+
+  useEffect(() => {
+    if (!fetchedRef.current) {
+      fetchedRef.current = true;
+      fetchStats();
+    }
+  }, [fetchStats]);
 
   const summaryCards = [
     { label: 'Total livraisons', value: stats.totalDeliveries, icon: Package, color: 'text-primary' },
