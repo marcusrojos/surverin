@@ -468,7 +468,7 @@ export function ParcoursDeliveries({
                 Livrées ({delivered.length})
               </p>
               {delivered.map(pd => {
-                const isPendingSync = pendingDeliveries.some(p => p.deliveryId === pd.deliveryId);
+                const isPendingSync = pendingDeliveries.some(p => p.delivery_id === pd.deliveryId);
                 return (
                   <Card key={pd.pharmacyId} className={cn('opacity-70', isPendingSync && 'border-warning/30')}>
                     <CardContent className="pt-4 pb-4">
