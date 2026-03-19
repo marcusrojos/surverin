@@ -84,12 +84,15 @@ export function ParcoursDeliveries({
     try {
       const { data: ppData, error: ppError } = await supabase
         .from('parcours_pharmacies')
-        .select('pharmacy_id')
-        .eq('parcours_id', parcoursId);
+        .select('pharmacy_id, position')
+        .eq('parcours_id', parcoursId)
+        .order('position', { ascending: true });
 
       if (ppError) throw ppError;
 
       const pharmacyIds = (ppData || []).map(pp => pp.pharmacy_id);
+      const positionMap = new Map((ppData || []).map(pp => [pp.pharmacy_id, pp.position]));
+
       if (pharmacyIds.length === 0) {
         setDeliveries([]);
         setLoading(false);
@@ -100,8 +103,7 @@ export function ParcoursDeliveries({
         .from('deliveries')
         .select('*')
         .eq('driver_id', driverId)
-        .in('pharmacy_id', pharmacyIds)
-        .order('created_at', { ascending: true });
+        .in('pharmacy_id', pharmacyIds);
 
       if (delError) throw delError;
 
@@ -127,6 +129,13 @@ export function ParcoursDeliveries({
         recipient_name: d.recipient_name,
         created_at: d.created_at,
       }));
+
+      // Sort by pharmacy position in the axis
+      mapped.sort((a, b) => {
+        const posA = positionMap.get(a.pharmacy_id) ?? 999;
+        const posB = positionMap.get(b.pharmacy_id) ?? 999;
+        return posA - posB;
+      });
 
       setDeliveries(mapped);
     } catch {
