@@ -252,60 +252,98 @@ export async function generateInventoryPDF(data: InventoryPDFData) {
   }
 
   // ── SCANS DETAIL ──
-  if (data.scans.length > 0) {
-    // Missing
-    const missing = data.scans.filter(s => s.status === 'missing');
-    if (missing.length > 0) {
-      drawSectionTitle('COLIS MANQUANTS');
-      for (const s of missing) {
-        ensureSpace(6);
-        doc.setFontSize(8);
-        doc.setFont('helvetica', 'normal');
-        doc.setTextColor(200, 60, 60);
-        const label = `✗ ${s.barcode}`;
-        const detail = [s.type, s.pharmacy_name].filter(Boolean).join(' — ');
-        doc.text(`${label}${detail ? ` (${detail})` : ''}`, margin + 6, y);
-        setColor(TEXT_DARK);
-        y += 5.5;
-      }
-      y += 2;
-    }
+  // Compute missing from expectedColis cross-referenced with scans for robustness
+  const scannedBarcodes = new Set(data.scans.filter(s => s.status === 'matched').map(s => s.barcode));
+  const missingFromScans = data.scans.filter(s => s.status === 'missing');
+  const missingFromExpected = data.expectedColis
+    .filter(c => !scannedBarcodes.has(c.barcode) && !missingFromScans.some(m => m.barcode === c.barcode))
+    .map(c => ({ barcode: c.barcode, type: c.type, pharmacy_name: c.pharmacyName, status: 'missing' as const }));
+  const allMissing = [...missingFromScans, ...missingFromExpected];
 
-    // Extra
-    const extra = data.scans.filter(s => s.status === 'extra');
-    if (extra.length > 0) {
-      drawSectionTitle('COLIS EN TROP (NON ATTENDUS)');
-      for (const s of extra) {
-        ensureSpace(6);
-        doc.setFontSize(8);
-        doc.setFont('helvetica', 'normal');
-        doc.setTextColor(200, 130, 0);
-        const label = `+ ${s.barcode}`;
-        const detail = [s.type, s.pharmacy_name].filter(Boolean).join(' — ');
-        doc.text(`${label}${detail ? ` (${detail})` : ''}`, margin + 6, y);
-        setColor(TEXT_DARK);
-        y += 5.5;
-      }
-      y += 2;
-    }
+  const extra = data.scans.filter(s => s.status === 'extra');
 
-    // Matched
-    const matched = data.scans.filter(s => s.status === 'matched');
-    if (matched.length > 0) {
-      drawSectionTitle('COLIS CONFORMES');
-      for (const s of matched) {
-        ensureSpace(6);
-        doc.setFontSize(8);
-        doc.setFont('helvetica', 'normal');
-        setColor(BRAND_GREEN);
-        const label = `✓ ${s.barcode}`;
-        const detail = [s.type, s.pharmacy_name].filter(Boolean).join(' — ');
-        doc.text(`${label}${detail ? ` (${detail})` : ''}`, margin + 6, y);
-        setColor(TEXT_DARK);
-        y += 5.5;
-      }
-      y += 2;
+  if (allMissing.length > 0) {
+    drawSectionTitle(`COLIS MANQUANTS (${allMissing.length})`);
+    // Table header
+    ensureSpace(12);
+    const mColX = [margin + 6, margin + 55, margin + 95];
+    setFillCol({ r: 255, g: 235, b: 235 });
+    doc.roundedRect(margin, y - 3, contentWidth, 8, 1, 1, 'F');
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(180, 40, 40);
+    doc.text('Code-barres', mColX[0], y + 2);
+    doc.text('Type', mColX[1], y + 2);
+    doc.text('Pharmacie', mColX[2], y + 2);
+    y += 8;
+    setDrawCol(BORDER_LIGHT);
+    doc.setLineWidth(0.3);
+    doc.line(margin, y, pageWidth - margin, y);
+    y += 4;
+
+    for (const s of allMissing) {
+      ensureSpace(6);
+      doc.setFontSize(7.5);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(200, 60, 60);
+      doc.text(`✗ ${s.barcode}`, mColX[0], y);
+      doc.text(s.type || '—', mColX[1], y);
+      doc.text(s.pharmacy_name || '—', mColX[2], y);
+      y += 5.5;
     }
+    setColor(TEXT_DARK);
+    y += 3;
+  }
+
+  if (extra.length > 0) {
+    drawSectionTitle(`COLIS EN TROP — NON ATTENDUS (${extra.length})`);
+    // Table header
+    ensureSpace(12);
+    const eColX = [margin + 6, margin + 55, margin + 95];
+    setFillCol({ r: 255, g: 245, b: 225 });
+    doc.roundedRect(margin, y - 3, contentWidth, 8, 1, 1, 'F');
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(180, 100, 0);
+    doc.text('Code-barres', eColX[0], y + 2);
+    doc.text('Type', eColX[1], y + 2);
+    doc.text('Pharmacie', eColX[2], y + 2);
+    y += 8;
+    setDrawCol(BORDER_LIGHT);
+    doc.setLineWidth(0.3);
+    doc.line(margin, y, pageWidth - margin, y);
+    y += 4;
+
+    for (const s of extra) {
+      ensureSpace(6);
+      doc.setFontSize(7.5);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(200, 130, 0);
+      doc.text(`+ ${s.barcode}`, eColX[0], y);
+      doc.text(s.type || '—', eColX[1], y);
+      doc.text(s.pharmacy_name || '—', eColX[2], y);
+      y += 5.5;
+    }
+    setColor(TEXT_DARK);
+    y += 3;
+  }
+
+  // Matched
+  const matched = data.scans.filter(s => s.status === 'matched');
+  if (matched.length > 0) {
+    drawSectionTitle(`COLIS CONFORMES (${matched.length})`);
+    for (const s of matched) {
+      ensureSpace(6);
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'normal');
+      setColor(BRAND_GREEN);
+      const label = `✓ ${s.barcode}`;
+      const detail = [s.type, s.pharmacy_name].filter(Boolean).join(' — ');
+      doc.text(`${label}${detail ? ` (${detail})` : ''}`, margin + 6, y);
+      setColor(TEXT_DARK);
+      y += 5.5;
+    }
+    y += 2;
   }
 
   // ── FORCE CONFIRMATION ──
