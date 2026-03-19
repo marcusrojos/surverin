@@ -434,14 +434,10 @@ export function ParcoursDeliveries({
                           size="sm"
                           className="mt-3 w-full"
                           onClick={() => openValidation(pd)}
-                          disabled={!pd.deliveryId}
                         >
                           <Truck className="w-4 h-4 mr-1.5" />
                           Livrer
                         </Button>
-                        {!pd.deliveryId && (
-                          <p className="text-[10px] text-destructive mt-1">Aucune livraison créée pour cette pharmacie</p>
-                        )}
                       </div>
                     </div>
                   </CardContent>
