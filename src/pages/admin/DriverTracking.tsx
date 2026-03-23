@@ -194,7 +194,7 @@ export default function DriverTrackingPage() {
           parcours_id: d.parcours_id,
         }));
 
-        const compliance = positions && positions.size >= 2
+        const compliance = axisName
           ? computeCompliance(records, axisName)
           : null;
 
