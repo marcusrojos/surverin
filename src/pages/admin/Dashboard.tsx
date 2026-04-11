@@ -125,6 +125,18 @@ export default function AdminDashboard() {
       const todayDelivered = todayDeliveredRes.count || 0;
       const deliveryRate = total > 0 ? Math.round((deliveredCount / total) * 100) : 0;
 
+      // Bacs stats
+      const bacsData = bacsBalanceRes.data || [];
+      const totalBacsPending = bacsData.reduce((sum: number, b: any) => sum + (b.pending_bacs || 0), 0);
+
+      // Sum bacs_recovered from all delivered deliveries
+      const { data: bacsRecoveredData } = await supabase
+        .from('deliveries')
+        .select('bacs_recovered')
+        .eq('status', 'livre')
+        .gt('bacs_recovered', 0);
+      const totalBacsRecovered = (bacsRecoveredData || []).reduce((sum: number, d: any) => sum + (d.bacs_recovered || 0), 0);
+
       const newStats: Stats = {
         totalDeliveries: total,
         pending: pendingCount,
@@ -136,6 +148,8 @@ export default function AdminDashboard() {
         todayDeliveries: todayCreated,
         todayDelivered: todayDelivered,
         deliveryRate,
+        totalBacsPending,
+        totalBacsRecovered,
       };
       setStats(newStats);
 
