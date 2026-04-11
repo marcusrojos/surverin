@@ -360,6 +360,22 @@ export async function generateReceiptPDF(data: ReceiptData) {
   }
 
   // ══════════════════════════════════════════════
+  //            BACS RECOVERY
+  // ══════════════════════════════════════════════
+
+  if ((data.bacs_to_recover && data.bacs_to_recover > 0) || (data.bacs_recovered && data.bacs_recovered > 0)) {
+    drawSectionTitle('RÉCUPÉRATION DE BACS');
+    addField('Bacs à récupérer :', String(data.bacs_to_recover || 0));
+    addField('Bacs récupérés :', String(data.bacs_recovered || 0));
+    const remaining = (data.bacs_to_recover || 0) - (data.bacs_recovered || 0);
+    if (remaining > 0) {
+      addInfoBox(`⚠ ${remaining} bac${remaining > 1 ? 's' : ''} non récupéré${remaining > 1 ? 's' : ''} — reporté${remaining > 1 ? 's' : ''} au prochain passage`, 'warning');
+    } else if (data.bacs_to_recover && data.bacs_to_recover > 0) {
+      addInfoBox('✓ Tous les bacs ont été récupérés', 'success');
+    }
+  }
+
+  // ══════════════════════════════════════════════
   //              SIGNATURE
   // ══════════════════════════════════════════════
 
