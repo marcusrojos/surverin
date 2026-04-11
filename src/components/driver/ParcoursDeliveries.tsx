@@ -197,11 +197,15 @@ export function ParcoursDeliveries({
       const pharmacyIds = ppData.map(pp => pp.pharmacy_id);
       const ppIds = ppData.map(pp => pp.id);
 
-      const [pharmRes, colisRes, delivRes] = await Promise.all([
+      const [pharmRes, colisRes, delivRes, bacsRes] = await Promise.all([
         supabase.from('pharmacies').select('id, name, address, latitude, longitude').in('id', pharmacyIds),
         supabase.from('parcours_colis').select('id, barcode, type, parcours_pharmacy_id').in('parcours_pharmacy_id', ppIds),
         supabase.from('deliveries').select('*').eq('parcours_id', parcoursId),
+        supabase.from('pharmacy_bacs_balance').select('pharmacy_id, pending_bacs').in('pharmacy_id', pharmacyIds),
       ]);
+
+      const bacsBalanceMap = new Map<string, number>();
+      (bacsRes.data || []).forEach((b: any) => bacsBalanceMap.set(b.pharmacy_id, b.pending_bacs));
 
       const mapped = buildMappedData(
         ppData,
@@ -216,6 +220,7 @@ export function ParcoursDeliveries({
           recipient_name: d.recipient_name,
           verification_code: d.verification_code,
         })),
+        bacsBalanceMap,
       );
 
       setPharmacyDeliveries(mapped);
