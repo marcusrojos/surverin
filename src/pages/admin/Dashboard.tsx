@@ -19,6 +19,8 @@ interface Stats {
   todayDeliveries: number;
   todayDelivered: number;
   deliveryRate: number;
+  totalBacsPending: number;
+  totalBacsRecovered: number;
 }
 
 interface RecentDelivery {
