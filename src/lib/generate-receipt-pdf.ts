@@ -35,6 +35,9 @@ interface ReceiptData {
   geofenceRadius?: number;
   // Online/offline status
   isOffline?: boolean;
+  // Bacs recovery
+  bacs_to_recover?: number;
+  bacs_recovered?: number;
 }
 
 // DPCI Brand Colors (HSL 152 72% 30% → RGB)
