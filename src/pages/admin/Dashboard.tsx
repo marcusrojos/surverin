@@ -19,6 +19,8 @@ interface Stats {
   todayDeliveries: number;
   todayDelivered: number;
   deliveryRate: number;
+  totalBacsPending: number;
+  totalBacsRecovered: number;
 }
 
 interface RecentDelivery {
@@ -60,6 +62,7 @@ export default function AdminDashboard() {
   const [stats, setStats] = useState<Stats>({
     totalDeliveries: 0, pending: 0, delivered: 0, pharmacies: 0, pharmaciesWithGps: 0,
     drivers: 0, users: 0, todayDeliveries: 0, todayDelivered: 0, deliveryRate: 0,
+    totalBacsPending: 0, totalBacsRecovered: 0,
   });
   const [recentDeliveries, setRecentDeliveries] = useState<RecentDelivery[]>([]);
   const [dailyData, setDailyData] = useState<DailyData[]>([]);
@@ -92,6 +95,7 @@ export default function AdminDashboard() {
         driversRes, usersRes,
         todayCreatedRes, todayDeliveredRes,
         recentRes, last7daysRes, profilesRes,
+        bacsBalanceRes,
       ] = await Promise.all([
         supabase.from('deliveries').select('id', { count: 'exact', head: true }),
         supabase.from('deliveries').select('id', { count: 'exact', head: true }).eq('status', 'en_attente'),
@@ -102,11 +106,10 @@ export default function AdminDashboard() {
         supabase.from('user_roles').select('id', { count: 'exact', head: true }),
         supabase.from('deliveries').select('id', { count: 'exact', head: true }).gte('created_at', todayStart),
         supabase.from('deliveries').select('id', { count: 'exact', head: true }).eq('status', 'livre').gte('delivered_at', todayStart),
-        // Only fetch last 5 deliveries for the recent list
         supabase.from('deliveries').select('id, reference, status, created_at, delivered_at, pharmacy_id, driver_id').order('created_at', { ascending: false }).limit(5),
-        // Only fetch last 7 days of deliveries for the chart (minimal fields)
         supabase.from('deliveries').select('created_at, delivered_at, status, pharmacy_id').gte('created_at', sevenDaysAgo),
         supabase.from('profiles').select('user_id, full_name'),
+        supabase.from('pharmacy_bacs_balance').select('pending_bacs'),
       ]);
 
       apiMonitor.record('/rest/v1/deliveries', 'GET', 200);
@@ -122,6 +125,18 @@ export default function AdminDashboard() {
       const todayDelivered = todayDeliveredRes.count || 0;
       const deliveryRate = total > 0 ? Math.round((deliveredCount / total) * 100) : 0;
 
+      // Bacs stats
+      const bacsData = bacsBalanceRes.data || [];
+      const totalBacsPending = bacsData.reduce((sum: number, b: any) => sum + (b.pending_bacs || 0), 0);
+
+      // Sum bacs_recovered from all delivered deliveries
+      const { data: bacsRecoveredData } = await supabase
+        .from('deliveries')
+        .select('bacs_recovered')
+        .eq('status', 'livre')
+        .gt('bacs_recovered', 0);
+      const totalBacsRecovered = (bacsRecoveredData || []).reduce((sum: number, d: any) => sum + (d.bacs_recovered || 0), 0);
+
       const newStats: Stats = {
         totalDeliveries: total,
         pending: pendingCount,
@@ -133,6 +148,8 @@ export default function AdminDashboard() {
         todayDeliveries: todayCreated,
         todayDelivered: todayDelivered,
         deliveryRate,
+        totalBacsPending,
+        totalBacsRecovered,
       };
       setStats(newStats);
 
@@ -224,7 +241,8 @@ export default function AdminDashboard() {
     { label: 'Livrées', value: stats.delivered, icon: CheckCircle, color: 'text-success' },
     { label: 'Pharmacies', value: stats.pharmacies, icon: Building2, color: 'text-info' },
     { label: 'Livreurs', value: stats.drivers, icon: Truck, color: 'text-primary' },
-    { label: 'Utilisateurs', value: stats.users, icon: Users, color: 'text-muted-foreground' },
+    { label: 'Bacs en attente', value: stats.totalBacsPending, icon: Package, color: 'text-warning' },
+    { label: 'Bacs récupérés', value: stats.totalBacsRecovered, icon: CheckCircle, color: 'text-success' },
   ];
 
   const PIE_COLORS = ['hsl(152, 72%, 30%)', 'hsl(38, 92%, 50%)'];
@@ -245,7 +263,7 @@ export default function AdminDashboard() {
         </div>
 
         {/* KPI Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
           {summaryCards.map((c) => (
             <Card key={c.label} className="card-hover">
               <CardHeader className="flex flex-row items-center justify-between pb-2 pt-4 px-4">

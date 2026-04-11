@@ -79,6 +79,8 @@ export type Database = {
       }
       deliveries: {
         Row: {
+          bacs_recovered: number
+          bacs_to_recover: number
           created_at: string
           delivered_at: string | null
           driver_id: string | null
@@ -103,6 +105,8 @@ export type Database = {
           verification_code: string | null
         }
         Insert: {
+          bacs_recovered?: number
+          bacs_to_recover?: number
           created_at?: string
           delivered_at?: string | null
           driver_id?: string | null
@@ -127,6 +131,8 @@ export type Database = {
           verification_code?: string | null
         }
         Update: {
+          bacs_recovered?: number
+          bacs_to_recover?: number
           created_at?: string
           delivered_at?: string | null
           driver_id?: string | null
@@ -433,6 +439,35 @@ export type Database = {
           user_id?: string | null
         }
         Relationships: []
+      }
+      pharmacy_bacs_balance: {
+        Row: {
+          id: string
+          pending_bacs: number
+          pharmacy_id: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          pending_bacs?: number
+          pharmacy_id: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          pending_bacs?: number
+          pharmacy_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pharmacy_bacs_balance_pharmacy_id_fkey"
+            columns: ["pharmacy_id"]
+            isOneToOne: true
+            referencedRelation: "pharmacies"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       profiles: {
         Row: {

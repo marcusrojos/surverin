@@ -65,6 +65,8 @@ interface PharmacyDelivery {
   nb_cartons: number;
   nb_sachets: number;
   nb_barques: number;
+  // Bacs recovery
+  bacsToRecover: number;
 }
 
 // Stable cache store — created once outside component renders
@@ -89,6 +91,7 @@ export function ParcoursDeliveries({
   const [nbCartonsReceived, setNbCartonsReceived] = useState(0);
   const [nbSachetsReceived, setNbSachetsReceived] = useState(0);
   const [nbBarquesReceived, setNbBarquesReceived] = useState(0);
+  const [bacsRecovered, setBacsRecovered] = useState(0);
   const [offlinePhoto, setOfflinePhoto] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -122,6 +125,7 @@ export function ParcoursDeliveries({
     pharmData: { id: string; name: string; address: string | null; latitude: number | null; longitude: number | null }[],
     colisData: { id: string; barcode: string; type: string; parcours_pharmacy_id: string }[],
     delivData: { id: string; pharmacy_id: string; status: string; reference: string; delivered_at: string | null; recipient_name: string | null; verification_code: string | null }[],
+    bacsBalanceMap: Map<string, number>,
   ): PharmacyDelivery[] => {
     const pharmMap = new Map(pharmData.map(p => [p.id, p]));
     const colisMap = new Map<string, { id: string; barcode: string; type: string }[]>();
@@ -154,6 +158,7 @@ export function ParcoursDeliveries({
         nb_cartons: colis.filter(c => c.type === 'carton').length,
         nb_sachets: colis.filter(c => c.type === 'sachet').length,
         nb_barques: colis.filter(c => c.type === 'barque').length,
+        bacsToRecover: bacsBalanceMap.get(pp.pharmacy_id) || 0,
       };
     });
   };
@@ -192,11 +197,15 @@ export function ParcoursDeliveries({
       const pharmacyIds = ppData.map(pp => pp.pharmacy_id);
       const ppIds = ppData.map(pp => pp.id);
 
-      const [pharmRes, colisRes, delivRes] = await Promise.all([
+      const [pharmRes, colisRes, delivRes, bacsRes] = await Promise.all([
         supabase.from('pharmacies').select('id, name, address, latitude, longitude').in('id', pharmacyIds),
         supabase.from('parcours_colis').select('id, barcode, type, parcours_pharmacy_id').in('parcours_pharmacy_id', ppIds),
         supabase.from('deliveries').select('*').eq('parcours_id', parcoursId),
+        supabase.from('pharmacy_bacs_balance').select('pharmacy_id, pending_bacs').in('pharmacy_id', pharmacyIds),
       ]);
+
+      const bacsBalanceMap = new Map<string, number>();
+      (bacsRes.data || []).forEach((b: any) => bacsBalanceMap.set(b.pharmacy_id, b.pending_bacs));
 
       const mapped = buildMappedData(
         ppData,
@@ -211,6 +220,7 @@ export function ParcoursDeliveries({
           recipient_name: d.recipient_name,
           verification_code: d.verification_code,
         })),
+        bacsBalanceMap,
       );
 
       setPharmacyDeliveries(mapped);
@@ -270,6 +280,7 @@ export function ParcoursDeliveries({
     setNbCartonsReceived(pd.nb_cartons);
     setNbSachetsReceived(pd.nb_sachets);
     setNbBarquesReceived(pd.nb_barques);
+    setBacsRecovered(0);
   };
 
   const handlePhotoCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -325,12 +336,34 @@ export function ParcoursDeliveries({
             nb_cartons_received: nbCartonsReceived,
             nb_sachets_received: nbSachetsReceived,
             nb_barques_received: nbBarquesReceived,
+            bacs_to_recover: validating.bacsToRecover,
+            bacs_recovered: bacsRecovered,
             delivered_at: new Date().toISOString(),
             driver_latitude: driverPosition?.latitude ?? null,
             driver_longitude: driverPosition?.longitude ?? null,
           } as any)
           .eq('id', deliveryId);
         if (error) throw error;
+
+        // Update pharmacy_bacs_balance:
+        // New pending = (previous pending - recovered) + bacs delivered now
+        const newPending = Math.max(0, validating.bacsToRecover - bacsRecovered) + validating.nb_barques;
+        const { data: existingBalance } = await supabase
+          .from('pharmacy_bacs_balance')
+          .select('id')
+          .eq('pharmacy_id', validating.pharmacyId)
+          .maybeSingle();
+
+        if (existingBalance) {
+          await supabase
+            .from('pharmacy_bacs_balance')
+            .update({ pending_bacs: newPending, updated_at: new Date().toISOString() } as any)
+            .eq('pharmacy_id', validating.pharmacyId);
+        } else {
+          await supabase
+            .from('pharmacy_bacs_balance')
+            .insert({ pharmacy_id: validating.pharmacyId, pending_bacs: newPending } as any);
+        }
 
         toast.success('Livraison validée ✓');
         setValidating(null);
@@ -541,6 +574,15 @@ export function ParcoursDeliveries({
                               </span>
                             )}
                           </div>
+                          {/* Bacs to recover */}
+                          {pd.bacsToRecover > 0 && (
+                            <div className="mt-1.5 flex items-center gap-1.5 px-2 py-1 rounded-md bg-accent/50 border border-accent">
+                              <Package className="w-3.5 h-3.5 text-primary shrink-0" />
+                              <span className="text-xs font-semibold text-primary">
+                                {pd.bacsToRecover} bac{pd.bacsToRecover > 1 ? 's' : ''} à récupérer
+                              </span>
+                            </div>
+                          )}
                           {pd.colis.length > 0 && (
                             <div className="flex flex-wrap gap-1 mt-1">
                               {pd.colis.map(c => (
@@ -731,6 +773,31 @@ export function ParcoursDeliveries({
                     </div>
                   </div>
                 </div>
+
+                {/* Bacs recovery */}
+                {validating && validating.bacsToRecover > 0 && (
+                  <div className="space-y-2 p-3 rounded-lg bg-accent/30 border border-accent">
+                    <Label className="flex items-center gap-1.5 text-primary">
+                      <Package className="w-3.5 h-3.5" />
+                      Bacs à récupérer : {validating.bacsToRecover}
+                    </Label>
+                    <div>
+                      <p className="text-[10px] text-muted-foreground mb-1">Bacs récupérés</p>
+                      <Input
+                        type="number"
+                        min={0}
+                        max={validating.bacsToRecover}
+                        value={bacsRecovered}
+                        onChange={(e) => setBacsRecovered(Math.min(parseInt(e.target.value) || 0, validating.bacsToRecover))}
+                      />
+                      {bacsRecovered < validating.bacsToRecover && (
+                        <p className="text-[10px] text-warning mt-1">
+                          {validating.bacsToRecover - bacsRecovered} bac{validating.bacsToRecover - bacsRecovered > 1 ? 's' : ''} restant{validating.bacsToRecover - bacsRecovered > 1 ? 's' : ''} à récupérer au prochain passage
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 {/* Recipient name */}
                 <div className="space-y-1.5">

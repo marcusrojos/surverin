@@ -35,6 +35,9 @@ interface ReceiptData {
   geofenceRadius?: number;
   // Online/offline status
   isOffline?: boolean;
+  // Bacs recovery
+  bacs_to_recover?: number;
+  bacs_recovered?: number;
 }
 
 // DPCI Brand Colors (HSL 152 72% 30% → RGB)
@@ -260,7 +263,7 @@ export async function generateReceiptPDF(data: ReceiptData) {
     // Geofence compliance — only for online deliveries
     if (!data.isOffline && data.driverLatitude && data.driverLongitude && data.pharmacyLatitude && data.pharmacyLongitude) {
       const dist = calculateDistance(data.driverLatitude, data.driverLongitude, data.pharmacyLatitude, data.pharmacyLongitude);
-      const radius = data.geofenceRadius || 20;
+      const radius = data.geofenceRadius || 10;
       const withinZone = dist <= radius;
       const distStr = dist < 1000 ? `${Math.round(dist)} m` : `${(dist / 1000).toFixed(1)} km`;
       addField('Distance :', `${distStr} (périmètre autorisé : ${radius}m)`);
@@ -353,6 +356,22 @@ export async function generateReceiptPDF(data: ReceiptData) {
         doc.text(`• ${typeLabel} — ${pkg.reference || 'Sans réf.'}`, margin + 8, y);
         y += 5;
       }
+    }
+  }
+
+  // ══════════════════════════════════════════════
+  //            BACS RECOVERY
+  // ══════════════════════════════════════════════
+
+  if ((data.bacs_to_recover && data.bacs_to_recover > 0) || (data.bacs_recovered && data.bacs_recovered > 0)) {
+    drawSectionTitle('RÉCUPÉRATION DE BACS');
+    addField('Bacs à récupérer :', String(data.bacs_to_recover || 0));
+    addField('Bacs récupérés :', String(data.bacs_recovered || 0));
+    const remaining = (data.bacs_to_recover || 0) - (data.bacs_recovered || 0);
+    if (remaining > 0) {
+      addInfoBox(`⚠ ${remaining} bac${remaining > 1 ? 's' : ''} non récupéré${remaining > 1 ? 's' : ''} — reporté${remaining > 1 ? 's' : ''} au prochain passage`, 'warning');
+    } else if (data.bacs_to_recover && data.bacs_to_recover > 0) {
+      addInfoBox('✓ Tous les bacs ont été récupérés', 'success');
     }
   }
 
