@@ -774,6 +774,31 @@ export function ParcoursDeliveries({
                   </div>
                 </div>
 
+                {/* Bacs recovery */}
+                {validating && validating.bacsToRecover > 0 && (
+                  <div className="space-y-2 p-3 rounded-lg bg-accent/30 border border-accent">
+                    <Label className="flex items-center gap-1.5 text-primary">
+                      <Package className="w-3.5 h-3.5" />
+                      Bacs à récupérer : {validating.bacsToRecover}
+                    </Label>
+                    <div>
+                      <p className="text-[10px] text-muted-foreground mb-1">Bacs récupérés</p>
+                      <Input
+                        type="number"
+                        min={0}
+                        max={validating.bacsToRecover}
+                        value={bacsRecovered}
+                        onChange={(e) => setBacsRecovered(Math.min(parseInt(e.target.value) || 0, validating.bacsToRecover))}
+                      />
+                      {bacsRecovered < validating.bacsToRecover && (
+                        <p className="text-[10px] text-warning mt-1">
+                          {validating.bacsToRecover - bacsRecovered} bac{validating.bacsToRecover - bacsRecovered > 1 ? 's' : ''} restant{validating.bacsToRecover - bacsRecovered > 1 ? 's' : ''} à récupérer au prochain passage
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 {/* Recipient name */}
                 <div className="space-y-1.5">
                   <Label className="flex items-center gap-1.5">
