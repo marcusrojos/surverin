@@ -336,12 +336,34 @@ export function ParcoursDeliveries({
             nb_cartons_received: nbCartonsReceived,
             nb_sachets_received: nbSachetsReceived,
             nb_barques_received: nbBarquesReceived,
+            bacs_to_recover: validating.bacsToRecover,
+            bacs_recovered: bacsRecovered,
             delivered_at: new Date().toISOString(),
             driver_latitude: driverPosition?.latitude ?? null,
             driver_longitude: driverPosition?.longitude ?? null,
           } as any)
           .eq('id', deliveryId);
         if (error) throw error;
+
+        // Update pharmacy_bacs_balance:
+        // New pending = (previous pending - recovered) + bacs delivered now
+        const newPending = Math.max(0, validating.bacsToRecover - bacsRecovered) + validating.nb_barques;
+        const { data: existingBalance } = await supabase
+          .from('pharmacy_bacs_balance')
+          .select('id')
+          .eq('pharmacy_id', validating.pharmacyId)
+          .maybeSingle();
+
+        if (existingBalance) {
+          await supabase
+            .from('pharmacy_bacs_balance')
+            .update({ pending_bacs: newPending, updated_at: new Date().toISOString() } as any)
+            .eq('pharmacy_id', validating.pharmacyId);
+        } else {
+          await supabase
+            .from('pharmacy_bacs_balance')
+            .insert({ pharmacy_id: validating.pharmacyId, pending_bacs: newPending } as any);
+        }
 
         toast.success('Livraison validée ✓');
         setValidating(null);
