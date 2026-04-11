@@ -241,7 +241,8 @@ export default function AdminDashboard() {
     { label: 'Livrées', value: stats.delivered, icon: CheckCircle, color: 'text-success' },
     { label: 'Pharmacies', value: stats.pharmacies, icon: Building2, color: 'text-info' },
     { label: 'Livreurs', value: stats.drivers, icon: Truck, color: 'text-primary' },
-    { label: 'Utilisateurs', value: stats.users, icon: Users, color: 'text-muted-foreground' },
+    { label: 'Bacs en attente', value: stats.totalBacsPending, icon: Package, color: 'text-warning' },
+    { label: 'Bacs récupérés', value: stats.totalBacsRecovered, icon: CheckCircle, color: 'text-success' },
   ];
 
   const PIE_COLORS = ['hsl(152, 72%, 30%)', 'hsl(38, 92%, 50%)'];
