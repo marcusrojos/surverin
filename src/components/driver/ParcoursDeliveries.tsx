@@ -91,6 +91,7 @@ export function ParcoursDeliveries({
   const [nbCartonsReceived, setNbCartonsReceived] = useState(0);
   const [nbSachetsReceived, setNbSachetsReceived] = useState(0);
   const [nbBarquesReceived, setNbBarquesReceived] = useState(0);
+  const [bacsRecovered, setBacsRecovered] = useState(0);
   const [offlinePhoto, setOfflinePhoto] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
