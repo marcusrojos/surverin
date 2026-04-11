@@ -574,6 +574,15 @@ export function ParcoursDeliveries({
                               </span>
                             )}
                           </div>
+                          {/* Bacs to recover */}
+                          {pd.bacsToRecover > 0 && (
+                            <div className="mt-1.5 flex items-center gap-1.5 px-2 py-1 rounded-md bg-accent/50 border border-accent">
+                              <Package className="w-3.5 h-3.5 text-primary shrink-0" />
+                              <span className="text-xs font-semibold text-primary">
+                                {pd.bacsToRecover} bac{pd.bacsToRecover > 1 ? 's' : ''} à récupérer
+                              </span>
+                            </div>
+                          )}
                           {pd.colis.length > 0 && (
                             <div className="flex flex-wrap gap-1 mt-1">
                               {pd.colis.map(c => (
