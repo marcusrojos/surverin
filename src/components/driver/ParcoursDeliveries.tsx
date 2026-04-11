@@ -280,6 +280,7 @@ export function ParcoursDeliveries({
     setNbCartonsReceived(pd.nb_cartons);
     setNbSachetsReceived(pd.nb_sachets);
     setNbBarquesReceived(pd.nb_barques);
+    setBacsRecovered(0);
   };
 
   const handlePhotoCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
