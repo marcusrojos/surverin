@@ -62,6 +62,7 @@ export default function AdminDashboard() {
   const [stats, setStats] = useState<Stats>({
     totalDeliveries: 0, pending: 0, delivered: 0, pharmacies: 0, pharmaciesWithGps: 0,
     drivers: 0, users: 0, todayDeliveries: 0, todayDelivered: 0, deliveryRate: 0,
+    totalBacsPending: 0, totalBacsRecovered: 0,
   });
   const [recentDeliveries, setRecentDeliveries] = useState<RecentDelivery[]>([]);
   const [dailyData, setDailyData] = useState<DailyData[]>([]);
