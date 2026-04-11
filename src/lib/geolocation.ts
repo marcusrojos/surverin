@@ -22,7 +22,7 @@ function toRad(deg: number): number {
   return deg * (Math.PI / 180);
 }
 
-export const GEOFENCE_RADIUS = 20; // meters
+export const GEOFENCE_RADIUS = 10; // meters
 
 export interface GeoPosition {
   latitude: number;

@@ -65,6 +65,8 @@ interface PharmacyDelivery {
   nb_cartons: number;
   nb_sachets: number;
   nb_barques: number;
+  // Bacs recovery
+  bacsToRecover: number;
 }
 
 // Stable cache store — created once outside component renders
