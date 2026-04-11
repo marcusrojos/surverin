@@ -125,6 +125,7 @@ export function ParcoursDeliveries({
     pharmData: { id: string; name: string; address: string | null; latitude: number | null; longitude: number | null }[],
     colisData: { id: string; barcode: string; type: string; parcours_pharmacy_id: string }[],
     delivData: { id: string; pharmacy_id: string; status: string; reference: string; delivered_at: string | null; recipient_name: string | null; verification_code: string | null }[],
+    bacsBalanceMap: Map<string, number>,
   ): PharmacyDelivery[] => {
     const pharmMap = new Map(pharmData.map(p => [p.id, p]));
     const colisMap = new Map<string, { id: string; barcode: string; type: string }[]>();
@@ -157,6 +158,7 @@ export function ParcoursDeliveries({
         nb_cartons: colis.filter(c => c.type === 'carton').length,
         nb_sachets: colis.filter(c => c.type === 'sachet').length,
         nb_barques: colis.filter(c => c.type === 'barque').length,
+        bacsToRecover: bacsBalanceMap.get(pp.pharmacy_id) || 0,
       };
     });
   };
