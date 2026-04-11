@@ -263,7 +263,7 @@ export async function generateReceiptPDF(data: ReceiptData) {
     // Geofence compliance — only for online deliveries
     if (!data.isOffline && data.driverLatitude && data.driverLongitude && data.pharmacyLatitude && data.pharmacyLongitude) {
       const dist = calculateDistance(data.driverLatitude, data.driverLongitude, data.pharmacyLatitude, data.pharmacyLongitude);
-      const radius = data.geofenceRadius || 20;
+      const radius = data.geofenceRadius || 10;
       const withinZone = dist <= radius;
       const distStr = dist < 1000 ? `${Math.round(dist)} m` : `${(dist / 1000).toFixed(1)} km`;
       addField('Distance :', `${distStr} (périmètre autorisé : ${radius}m)`);
