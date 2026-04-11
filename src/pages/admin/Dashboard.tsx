@@ -95,6 +95,7 @@ export default function AdminDashboard() {
         driversRes, usersRes,
         todayCreatedRes, todayDeliveredRes,
         recentRes, last7daysRes, profilesRes,
+        bacsBalanceRes,
       ] = await Promise.all([
         supabase.from('deliveries').select('id', { count: 'exact', head: true }),
         supabase.from('deliveries').select('id', { count: 'exact', head: true }).eq('status', 'en_attente'),
@@ -105,11 +106,10 @@ export default function AdminDashboard() {
         supabase.from('user_roles').select('id', { count: 'exact', head: true }),
         supabase.from('deliveries').select('id', { count: 'exact', head: true }).gte('created_at', todayStart),
         supabase.from('deliveries').select('id', { count: 'exact', head: true }).eq('status', 'livre').gte('delivered_at', todayStart),
-        // Only fetch last 5 deliveries for the recent list
         supabase.from('deliveries').select('id, reference, status, created_at, delivered_at, pharmacy_id, driver_id').order('created_at', { ascending: false }).limit(5),
-        // Only fetch last 7 days of deliveries for the chart (minimal fields)
         supabase.from('deliveries').select('created_at, delivered_at, status, pharmacy_id').gte('created_at', sevenDaysAgo),
         supabase.from('profiles').select('user_id, full_name'),
+        supabase.from('pharmacy_bacs_balance').select('pending_bacs'),
       ]);
 
       apiMonitor.record('/rest/v1/deliveries', 'GET', 200);
