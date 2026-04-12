@@ -574,7 +574,15 @@ export function ParcoursDeliveries({
                               </span>
                             )}
                           </div>
-                          {/* Bacs to recover */}
+                          {/* Bacs info */}
+                          {pd.nb_barques > 0 && (
+                            <div className="mt-1.5 flex items-center gap-1.5 px-2 py-1 rounded-md bg-muted/50 border border-border">
+                              <Database className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                              <span className="text-xs text-muted-foreground">
+                                {pd.nb_barques} bac{pd.nb_barques > 1 ? 's' : ''} à livrer
+                              </span>
+                            </div>
+                          )}
                           {pd.bacsToRecover > 0 && (
                             <div className="mt-1.5 flex items-center gap-1.5 px-2 py-1 rounded-md bg-accent/50 border border-accent">
                               <Package className="w-3.5 h-3.5 text-primary shrink-0" />
@@ -774,6 +782,19 @@ export function ParcoursDeliveries({
                   </div>
                 </div>
 
+                {/* Bacs delivery info */}
+                {validating && validating.nb_barques > 0 && (
+                  <div className="p-3 rounded-lg bg-muted/50 border border-border">
+                    <p className="text-xs font-medium flex items-center gap-1.5">
+                      <Database className="w-3.5 h-3.5" />
+                      {validating.nb_barques} bac{validating.nb_barques > 1 ? 's' : ''} à livrer dans cette pharmacie
+                    </p>
+                    <p className="text-[10px] text-muted-foreground mt-1">
+                      Ces bacs seront à récupérer au prochain passage
+                    </p>
+                  </div>
+                )}
+
                 {/* Bacs recovery */}
                 {validating && validating.bacsToRecover > 0 && (
                   <div className="space-y-2 p-3 rounded-lg bg-accent/30 border border-accent">
@@ -781,8 +802,11 @@ export function ParcoursDeliveries({
                       <Package className="w-3.5 h-3.5" />
                       Bacs à récupérer : {validating.bacsToRecover}
                     </Label>
+                    <p className="text-[10px] text-muted-foreground">
+                      Bacs laissés lors des livraisons précédentes
+                    </p>
                     <div>
-                      <p className="text-[10px] text-muted-foreground mb-1">Bacs récupérés</p>
+                      <p className="text-[10px] text-muted-foreground mb-1">Bacs effectivement récupérés</p>
                       <Input
                         type="number"
                         min={0}
