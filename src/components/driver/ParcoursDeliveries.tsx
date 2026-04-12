@@ -574,7 +574,15 @@ export function ParcoursDeliveries({
                               </span>
                             )}
                           </div>
-                          {/* Bacs to recover */}
+                          {/* Bacs info */}
+                          {pd.nb_barques > 0 && (
+                            <div className="mt-1.5 flex items-center gap-1.5 px-2 py-1 rounded-md bg-muted/50 border border-border">
+                              <Database className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                              <span className="text-xs text-muted-foreground">
+                                {pd.nb_barques} bac{pd.nb_barques > 1 ? 's' : ''} à livrer
+                              </span>
+                            </div>
+                          )}
                           {pd.bacsToRecover > 0 && (
                             <div className="mt-1.5 flex items-center gap-1.5 px-2 py-1 rounded-md bg-accent/50 border border-accent">
                               <Package className="w-3.5 h-3.5 text-primary shrink-0" />
