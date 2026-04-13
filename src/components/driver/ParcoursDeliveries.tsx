@@ -157,7 +157,7 @@ export function ParcoursDeliveries({
         verificationCode: deliv?.verification_code || null,
         nb_cartons: colis.filter(c => c.type === 'carton').length,
         nb_sachets: colis.filter(c => c.type === 'sachet').length,
-        nb_barques: colis.filter(c => c.type === 'barque').length,
+        nb_barques: colis.filter(c => c.type === 'bac' || c.type === 'barque').length,
         bacsToRecover: bacsBalanceMap.get(pp.pharmacy_id) || 0,
       };
     });
@@ -570,7 +570,7 @@ export function ParcoursDeliveries({
                             )}
                             {pd.nb_barques > 0 && (
                               <span className="text-xs text-muted-foreground">
-                                {pd.nb_barques} barque{pd.nb_barques > 1 ? 's' : ''}
+                                {pd.nb_barques} bac{pd.nb_barques > 1 ? 's' : ''}
                               </span>
                             )}
                           </div>
