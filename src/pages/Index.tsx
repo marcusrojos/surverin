@@ -10,7 +10,7 @@ const Index = () => {
   }
 
   if (!user) return <Navigate to="/login" replace />;
-  if (role === 'admin') return <Navigate to="/admin" replace />;
+  if (role === 'admin' || role === 'super_admin') return <Navigate to="/admin" replace />;
   if (role === 'livreur') return <Navigate to="/driver" replace />;
   if (role === 'pharmacie') return <Navigate to="/pharmacy" replace />;
 

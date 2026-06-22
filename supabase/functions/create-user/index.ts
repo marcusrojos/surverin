@@ -12,6 +12,7 @@ interface CreateUserRequest {
   role: "admin" | "livreur" | "pharmacie";
   pharmacy_id?: string;
   username?: string;
+  site_id?: string;
 }
 
 Deno.serve(async (req) => {
@@ -33,7 +34,7 @@ Deno.serve(async (req) => {
 
     const adminClient = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Verify caller is admin
+    // Verify caller
     const token = authHeader.replace("Bearer ", "");
     const { data: { user: callerUser }, error: userError } = await adminClient.auth.getUser(token);
     if (userError || !callerUser) {
@@ -49,14 +50,15 @@ Deno.serve(async (req) => {
       .eq("user_id", callerUser.id)
       .single();
 
-    if (roleError || roleData?.role !== "admin") {
+    const callerRole = roleData?.role;
+    if (roleError || (callerRole !== "admin" && callerRole !== "super_admin")) {
       return new Response(
         JSON.stringify({ error: "Only admins can create users" }),
         { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    const { email, password, full_name, role, pharmacy_id, username }: CreateUserRequest = await req.json();
+    const { email, password, full_name, role, pharmacy_id, username, site_id }: CreateUserRequest = await req.json();
 
     if (!email || !password || !full_name || !role) {
       return new Response(
@@ -70,6 +72,35 @@ Deno.serve(async (req) => {
         JSON.stringify({ error: "Password must be at least 6 characters" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
+    }
+
+    // Only super_admin can create admin accounts
+    if (role === "admin" && callerRole !== "super_admin") {
+      return new Response(
+        JSON.stringify({ error: "Only a super admin can create an administrator" }),
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Resolve the site the new user belongs to
+    let targetSiteId: string | null = null;
+    if (callerRole === "super_admin") {
+      // Super admin must specify the site (for admins). For other roles, site_id is also required.
+      targetSiteId = site_id ?? null;
+      if (!targetSiteId) {
+        return new Response(
+          JSON.stringify({ error: "site_id is required" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    } else {
+      // Regular admin: force the new user onto the admin's own site
+      const { data: adminProfile } = await adminClient
+        .from("profiles")
+        .select("site_id")
+        .eq("user_id", callerUser.id)
+        .single();
+      targetSiteId = adminProfile?.site_id ?? null;
     }
 
     if (role === "pharmacie" && !pharmacy_id) {
@@ -131,6 +162,7 @@ Deno.serve(async (req) => {
       full_name: full_name.trim(),
       email: email.trim(),
       plain_password: password,
+      site_id: targetSiteId,
     };
     if (username) {
       profileData.username = username.trim();
@@ -191,6 +223,7 @@ Deno.serve(async (req) => {
           email: authData.user.email,
           full_name: full_name.trim(),
           role: role,
+          site_id: targetSiteId,
           pharmacy_id: role === "pharmacie" ? pharmacy_id : undefined
         } 
       }),
