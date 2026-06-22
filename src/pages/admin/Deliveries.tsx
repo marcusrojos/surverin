@@ -140,7 +140,7 @@ export default function DeliveriesPage() {
 
       const { data: pharmaciesData } = await supabase
         .from('pharmacies')
-        .select('id, name, address, client_code, phone, email, user_id, latitude, longitude')
+        .select('id, name, address, client_code, phone, email, user_id, latitude, longitude, site_id')
         .order('name');
 
       const { data: driverRoles } = await supabase
