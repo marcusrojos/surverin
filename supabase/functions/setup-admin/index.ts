@@ -15,11 +15,11 @@ Deno.serve(async (req) => {
       { auth: { autoRefreshToken: false, persistSession: false } }
     )
 
-    // Check if an admin already exists
+    // Check if a super admin or admin already exists
     const { data: existingAdmins } = await supabaseAdmin
       .from('user_roles')
       .select('id')
-      .eq('role', 'admin')
+      .in('role', ['admin', 'super_admin'])
       .limit(1)
 
     if (existingAdmins && existingAdmins.length > 0) {
