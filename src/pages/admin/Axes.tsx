@@ -132,7 +132,8 @@ export default function AdminAxes() {
         const { data, error } = await supabase.from('axes').insert({
           name: formName.trim(),
           description: formDescription.trim() || null,
-        }).select().single();
+          site_id: siteId,
+        } as any).select().single();
         if (error) throw error;
 
         if (selectedPharmacies.length > 0) {
