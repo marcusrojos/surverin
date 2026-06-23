@@ -136,6 +136,12 @@ async function resolveTargetDelivery(item: PendingValidation): Promise<{
     };
   }
 
+  const { data: pharmacyForSite } = await supabase
+    .from('pharmacies')
+    .select('site_id')
+    .eq('id', item.pharmacy_id)
+    .maybeSingle();
+
   const { data: created, error: createError } = await supabase
     .from('deliveries')
     .insert({
@@ -144,6 +150,7 @@ async function resolveTargetDelivery(item: PendingValidation): Promise<{
       driver_id: item.driver_id,
       reference: item.reference,
       status: 'en_attente',
+      site_id: (pharmacyForSite as any)?.site_id ?? null,
     })
     .select('id, status, delivered_at')
     .single();

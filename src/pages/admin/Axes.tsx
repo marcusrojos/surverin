@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/lib/auth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -28,6 +29,7 @@ interface Axis {
 }
 
 export default function AdminAxes() {
+  const { siteId } = useAuth();
   const [axes, setAxes] = useState<Axis[]>([]);
   const [allPharmacies, setAllPharmacies] = useState<Pharmacy[]>([]);
   const [loading, setLoading] = useState(true);
@@ -130,7 +132,8 @@ export default function AdminAxes() {
         const { data, error } = await supabase.from('axes').insert({
           name: formName.trim(),
           description: formDescription.trim() || null,
-        }).select().single();
+          site_id: siteId,
+        } as any).select().single();
         if (error) throw error;
 
         if (selectedPharmacies.length > 0) {

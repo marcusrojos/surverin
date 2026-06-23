@@ -7,10 +7,12 @@ import { Loader2 } from 'lucide-react';
 
 interface DashboardLayoutProps {
   children: ReactNode;
-  requiredRole?: 'admin' | 'livreur' | 'pharmacie';
+  requiredRole?: 'admin' | 'livreur' | 'pharmacie' | 'super_admin';
+  /** When true, both admin and super_admin can access. */
+  allowSuperAdmin?: boolean;
 }
 
-export function DashboardLayout({ children, requiredRole }: DashboardLayoutProps) {
+export function DashboardLayout({ children, requiredRole, allowSuperAdmin }: DashboardLayoutProps) {
   const { user, role, loading } = useAuth();
 
   if (loading) {
@@ -23,8 +25,15 @@ export function DashboardLayout({ children, requiredRole }: DashboardLayoutProps
 
   if (!user) return <Navigate to="/login" replace />;
 
-  if (requiredRole && role !== requiredRole) {
-    if (role === 'admin') return <Navigate to="/admin" replace />;
+  // Treat super_admin as having admin access by default
+  const roleMatches =
+    !requiredRole ||
+    role === requiredRole ||
+    (requiredRole === 'admin' && role === 'super_admin') ||
+    (allowSuperAdmin && (role === 'admin' || role === 'super_admin'));
+
+  if (!roleMatches) {
+    if (role === 'admin' || role === 'super_admin') return <Navigate to="/admin" replace />;
     if (role === 'livreur') return <Navigate to="/driver" replace />;
     if (role === 'pharmacie') return <Navigate to="/pharmacy" replace />;
     return <Navigate to="/login" replace />;

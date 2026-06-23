@@ -218,6 +218,14 @@ export function CreateParcoursWizard({ open, onOpenChange, onCreated }: CreatePa
 
     setIsSaving(true);
     try {
+      // Derive the site from the selected axis (keeps data scoped to one site)
+      const { data: axisData } = await supabase
+        .from('axes')
+        .select('site_id')
+        .eq('id', selectedAxis)
+        .single();
+      const siteId = (axisData as any)?.site_id ?? null;
+
       // 1. Create the parcours
       const { data: parcours, error: parcoursError } = await supabase
         .from('parcours')
@@ -226,6 +234,7 @@ export function CreateParcoursWizard({ open, onOpenChange, onCreated }: CreatePa
           axis_id: selectedAxis,
           driver_id: selectedDriver,
           status: 'en_attente_inventaire',
+          site_id: siteId,
         } as any)
         .select('id')
         .single();
@@ -318,6 +327,7 @@ export function CreateParcoursWizard({ open, onOpenChange, onCreated }: CreatePa
           packages: items.map(c => ({ barcode: c.barcode.trim(), type: c.type })),
           status: 'en_attente' as const,
           verification_code: hasActiveAccount ? generateCode() : null,
+          site_id: siteId,
         };
       });
 

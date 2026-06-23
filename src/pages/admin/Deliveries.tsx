@@ -140,7 +140,7 @@ export default function DeliveriesPage() {
 
       const { data: pharmaciesData } = await supabase
         .from('pharmacies')
-        .select('id, name, address, client_code, phone, email, user_id, latitude, longitude')
+        .select('id, name, address, client_code, phone, email, user_id, latitude, longitude, site_id')
         .order('name');
 
       const { data: driverRoles } = await supabase
@@ -247,6 +247,7 @@ export default function DeliveriesPage() {
             nb_sachets,
             nb_barques,
             packages: packagesJson,
+            site_id: (selectedPharmacy as any)?.site_id ?? null,
           } as any)
           .select()
           .single();

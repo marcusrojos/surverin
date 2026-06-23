@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
+import { useAuth } from '@/lib/auth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -69,6 +70,7 @@ type AccountFilter = 'all' | 'with_active' | 'with_inactive' | 'no_account';
 type SortMode = 'alphabetical' | 'axis_order';
 
 export default function PharmaciesPage() {
+  const { siteId } = useAuth();
   const [pharmacies, setPharmacies] = useState<Pharmacy[]>([]);
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -302,6 +304,7 @@ export default function PharmaciesPage() {
             latitude: formData.latitude,
             longitude: formData.longitude,
             location_source: formData.location_source,
+            site_id: siteId,
           } as any)
           .select()
           .single();

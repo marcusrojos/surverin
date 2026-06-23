@@ -15,11 +15,11 @@ Deno.serve(async (req) => {
       { auth: { autoRefreshToken: false, persistSession: false } }
     )
 
-    // Check if an admin already exists
+    // Check if a super admin or admin already exists
     const { data: existingAdmins } = await supabaseAdmin
       .from('user_roles')
       .select('id')
-      .eq('role', 'admin')
+      .in('role', ['admin', 'super_admin'])
       .limit(1)
 
     if (existingAdmins && existingAdmins.length > 0) {
@@ -79,10 +79,10 @@ Deno.serve(async (req) => {
       plain_password: password,
     })
 
-    // Create admin role
+    // Create super admin role (first account oversees all sites)
     await supabaseAdmin.from('user_roles').insert({
       user_id: userId,
-      role: 'admin',
+      role: 'super_admin',
     })
 
     return new Response(

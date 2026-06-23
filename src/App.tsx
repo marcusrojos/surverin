@@ -21,6 +21,8 @@ const AdminDriverTracking = lazy(() => import("./pages/admin/DriverTracking"));
 const AdminLists = lazy(() => import("./pages/admin/Lists"));
 const AdminAxes = lazy(() => import("./pages/admin/Axes"));
 const AdminParcours = lazy(() => import("./pages/admin/Parcours"));
+const AdminSites = lazy(() => import("./pages/admin/Sites"));
+const AdminBacs = lazy(() => import("./pages/admin/Bacs"));
 const DriverDashboard = lazy(() => import("./pages/driver/Dashboard"));
 const PharmacyDashboard = lazy(() => import("./pages/pharmacy/Dashboard"));
 const NotFound = lazy(() => import("./pages/NotFound"));
@@ -68,6 +70,8 @@ const App = () => (
               <Route path="/admin/lists" element={<AdminLists />} />
               <Route path="/admin/axes" element={<AdminAxes />} />
               <Route path="/admin/parcours" element={<AdminParcours />} />
+              <Route path="/admin/sites" element={<AdminSites />} />
+              <Route path="/admin/bacs" element={<AdminBacs />} />
               <Route path="/driver" element={<DriverDashboard />} />
               <Route path="/pharmacy" element={<PharmacyDashboard />} />
               <Route path="/install" element={<Install />} />

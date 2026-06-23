@@ -20,6 +20,7 @@ export type Database = {
           description: string | null
           id: string
           name: string
+          site_id: string | null
           updated_at: string
         }
         Insert: {
@@ -27,6 +28,7 @@ export type Database = {
           description?: string | null
           id?: string
           name: string
+          site_id?: string | null
           updated_at?: string
         }
         Update: {
@@ -34,9 +36,18 @@ export type Database = {
           description?: string | null
           id?: string
           name?: string
+          site_id?: string | null
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "axes_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: false
+            referencedRelation: "sites"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       axis_pharmacies: {
         Row: {
@@ -100,6 +111,7 @@ export type Database = {
           recipient_name: string | null
           recipient_signature: string | null
           reference: string
+          site_id: string | null
           status: Database["public"]["Enums"]["delivery_status"]
           updated_at: string
           verification_code: string | null
@@ -126,6 +138,7 @@ export type Database = {
           recipient_name?: string | null
           recipient_signature?: string | null
           reference: string
+          site_id?: string | null
           status?: Database["public"]["Enums"]["delivery_status"]
           updated_at?: string
           verification_code?: string | null
@@ -152,6 +165,7 @@ export type Database = {
           recipient_name?: string | null
           recipient_signature?: string | null
           reference?: string
+          site_id?: string | null
           status?: Database["public"]["Enums"]["delivery_status"]
           updated_at?: string
           verification_code?: string | null
@@ -171,6 +185,13 @@ export type Database = {
             referencedRelation: "pharmacies"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "deliveries_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: false
+            referencedRelation: "sites"
+            referencedColumns: ["id"]
+          },
         ]
       }
       parcours: {
@@ -184,6 +205,7 @@ export type Database = {
           force_confirmed_reason: string | null
           id: string
           name: string
+          site_id: string | null
           status: Database["public"]["Enums"]["parcours_status"]
           updated_at: string
         }
@@ -197,6 +219,7 @@ export type Database = {
           force_confirmed_reason?: string | null
           id?: string
           name: string
+          site_id?: string | null
           status?: Database["public"]["Enums"]["parcours_status"]
           updated_at?: string
         }
@@ -210,6 +233,7 @@ export type Database = {
           force_confirmed_reason?: string | null
           id?: string
           name?: string
+          site_id?: string | null
           status?: Database["public"]["Enums"]["parcours_status"]
           updated_at?: string
         }
@@ -219,6 +243,13 @@ export type Database = {
             columns: ["axis_id"]
             isOneToOne: false
             referencedRelation: "axes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "parcours_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: false
+            referencedRelation: "sites"
             referencedColumns: ["id"]
           },
         ]
@@ -407,6 +438,7 @@ export type Database = {
           longitude: number | null
           name: string
           phone: string | null
+          site_id: string | null
           updated_at: string
           user_id: string | null
         }
@@ -421,6 +453,7 @@ export type Database = {
           longitude?: number | null
           name: string
           phone?: string | null
+          site_id?: string | null
           updated_at?: string
           user_id?: string | null
         }
@@ -435,10 +468,19 @@ export type Database = {
           longitude?: number | null
           name?: string
           phone?: string | null
+          site_id?: string | null
           updated_at?: string
           user_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "pharmacies_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: false
+            referencedRelation: "sites"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       pharmacy_bacs_balance: {
         Row: {
@@ -477,6 +519,7 @@ export type Database = {
           id: string
           is_active: boolean
           plain_password: string | null
+          site_id: string | null
           updated_at: string
           user_id: string
           username: string | null
@@ -488,6 +531,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           plain_password?: string | null
+          site_id?: string | null
           updated_at?: string
           user_id: string
           username?: string | null
@@ -499,9 +543,48 @@ export type Database = {
           id?: string
           is_active?: boolean
           plain_password?: string | null
+          site_id?: string | null
           updated_at?: string
           user_id?: string
           username?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "profiles_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: false
+            referencedRelation: "sites"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sites: {
+        Row: {
+          address: string | null
+          created_at: string
+          id: string
+          is_active: boolean
+          name: string
+          phone: string | null
+          updated_at: string
+        }
+        Insert: {
+          address?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name: string
+          phone?: string | null
+          updated_at?: string
+        }
+        Update: {
+          address?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          phone?: string | null
+          updated_at?: string
         }
         Relationships: []
       }
@@ -528,12 +611,29 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      admin_can_access_axis: {
+        Args: { _axis: string; _uid: string }
+        Returns: boolean
+      }
+      admin_can_access_parcours: {
+        Args: { _parcours: string; _uid: string }
+        Returns: boolean
+      }
+      admin_can_access_pharmacy: {
+        Args: { _pharmacy: string; _uid: string }
+        Returns: boolean
+      }
+      admin_can_access_site: {
+        Args: { _site: string; _uid: string }
+        Returns: boolean
+      }
       generate_client_code: { Args: never; Returns: string }
       generate_verification_code: { Args: never; Returns: string }
       get_user_role: {
         Args: { _user_id: string }
         Returns: Database["public"]["Enums"]["app_role"]
       }
+      get_user_site: { Args: { _user_id: string }; Returns: string }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -541,6 +641,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      is_super_admin: { Args: { _user_id: string }; Returns: boolean }
       resolve_identifier_to_email: {
         Args: { identifier: string }
         Returns: string

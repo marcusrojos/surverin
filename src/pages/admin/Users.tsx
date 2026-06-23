@@ -38,8 +38,9 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
-import { Plus, Pencil, Trash2, Search, Users, Loader2, Shield, Truck, Eye, EyeOff } from 'lucide-react';
+import { Plus, Pencil, Trash2, Search, Users, Loader2, Shield, Truck, Eye, EyeOff, Network, Crown } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/lib/auth';
 import { toast } from 'sonner';
 import { z } from 'zod';
 
@@ -49,9 +50,10 @@ interface UserWithRole {
   full_name: string;
   email: string;
   username: string | null;
-  role: 'admin' | 'livreur' | 'pharmacie';
+  role: 'super_admin' | 'admin' | 'livreur' | 'pharmacie';
   created_at: string;
   is_active: boolean;
+  site_id: string | null;
 }
 
 const userSchema = z.object({
@@ -63,7 +65,10 @@ const userSchema = z.object({
 });
 
 export default function UsersPage() {
+  const { role: currentRole } = useAuth();
+  const isSuperAdmin = currentRole === 'super_admin';
   const [users, setUsers] = useState<UserWithRole[]>([]);
+  const [sites, setSites] = useState<{ id: string; name: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -75,6 +80,7 @@ export default function UsersPage() {
     password: '',
     role: 'livreur' as 'admin' | 'livreur',
     username: '',
+    site_id: '',
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSaving, setIsSaving] = useState(false);
@@ -84,7 +90,14 @@ export default function UsersPage() {
 
   useEffect(() => {
     fetchUsers();
-  }, []);
+    if (isSuperAdmin) {
+      supabase.from('sites').select('id, name').order('name').then(({ data }) => {
+        setSites((data || []).map((s: any) => ({ id: s.id, name: s.name })));
+      });
+    }
+  }, [isSuperAdmin]);
+
+  const siteName = (id: string | null) => sites.find((s) => s.id === id)?.name || '—';
 
   const fetchUsers = async () => {
     try {
@@ -110,9 +123,10 @@ export default function UsersPage() {
             full_name: profile.full_name,
             email: profile.email,
             username: profile.username || null,
-            role: (userRole?.role as 'admin' | 'livreur' | 'pharmacie') || 'livreur',
+            role: (userRole?.role as 'super_admin' | 'admin' | 'livreur' | 'pharmacie') || 'livreur',
             created_at: profile.created_at,
             is_active: (profile as any).is_active ?? true,
+            site_id: (profile as any).site_id ?? null,
           };
         })
         .filter(u => u.role !== 'pharmacie');
@@ -155,12 +169,13 @@ export default function UsersPage() {
         full_name: user.full_name,
         email: user.email,
         password: '',
-        role: user.role as 'admin' | 'livreur',
+        role: (user.role === 'admin' ? 'admin' : 'livreur'),
         username: user.username || '',
+        site_id: user.site_id || '',
       });
     } else {
       setSelectedUser(null);
-      setFormData({ full_name: '', email: '', password: '', role: 'livreur', username: '' });
+      setFormData({ full_name: '', email: '', password: '', role: isSuperAdmin ? 'admin' : 'livreur', username: '', site_id: '' });
     }
     setIsDialogOpen(true);
   };
@@ -181,6 +196,12 @@ export default function UsersPage() {
       return;
     }
 
+    // Super admin must assign a site
+    if (isSuperAdmin && !formData.site_id) {
+      setErrors({ site_id: 'Veuillez sélectionner un site' });
+      return;
+    }
+
     setIsSaving(true);
     try {
       if (selectedUser) {
@@ -189,6 +210,9 @@ export default function UsersPage() {
           email: formData.email.trim(),
           username: formData.username.trim() || null,
         };
+        if (isSuperAdmin && formData.site_id) {
+          updateData.site_id = formData.site_id;
+        }
 
         const { error: profileError } = await supabase
           .from('profiles')
@@ -229,6 +253,7 @@ export default function UsersPage() {
             full_name: formData.full_name.trim(),
             role: formData.role,
             username: formData.username.trim() || undefined,
+            site_id: isSuperAdmin ? formData.site_id : undefined,
           },
         });
 
@@ -330,6 +355,7 @@ export default function UsersPage() {
                   <TableHead className="hidden md:table-cell">Identifiant</TableHead>
                   <TableHead className="hidden md:table-cell">Email</TableHead>
                   <TableHead>Rôle</TableHead>
+                  {isSuperAdmin && <TableHead className="hidden lg:table-cell">Site</TableHead>}
                   <TableHead>Actif</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
@@ -346,17 +372,24 @@ export default function UsersPage() {
                     </TableCell>
                     <TableCell>
                       <Badge
-                        variant={user.role === 'admin' ? 'default' : 'secondary'}
+                        variant={user.role === 'admin' || user.role === 'super_admin' ? 'default' : 'secondary'}
                         className="gap-1"
                       >
-                        {user.role === 'admin' ? (
+                        {user.role === 'super_admin' ? (
+                          <Crown className="w-3 h-3" />
+                        ) : user.role === 'admin' ? (
                           <Shield className="w-3 h-3" />
                         ) : (
                           <Truck className="w-3 h-3" />
                         )}
-                        {user.role === 'admin' ? 'Admin' : 'Livreur'}
+                        {user.role === 'super_admin' ? 'Super admin' : user.role === 'admin' ? 'Admin' : 'Livreur'}
                       </Badge>
                     </TableCell>
+                    {isSuperAdmin && (
+                      <TableCell className="hidden lg:table-cell text-muted-foreground">
+                        {siteName(user.site_id)}
+                      </TableCell>
+                    )}
                     <TableCell>
                       <Switch
                         checked={user.is_active}
@@ -504,12 +537,14 @@ export default function UsersPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="admin">
-                      <div className="flex items-center gap-2">
-                        <Shield className="w-4 h-4" />
-                        Administrateur
-                      </div>
-                    </SelectItem>
+                    {isSuperAdmin && (
+                      <SelectItem value="admin">
+                        <div className="flex items-center gap-2">
+                          <Shield className="w-4 h-4" />
+                          Administrateur
+                        </div>
+                      </SelectItem>
+                    )}
                     <SelectItem value="livreur">
                       <div className="flex items-center gap-2">
                         <Truck className="w-4 h-4" />
@@ -519,6 +554,30 @@ export default function UsersPage() {
                   </SelectContent>
                 </Select>
               </div>
+              {isSuperAdmin && (
+                <div className="space-y-2">
+                  <Label htmlFor="site">Site *</Label>
+                  <Select
+                    value={formData.site_id}
+                    onValueChange={(value) => setFormData({ ...formData, site_id: value })}
+                  >
+                    <SelectTrigger className={errors.site_id ? 'border-destructive' : ''}>
+                      <SelectValue placeholder="Sélectionner un site" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {sites.map((s) => (
+                        <SelectItem key={s.id} value={s.id}>
+                          <div className="flex items-center gap-2">
+                            <Network className="w-4 h-4" />
+                            {s.name}
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {errors.site_id && <p className="text-sm text-destructive">{errors.site_id}</p>}
+                </div>
+              )}
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setIsDialogOpen(false)}>

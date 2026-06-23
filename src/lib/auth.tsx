@@ -2,14 +2,14 @@ import { createContext, useContext, useEffect, useState, ReactNode } from 'react
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 
-type AppRole = 'admin' | 'livreur' | 'pharmacie';
+type AppRole = 'super_admin' | 'admin' | 'livreur' | 'pharmacie';
 
 const ROLE_CACHE_KEY = 'dpci_user_role';
 
 function getCachedRole(): AppRole | null {
   try {
     const cached = localStorage.getItem(ROLE_CACHE_KEY);
-    if (cached && ['admin', 'livreur', 'pharmacie'].includes(cached)) {
+    if (cached && ['super_admin', 'admin', 'livreur', 'pharmacie'].includes(cached)) {
       return cached as AppRole;
     }
   } catch {}
@@ -30,6 +30,7 @@ interface AuthContextType {
   user: User | null;
   session: Session | null;
   role: AppRole | null;
+  siteId: string | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
@@ -41,6 +42,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [role, setRole] = useState<AppRole | null>(null);
+  const [siteId, setSiteId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   const fetchUserRole = async (userId: string) => {
@@ -63,6 +65,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const cached = getCachedRole();
       setRole(cached);
     }
+
+    try {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('site_id')
+        .eq('user_id', userId)
+        .maybeSingle();
+      setSiteId((profile as any)?.site_id ?? null);
+    } catch {
+      setSiteId(null);
+    }
   };
 
   useEffect(() => {
@@ -77,6 +90,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }, 0);
         } else {
           setRole(null);
+          setSiteId(null);
         }
         setLoading(false);
       }
@@ -124,11 +138,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
     setSession(null);
     setRole(null);
+    setSiteId(null);
     setCachedRole(null);
   };
 
   return (
-    <AuthContext.Provider value={{ user, session, role, loading, signIn, signOut }}>
+    <AuthContext.Provider value={{ user, session, role, siteId, loading, signIn, signOut }}>
       {children}
     </AuthContext.Provider>
   );

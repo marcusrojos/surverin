@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Menu, LayoutDashboard, Package, Building2, Users, LogOut, Truck, Route, FileText, ClipboardList } from 'lucide-react';
+import { Menu, LayoutDashboard, Package, Building2, Users, LogOut, Truck, Route, FileText, ClipboardList, Box, Network } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/lib/auth';
 import dpciLogo from '@/assets/dpci-logo.png';
@@ -15,17 +15,34 @@ const adminNavItems: NavItem[] = [
   { icon: Route, label: 'Suivi chauffeurs', href: '/admin/tracking' },
   { icon: Building2, label: 'Pharmacies', href: '/admin/pharmacies' },
   { icon: Users, label: 'Utilisateurs', href: '/admin/users' },
+  { icon: Box, label: 'Bacs', href: '/admin/bacs' },
   { icon: FileText, label: 'Listes & PDF', href: '/admin/lists' },
   { icon: Route, label: 'Axes', href: '/admin/axes' },
 ];
 const driverNavItems: NavItem[] = [{ icon: Truck, label: 'Mes Livraisons', href: '/driver' }];
 const pharmacyNavItems: NavItem[] = [{ icon: Package, label: 'Mes Livraisons', href: '/pharmacy' }];
 
+function getNavItems(role: string | null): NavItem[] {
+  if (role === 'super_admin') {
+    return [{ icon: Network, label: 'Sites', href: '/admin/sites' }, ...adminNavItems];
+  }
+  if (role === 'admin') return adminNavItems;
+  if (role === 'pharmacie') return pharmacyNavItems;
+  return driverNavItems;
+}
+
+function roleLabel(role: string | null) {
+  if (role === 'super_admin') return 'Super administrateur';
+  if (role === 'admin') return 'Administrateur';
+  if (role === 'pharmacie') return 'Pharmacie';
+  return 'Livreur';
+}
+
 export function MobileNav() {
   const [open, setOpen] = useState(false);
   const location = useLocation();
   const { role, signOut, user } = useAuth();
-  const navItems = role === 'admin' ? adminNavItems : role === 'pharmacie' ? pharmacyNavItems : driverNavItems;
+  const navItems = getNavItems(role);
 
   return (
     <>
@@ -62,7 +79,7 @@ export function MobileNav() {
               <div className="px-4 py-4 border-t border-sidebar-border bg-sidebar">
                 <div className="px-4 py-2 mb-2">
                   <p className="text-sm font-medium truncate">{user?.email}</p>
-                  <p className="text-xs text-sidebar-foreground/60 capitalize">{role === 'admin' ? 'Administrateur' : role === 'pharmacie' ? 'Pharmacie' : 'Livreur'}</p>
+                  <p className="text-xs text-sidebar-foreground/60">{roleLabel(role)}</p>
                 </div>
                 <button onClick={() => { setOpen(false); signOut(); }} className="flex items-center gap-3 w-full px-4 py-3 rounded-lg text-sm font-medium text-sidebar-foreground/80 hover:bg-destructive/20 hover:text-destructive transition-all">
                   <LogOut className="w-5 h-5" />
