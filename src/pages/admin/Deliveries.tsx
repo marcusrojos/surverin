@@ -247,6 +247,7 @@ export default function DeliveriesPage() {
             nb_sachets,
             nb_barques,
             packages: packagesJson,
+            site_id: (selectedPharmacy as any)?.site_id ?? null,
           } as any)
           .select()
           .single();
