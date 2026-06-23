@@ -304,6 +304,7 @@ export default function PharmaciesPage() {
             latitude: formData.latitude,
             longitude: formData.longitude,
             location_source: formData.location_source,
+            site_id: siteId,
           } as any)
           .select()
           .single();
