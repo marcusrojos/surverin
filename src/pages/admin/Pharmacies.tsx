@@ -70,6 +70,7 @@ type AccountFilter = 'all' | 'with_active' | 'with_inactive' | 'no_account';
 type SortMode = 'alphabetical' | 'axis_order';
 
 export default function PharmaciesPage() {
+  const { siteId } = useAuth();
   const [pharmacies, setPharmacies] = useState<Pharmacy[]>([]);
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
