@@ -28,6 +28,7 @@ interface Axis {
 }
 
 export default function AdminAxes() {
+  const { siteId } = useAuth();
   const [axes, setAxes] = useState<Axis[]>([]);
   const [allPharmacies, setAllPharmacies] = useState<Pharmacy[]>([]);
   const [loading, setLoading] = useState(true);
