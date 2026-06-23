@@ -79,10 +79,10 @@ Deno.serve(async (req) => {
       plain_password: password,
     })
 
-    // Create admin role
+    // Create super admin role (first account oversees all sites)
     await supabaseAdmin.from('user_roles').insert({
       user_id: userId,
-      role: 'admin',
+      role: 'super_admin',
     })
 
     return new Response(
