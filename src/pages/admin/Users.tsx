@@ -177,7 +177,7 @@ export default function UsersPage() {
       });
     } else {
       setSelectedUser(null);
-      setFormData({ full_name: '', email: '', password: '', role: isSuperAdmin ? 'admin' : 'livreur', username: '', site_id: '' });
+      setFormData({ full_name: '', email: '', password: '', role: 'livreur', username: '', site_id: '' });
     }
     setIsDialogOpen(true);
   };
