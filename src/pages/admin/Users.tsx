@@ -258,7 +258,7 @@ export default function UsersPage() {
             full_name: formData.full_name.trim(),
             role: formData.role,
             username: formData.username.trim() || undefined,
-            site_id: isSuperAdmin ? formData.site_id : undefined,
+            site_id: isSuperAdmin && formData.role !== 'super_admin' ? formData.site_id : undefined,
           },
         });
 
