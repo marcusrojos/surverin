@@ -60,9 +60,11 @@ const userSchema = z.object({
   full_name: z.string().min(2, 'Le nom doit contenir au moins 2 caractères'),
   email: z.string().email('Email invalide'),
   password: z.string().min(6, 'Le mot de passe doit contenir au moins 6 caractères'),
-  role: z.enum(['admin', 'livreur']),
+  role: z.enum(['super_admin', 'admin', 'livreur']),
   username: z.string().optional(),
 });
+
+type EditableRole = 'super_admin' | 'admin' | 'livreur';
 
 export default function UsersPage() {
   const { role: currentRole } = useAuth();
