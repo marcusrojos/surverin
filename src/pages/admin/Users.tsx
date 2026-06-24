@@ -171,7 +171,7 @@ export default function UsersPage() {
         full_name: user.full_name,
         email: user.email,
         password: '',
-        role: (user.role === 'admin' ? 'admin' : 'livreur'),
+        role: (user.role === 'super_admin' || user.role === 'admin') ? user.role : 'livreur',
         username: user.username || '',
         site_id: user.site_id || '',
       });
