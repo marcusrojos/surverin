@@ -114,7 +114,7 @@ export default function AdminLists() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (role !== 'admin') {
+    if (role !== 'admin' && role !== 'super_admin') {
       navigate('/');
       return;
     }

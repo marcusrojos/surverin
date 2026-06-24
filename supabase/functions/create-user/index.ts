@@ -9,7 +9,7 @@ interface CreateUserRequest {
   email: string;
   password: string;
   full_name: string;
-  role: "admin" | "livreur" | "pharmacie";
+  role: "super_admin" | "admin" | "livreur" | "pharmacie";
   pharmacy_id?: string;
   username?: string;
   site_id?: string;
@@ -74,18 +74,21 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Only super_admin can create admin accounts
-    if (role === "admin" && callerRole !== "super_admin") {
+    // Only super_admin can create super_admin accounts
+    if (role === "super_admin" && callerRole !== "super_admin") {
       return new Response(
-        JSON.stringify({ error: "Only a super admin can create an administrator" }),
+        JSON.stringify({ error: "Only a super admin can create a super administrator" }),
         { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
     // Resolve the site the new user belongs to
     let targetSiteId: string | null = null;
-    if (callerRole === "super_admin") {
-      // Super admin must specify the site (for admins). For other roles, site_id is also required.
+    if (role === "super_admin") {
+      // Super admins are global: no site assignment
+      targetSiteId = null;
+    } else if (callerRole === "super_admin") {
+      // Super admin must specify the site for admins and drivers
       targetSiteId = site_id ?? null;
       if (!targetSiteId) {
         return new Response(

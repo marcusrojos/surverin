@@ -60,9 +60,11 @@ const userSchema = z.object({
   full_name: z.string().min(2, 'Le nom doit contenir au moins 2 caractères'),
   email: z.string().email('Email invalide'),
   password: z.string().min(6, 'Le mot de passe doit contenir au moins 6 caractères'),
-  role: z.enum(['admin', 'livreur']),
+  role: z.enum(['super_admin', 'admin', 'livreur']),
   username: z.string().optional(),
 });
+
+type EditableRole = 'super_admin' | 'admin' | 'livreur';
 
 export default function UsersPage() {
   const { role: currentRole } = useAuth();
@@ -78,7 +80,7 @@ export default function UsersPage() {
     full_name: '',
     email: '',
     password: '',
-    role: 'livreur' as 'admin' | 'livreur',
+    role: 'livreur' as EditableRole,
     username: '',
     site_id: '',
   });
@@ -169,13 +171,13 @@ export default function UsersPage() {
         full_name: user.full_name,
         email: user.email,
         password: '',
-        role: (user.role === 'admin' ? 'admin' : 'livreur'),
+        role: (user.role === 'super_admin' || user.role === 'admin') ? user.role : 'livreur',
         username: user.username || '',
         site_id: user.site_id || '',
       });
     } else {
       setSelectedUser(null);
-      setFormData({ full_name: '', email: '', password: '', role: isSuperAdmin ? 'admin' : 'livreur', username: '', site_id: '' });
+      setFormData({ full_name: '', email: '', password: '', role: 'livreur', username: '', site_id: '' });
     }
     setIsDialogOpen(true);
   };
@@ -196,8 +198,8 @@ export default function UsersPage() {
       return;
     }
 
-    // Super admin must assign a site
-    if (isSuperAdmin && !formData.site_id) {
+    // Super admin must assign a site for admins and drivers (not for super admins)
+    if (isSuperAdmin && formData.role !== 'super_admin' && !formData.site_id) {
       setErrors({ site_id: 'Veuillez sélectionner un site' });
       return;
     }
@@ -210,8 +212,11 @@ export default function UsersPage() {
           email: formData.email.trim(),
           username: formData.username.trim() || null,
         };
-        if (isSuperAdmin && formData.site_id) {
+        if (isSuperAdmin && formData.role !== 'super_admin' && formData.site_id) {
           updateData.site_id = formData.site_id;
+        }
+        if (isSuperAdmin && formData.role === 'super_admin') {
+          updateData.site_id = null;
         }
 
         const { error: profileError } = await supabase
@@ -253,7 +258,7 @@ export default function UsersPage() {
             full_name: formData.full_name.trim(),
             role: formData.role,
             username: formData.username.trim() || undefined,
-            site_id: isSuperAdmin ? formData.site_id : undefined,
+            site_id: isSuperAdmin && formData.role !== 'super_admin' ? formData.site_id : undefined,
           },
         });
 
@@ -529,7 +534,7 @@ export default function UsersPage() {
                 <Label htmlFor="role">Rôle *</Label>
                 <Select
                   value={formData.role}
-                  onValueChange={(value: 'admin' | 'livreur') =>
+                  onValueChange={(value: EditableRole) =>
                     setFormData({ ...formData, role: value })
                   }
                 >
@@ -538,13 +543,19 @@ export default function UsersPage() {
                   </SelectTrigger>
                   <SelectContent>
                     {isSuperAdmin && (
-                      <SelectItem value="admin">
+                      <SelectItem value="super_admin">
                         <div className="flex items-center gap-2">
-                          <Shield className="w-4 h-4" />
-                          Administrateur
+                          <Crown className="w-4 h-4" />
+                          Super administrateur
                         </div>
                       </SelectItem>
                     )}
+                    <SelectItem value="admin">
+                      <div className="flex items-center gap-2">
+                        <Shield className="w-4 h-4" />
+                        Administrateur
+                      </div>
+                    </SelectItem>
                     <SelectItem value="livreur">
                       <div className="flex items-center gap-2">
                         <Truck className="w-4 h-4" />
@@ -554,7 +565,7 @@ export default function UsersPage() {
                   </SelectContent>
                 </Select>
               </div>
-              {isSuperAdmin && (
+              {isSuperAdmin && formData.role !== 'super_admin' && (
                 <div className="space-y-2">
                   <Label htmlFor="site">Site *</Label>
                   <Select
