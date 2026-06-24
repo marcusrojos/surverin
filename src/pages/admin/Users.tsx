@@ -534,7 +534,7 @@ export default function UsersPage() {
                 <Label htmlFor="role">Rôle *</Label>
                 <Select
                   value={formData.role}
-                  onValueChange={(value: 'admin' | 'livreur') =>
+                  onValueChange={(value: EditableRole) =>
                     setFormData({ ...formData, role: value })
                   }
                 >
@@ -543,13 +543,19 @@ export default function UsersPage() {
                   </SelectTrigger>
                   <SelectContent>
                     {isSuperAdmin && (
-                      <SelectItem value="admin">
+                      <SelectItem value="super_admin">
                         <div className="flex items-center gap-2">
-                          <Shield className="w-4 h-4" />
-                          Administrateur
+                          <Crown className="w-4 h-4" />
+                          Super administrateur
                         </div>
                       </SelectItem>
                     )}
+                    <SelectItem value="admin">
+                      <div className="flex items-center gap-2">
+                        <Shield className="w-4 h-4" />
+                        Administrateur
+                      </div>
+                    </SelectItem>
                     <SelectItem value="livreur">
                       <div className="flex items-center gap-2">
                         <Truck className="w-4 h-4" />
@@ -559,7 +565,7 @@ export default function UsersPage() {
                   </SelectContent>
                 </Select>
               </div>
-              {isSuperAdmin && (
+              {isSuperAdmin && formData.role !== 'super_admin' && (
                 <div className="space-y-2">
                   <Label htmlFor="site">Site *</Label>
                   <Select
