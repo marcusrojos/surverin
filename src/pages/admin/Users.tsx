@@ -212,8 +212,11 @@ export default function UsersPage() {
           email: formData.email.trim(),
           username: formData.username.trim() || null,
         };
-        if (isSuperAdmin && formData.site_id) {
+        if (isSuperAdmin && formData.role !== 'super_admin' && formData.site_id) {
           updateData.site_id = formData.site_id;
+        }
+        if (isSuperAdmin && formData.role === 'super_admin') {
+          updateData.site_id = null;
         }
 
         const { error: profileError } = await supabase
