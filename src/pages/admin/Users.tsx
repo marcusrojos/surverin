@@ -80,7 +80,7 @@ export default function UsersPage() {
     full_name: '',
     email: '',
     password: '',
-    role: 'livreur' as 'admin' | 'livreur',
+    role: 'livreur' as EditableRole,
     username: '',
     site_id: '',
   });
