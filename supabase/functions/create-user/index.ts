@@ -9,7 +9,7 @@ interface CreateUserRequest {
   email: string;
   password: string;
   full_name: string;
-  role: "admin" | "livreur" | "pharmacie";
+  role: "super_admin" | "admin" | "livreur" | "pharmacie";
   pharmacy_id?: string;
   username?: string;
   site_id?: string;
