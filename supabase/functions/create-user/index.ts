@@ -74,8 +74,8 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Only super_admin can create admin accounts
-    if (role === "admin" && callerRole !== "super_admin") {
+    // Only super_admin can create admin or super_admin accounts
+    if ((role === "admin" || role === "super_admin") && callerRole !== "super_admin") {
       return new Response(
         JSON.stringify({ error: "Only a super admin can create an administrator" }),
         { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -84,8 +84,11 @@ Deno.serve(async (req) => {
 
     // Resolve the site the new user belongs to
     let targetSiteId: string | null = null;
-    if (callerRole === "super_admin") {
-      // Super admin must specify the site (for admins). For other roles, site_id is also required.
+    if (role === "super_admin") {
+      // Super admins are global: no site assignment
+      targetSiteId = null;
+    } else if (callerRole === "super_admin") {
+      // Super admin must specify the site for admins and drivers
       targetSiteId = site_id ?? null;
       if (!targetSiteId) {
         return new Response(
