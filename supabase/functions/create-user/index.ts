@@ -74,10 +74,10 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Only super_admin can create admin or super_admin accounts
-    if ((role === "admin" || role === "super_admin") && callerRole !== "super_admin") {
+    // Only super_admin can create super_admin accounts
+    if (role === "super_admin" && callerRole !== "super_admin") {
       return new Response(
-        JSON.stringify({ error: "Only a super admin can create an administrator" }),
+        JSON.stringify({ error: "Only a super admin can create a super administrator" }),
         { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
