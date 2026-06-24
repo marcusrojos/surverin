@@ -198,8 +198,8 @@ export default function UsersPage() {
       return;
     }
 
-    // Super admin must assign a site
-    if (isSuperAdmin && !formData.site_id) {
+    // Super admin must assign a site for admins and drivers (not for super admins)
+    if (isSuperAdmin && formData.role !== 'super_admin' && !formData.site_id) {
       setErrors({ site_id: 'Veuillez sélectionner un site' });
       return;
     }
