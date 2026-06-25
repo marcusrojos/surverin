@@ -11,8 +11,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/lib/auth';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import jsPDF from 'jspdf';
-import dpciLogo from '@/assets/dpci-logo.webp';
+import { createPdf, sectionTitle, table, field, finalizePdf, type TableColumn } from '@/lib/pdf-kit';
 
 interface DriverInfo {
   full_name: string;
