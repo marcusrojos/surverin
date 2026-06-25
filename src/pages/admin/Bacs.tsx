@@ -22,7 +22,7 @@ import { Box, Loader2, Search, Download } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/lib/auth';
 import { toast } from 'sonner';
-import jsPDF from 'jspdf';
+import { createPdf, sectionTitle, field, table, infoBox, finalizePdf, type TableColumn } from '@/lib/pdf-kit';
 
 interface BacRow {
   pharmacy_id: string;
