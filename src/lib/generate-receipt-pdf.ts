@@ -185,7 +185,7 @@ export async function generateReceiptPDF(data: ReceiptData) {
     const logoImg = await loadImage(dpciLogo);
     const logoWidth = 22;
     const logoHeight = (logoImg.height / logoImg.width) * logoWidth;
-    doc.addImage(logoImg, 'WEBP', margin, y, logoWidth, logoHeight);
+    doc.addImage(logoImg, 'PNG', margin, y, logoWidth, logoHeight);
     doc.setFontSize(16);
     doc.setFont('helvetica', 'bold');
     setColor(BRAND_DARK);
