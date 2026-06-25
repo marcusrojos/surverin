@@ -146,6 +146,107 @@ export default function SitesPage() {
     }
   };
 
+  const [reportingId, setReportingId] = useState<string | null>(null);
+
+  const generateReport = async (site: SiteRow) => {
+    setReportingId(site.id);
+    try {
+      const [{ data: profiles }, { data: roles }, { data: pharmacies }] = await Promise.all([
+        supabase.from('profiles').select('user_id, full_name, email, username, phone, is_active, site_id').eq('site_id', site.id),
+        supabase.from('user_roles').select('user_id, role'),
+        supabase.from('pharmacies').select('id, name, address, phone, client_code, user_id, site_id').eq('site_id', site.id),
+      ]);
+
+      const roleMap = new Map<string, string[]>();
+      (roles || []).forEach((r: any) => {
+        const arr = roleMap.get(r.user_id) || [];
+        arr.push(r.role);
+        roleMap.set(r.user_id, arr);
+      });
+
+      const profByUser = new Map((profiles || []).map((p: any) => [p.user_id, p]));
+      const admins = (profiles || []).filter((p: any) => (roleMap.get(p.user_id) || []).includes('admin'));
+      const livreurs = (profiles || []).filter((p: any) => (roleMap.get(p.user_id) || []).includes('livreur'));
+      const pharmaList = (pharmacies || []).map((ph: any) => {
+        const prof = ph.user_id ? profByUser.get(ph.user_id) : null;
+        return { ...ph, active: prof ? prof.is_active : false };
+      });
+      const pharmaActives = pharmaList.filter((p: any) => p.active);
+      const pharmaInactives = pharmaList.filter((p: any) => !p.active);
+
+      const doc = new jsPDF();
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const green: [number, number, number] = [21, 131, 82];
+      let y = 0;
+
+      doc.setFillColor(...green);
+      doc.rect(0, 0, pageWidth, 28, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(16);
+      doc.setFont('helvetica', 'bold');
+      doc.text(`DPCI Delivery — Rapport du site`, 14, 13);
+      doc.setFontSize(11);
+      doc.setFont('helvetica', 'normal');
+      doc.text(site.name, 14, 21);
+      doc.setTextColor(0, 0, 0);
+      y = 36;
+
+      doc.setFontSize(9);
+      const meta = [
+        site.address ? `Adresse : ${site.address}` : null,
+        site.phone ? `Téléphone : ${site.phone}` : null,
+        `Statut : ${site.is_active ? 'Actif' : 'Inactif'}`,
+        `Édité le ${new Date().toLocaleDateString('fr-FR')} à ${new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`,
+      ].filter(Boolean) as string[];
+      meta.forEach((m) => { doc.text(m, 14, y); y += 5; });
+      y += 4;
+
+      const newPageIf = (need = 8) => { if (y > 285 - need) { doc.addPage(); y = 20; } };
+      const section = (title: string) => {
+        newPageIf(14);
+        doc.setFillColor(...green);
+        doc.setTextColor(255, 255, 255);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(11);
+        doc.rect(14, y - 5, pageWidth - 28, 8, 'F');
+        doc.text(title, 16, y);
+        doc.setTextColor(0, 0, 0);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9);
+        y += 10;
+      };
+      const line = (txt: string) => {
+        newPageIf();
+        doc.text(txt, 18, y);
+        y += 5.5;
+      };
+      const empty = () => { doc.setTextColor(120, 120, 120); line('Aucun'); doc.setTextColor(0, 0, 0); };
+
+      section(`Administrateurs (${admins.length})`);
+      if (admins.length === 0) empty();
+      else admins.forEach((a: any) => line(`• ${a.full_name || a.username || '—'}${a.email ? ` — ${a.email}` : ''}${a.phone ? ` — ${a.phone}` : ''}`));
+
+      section(`Livreurs (${livreurs.length})`);
+      if (livreurs.length === 0) empty();
+      else livreurs.forEach((l: any) => line(`• ${l.full_name || l.username || '—'}${l.email ? ` — ${l.email}` : ''}${l.phone ? ` — ${l.phone}` : ''}${l.is_active ? '' : ' (inactif)'}`));
+
+      section(`Pharmacies actives (${pharmaActives.length})`);
+      if (pharmaActives.length === 0) empty();
+      else pharmaActives.forEach((p: any) => line(`• ${p.name}${p.client_code ? ` [${p.client_code}]` : ''}${p.phone ? ` — ${p.phone}` : ''}`));
+
+      section(`Pharmacies non actives (${pharmaInactives.length})`);
+      if (pharmaInactives.length === 0) empty();
+      else pharmaInactives.forEach((p: any) => line(`• ${p.name}${p.client_code ? ` [${p.client_code}]` : ''}${p.phone ? ` — ${p.phone}` : ''}`));
+
+      const safeName = site.name.replace(/[^a-z0-9]+/gi, '-').toLowerCase();
+      doc.save(`rapport-site-${safeName}-${new Date().toISOString().slice(0, 10)}.pdf`);
+    } catch (e: any) {
+      toast.error('Erreur lors de la génération du rapport');
+    } finally {
+      setReportingId(null);
+    }
+  };
+
   const handleToggle = async (site: SiteRow) => {
     try {
       const { error } = await supabase.from('sites').update({ is_active: !site.is_active }).eq('id', site.id);
