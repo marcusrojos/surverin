@@ -47,59 +47,8 @@ interface DeliveryByDriver {
   }[];
 }
 
-function loadImage(src: string): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => resolve(img);
-    img.onerror = reject;
-    img.src = src;
-  });
-}
 
-async function addPDFHeader(doc: jsPDF, title: string): Promise<number> {
-  const pageWidth = doc.internal.pageSize.getWidth();
-  const margin = 15;
-  let y = 15;
 
-  try {
-    const logoImg = await loadImage(dpciLogo);
-    const logoW = 20;
-    const logoH = (logoImg.height / logoImg.width) * logoW;
-    doc.addImage(logoImg, 'WEBP', margin, y, logoW, logoH);
-    doc.setFontSize(16);
-    doc.setFont('helvetica', 'bold');
-    doc.text('DPCI', margin + logoW + 5, y + 7);
-    doc.setFontSize(8);
-    doc.setFont('helvetica', 'normal');
-    doc.text('Livraison Express Pharmaceutique', margin + logoW + 5, y + 12);
-    y += Math.max(logoH, 15) + 5;
-  } catch {
-    doc.setFontSize(16);
-    doc.setFont('helvetica', 'bold');
-    doc.text('DPCI', margin, y + 7);
-    y += 15;
-  }
-
-  doc.setDrawColor(0, 102, 204);
-  doc.setLineWidth(0.8);
-  doc.line(margin, y, pageWidth - margin, y);
-  y += 8;
-
-  doc.setFontSize(14);
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(0, 0, 0);
-  doc.text(title, pageWidth / 2, y, { align: 'center' });
-  y += 3;
-  doc.setFontSize(8);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(120, 120, 120);
-  doc.text(`Généré le ${new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}`, pageWidth / 2, y + 5, { align: 'center' });
-  doc.setTextColor(0, 0, 0);
-  y += 12;
-
-  return y;
-}
 
 export default function AdminLists() {
   const { role } = useAuth();
