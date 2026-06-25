@@ -350,6 +350,9 @@ export default function SitesPage() {
                     <span className="text-xs text-muted-foreground">Actif</span>
                   </div>
                   <div className="flex items-center gap-1">
+                    <Button variant="ghost" size="icon" title="Télécharger le rapport" onClick={() => generateReport(site)} disabled={reportingId === site.id}>
+                      {reportingId === site.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />}
+                    </Button>
                     <Button variant="ghost" size="icon" onClick={() => openDialog(site)}>
                       <Pencil className="w-4 h-4" />
                     </Button>
