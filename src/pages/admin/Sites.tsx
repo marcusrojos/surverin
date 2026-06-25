@@ -27,7 +27,7 @@ import { Plus, Pencil, Trash2, Loader2, Network, Building2, Users, ClipboardList
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { z } from 'zod';
-import jsPDF from 'jspdf';
+import { createPdf, sectionTitle, field, table, infoBox, finalizePdf } from '@/lib/pdf-kit';
 
 interface SiteRow {
   id: string;
