@@ -175,187 +175,117 @@ export default function AdminLists() {
   }
 
   async function downloadDriversPDF() {
-    const doc = new jsPDF('p', 'mm', 'a4');
-    const margin = 15;
-    let y = await addPDFHeader(doc, 'Liste des Chauffeurs');
-
-    const colX = [margin, margin + 55, margin + 105, margin + 145];
-    doc.setFontSize(9);
-    doc.setFont('helvetica', 'bold');
-    doc.text('Nom complet', colX[0], y);
-    doc.text('Email', colX[1], y);
-    doc.text('Username', colX[2], y);
-    doc.text('Mot de passe', colX[3], y);
-    y += 2;
-    doc.setDrawColor(180, 180, 180);
-    doc.setLineWidth(0.3);
-    doc.line(margin, y, 195, y);
-    y += 5;
-
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8);
-    for (const d of drivers) {
-      if (y > 275) { doc.addPage(); y = 20; }
-      doc.text(d.full_name || '', colX[0], y);
-      doc.text(d.email || '', colX[1], y);
-      doc.text(d.username || '—', colX[2], y);
-      doc.text(d.plain_password || '—', colX[3], y);
-      y += 6;
-    }
-
-    doc.save('liste-chauffeurs.pdf');
+    if (drivers.length === 0) { toast.error('Aucun chauffeur à exporter'); return; }
+    const ctx = await createPdf('Liste des chauffeurs', 'p');
+    field(ctx, 'Total :', `${drivers.length} chauffeur(s)`, true);
+    sectionTitle(ctx, 'CHAUFFEURS');
+    const columns: TableColumn[] = [
+      { header: 'Nom complet', width: 45 },
+      { header: 'Email', width: 55 },
+      { header: 'Username', width: 35 },
+      { header: 'Mot de passe', width: 35 },
+    ];
+    table(
+      ctx,
+      columns,
+      drivers.map((d) => [d.full_name || '—', d.email || '—', d.username || '—', d.plain_password || '—'])
+    );
+    finalizePdf(ctx, 'liste-chauffeurs.pdf');
     toast.success('PDF chauffeurs téléchargé');
   }
 
   async function downloadPharmaciesPDF() {
-    const doc = new jsPDF('l', 'mm', 'a4');
-    const margin = 15;
-    let y = await addPDFHeader(doc, 'Liste des Pharmacies');
-
-    const colX = [margin, margin + 45, margin + 65, margin + 110, margin + 155, margin + 195];
-    doc.setFontSize(9);
-    doc.setFont('helvetica', 'bold');
-    doc.text('Pharmacie', colX[0], y);
-    doc.text('Code', colX[1], y);
-    doc.text('Email compte', colX[2], y);
-    doc.text('Adresse', colX[3], y);
-    doc.text('Téléphone', colX[4], y);
-    doc.text('Mot de passe', colX[5], y);
-    y += 2;
-    doc.setDrawColor(180, 180, 180);
-    doc.setLineWidth(0.3);
-    doc.line(margin, y, 282, y);
-    y += 5;
-
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8);
-    for (const p of pharmacies) {
-      if (y > 195) { doc.addPage(); y = 20; }
-      doc.text(p.name || '', colX[0], y);
-      doc.text(p.client_code || '', colX[1], y);
-      doc.text(p.profile_email || p.email || '—', colX[2], y);
-      doc.text((p.address || '—').substring(0, 40), colX[3], y);
-      doc.text(p.phone || '—', colX[4], y);
-      doc.text(p.plain_password || '—', colX[5], y);
-      y += 6;
-    }
-
-    doc.save('liste-pharmacies.pdf');
+    if (pharmacies.length === 0) { toast.error('Aucune pharmacie à exporter'); return; }
+    const ctx = await createPdf('Liste des pharmacies', 'l');
+    field(ctx, 'Total :', `${pharmacies.length} pharmacie(s)`, true);
+    sectionTitle(ctx, 'PHARMACIES');
+    const columns: TableColumn[] = [
+      { header: 'Pharmacie', width: 50 },
+      { header: 'Code', width: 25 },
+      { header: 'Email compte', width: 55 },
+      { header: 'Adresse', width: 60 },
+      { header: 'Téléphone', width: 35 },
+      { header: 'Mot de passe', width: 35 },
+    ];
+    table(
+      ctx,
+      columns,
+      pharmacies.map((p) => [
+        p.name || '—',
+        p.client_code || '—',
+        p.profile_email || p.email || '—',
+        p.address || '—',
+        p.phone || '—',
+        p.plain_password || '—',
+      ])
+    );
+    finalizePdf(ctx, 'liste-pharmacies.pdf');
     toast.success('PDF pharmacies téléchargé');
   }
 
   async function downloadDeliveriesPDF(groups?: DeliveryByDriver[]) {
     const data = groups || deliveriesByDriver;
     if (data.length === 0) { toast.error('Aucune livraison à exporter'); return; }
-    
+
     const isSingle = data.length === 1;
-    const title = isSingle ? `Livraisons — ${data[0].driver_name}` : 'Livraisons par Chauffeur';
-    
-    const doc = new jsPDF('l', 'mm', 'a4');
-    const pageWidth = doc.internal.pageSize.getWidth();
-    const margin = 15;
-    let y = await addPDFHeader(doc, title);
+    const title = isSingle ? `Livraisons — ${data[0].driver_name}` : 'Livraisons par chauffeur';
 
     const filterParts: string[] = [];
     if (selectedDriverId !== 'all') filterParts.push(`Livreur : ${selectedDriverId}`);
     if (selectedStatus !== 'all') filterParts.push(`Statut : ${selectedStatus === 'livre' ? 'Livré' : 'En attente'}`);
     if (selectedDate) filterParts.push(`Date : ${new Date(selectedDate).toLocaleDateString('fr-FR')}`);
-    if (filterParts.length > 0) {
-      doc.setFontSize(8);
-      doc.setFont('helvetica', 'italic');
-      doc.setTextColor(100, 100, 100);
-      doc.text(`Filtres appliqués : ${filterParts.join(' | ')}`, margin, y);
-      doc.setTextColor(0, 0, 0);
-      y += 6;
-    }
+
+    const ctx = await createPdf(title, 'l', filterParts.length > 0 ? `Filtres : ${filterParts.join('  ·  ')}` : undefined);
+
+    const columns: TableColumn[] = [
+      { header: 'Référence', width: 28 },
+      { header: 'Pharmacie', width: 50 },
+      { header: 'Adresse', width: 50 },
+      { header: 'Code vérif.', width: 25 },
+      { header: 'Colis', width: 20 },
+      { header: 'Statut', width: 22, align: 'center' },
+      { header: 'Date', width: 25 },
+    ];
 
     for (const group of data) {
-      if (y > 170) { doc.addPage(); y = 20; }
-
-      doc.setFillColor(240, 246, 255);
-      doc.rect(margin, y - 4, pageWidth - margin * 2, 14, 'F');
-      doc.setFontSize(12);
-      doc.setFont('helvetica', 'bold');
-      doc.setTextColor(0, 60, 130);
-      doc.text(`🚚  ${group.driver_name}`, margin + 3, y + 4);
-      if (group.driver_email) {
-        doc.setFontSize(8);
-        doc.setFont('helvetica', 'normal');
-        doc.setTextColor(80, 80, 80);
-        doc.text(`Email : ${group.driver_email}`, margin + 3, y + 9);
-      }
       const totalLivraisons = group.deliveries.length;
-      const totalLivrees = group.deliveries.filter(d => d.status === 'livre').length;
+      const totalLivrees = group.deliveries.filter((d) => d.status === 'livre').length;
       const totalAttente = totalLivraisons - totalLivrees;
-      doc.setFontSize(8);
-      doc.setFont('helvetica', 'normal');
-      doc.setTextColor(80, 80, 80);
-      doc.text(
-        `Total : ${totalLivraisons} livraison(s)  |  Livrées : ${totalLivrees}  |  En attente : ${totalAttente}`,
-        pageWidth - margin - 3, y + 4,
-        { align: 'right' }
+      sectionTitle(ctx, `${group.driver_name}`);
+      field(ctx, 'Email :', group.driver_email || '—');
+      field(ctx, 'Synthèse :', `${totalLivraisons} livraison(s) · ${totalLivrees} livrée(s) · ${totalAttente} en attente`);
+      table(
+        ctx,
+        columns,
+        group.deliveries.map((del) => {
+          const colisStr = [
+            del.nb_cartons > 0 ? `${del.nb_cartons}C` : '',
+            del.nb_sachets > 0 ? `${del.nb_sachets}S` : '',
+            del.nb_barques > 0 ? `${del.nb_barques}B` : '',
+          ].filter(Boolean).join(' ') || '—';
+          const dateStr = del.delivered_at
+            ? new Date(del.delivered_at).toLocaleDateString('fr-FR')
+            : new Date(del.created_at).toLocaleDateString('fr-FR');
+          return [
+            del.reference,
+            del.pharmacy_name,
+            del.pharmacy_address || '—',
+            del.verification_code || '—',
+            colisStr,
+            del.status === 'livre' ? 'Livré' : 'En attente',
+            dateStr,
+          ];
+        })
       );
-      doc.setTextColor(0, 0, 0);
-      y += 16;
-
-      const colX = [margin + 2, margin + 28, margin + 78, margin + 118, margin + 155, margin + 183, margin + 210];
-      doc.setFontSize(7.5);
-      doc.setFont('helvetica', 'bold');
-      doc.setTextColor(50, 50, 50);
-      doc.text('Référence', colX[0], y);
-      doc.text('Pharmacie', colX[1], y);
-      doc.text('Adresse', colX[2], y);
-      doc.text('Code vérif.', colX[3], y);
-      doc.text('Colis', colX[4], y);
-      doc.text('Statut', colX[5], y);
-      doc.text('Date création', colX[6], y);
-      y += 2;
-      doc.setDrawColor(150, 150, 200);
-      doc.setLineWidth(0.3);
-      doc.line(margin + 2, y, pageWidth - margin, y);
-      y += 4;
-
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(7.5);
-      for (const del of group.deliveries) {
-        if (y > 185) { doc.addPage(); y = 20; }
-        const rowColor = group.deliveries.indexOf(del) % 2 === 0 ? [252, 252, 252] : [245, 245, 255];
-        doc.setFillColor(rowColor[0], rowColor[1], rowColor[2]);
-        doc.rect(margin + 2, y - 3, pageWidth - margin * 2 - 2, 6, 'F');
-
-        doc.setTextColor(0, 0, 0);
-        doc.text(del.reference, colX[0], y);
-        doc.text(del.pharmacy_name.substring(0, 28), colX[1], y);
-        doc.text((del.pharmacy_address || '—').substring(0, 30), colX[2], y);
-        doc.text(del.verification_code || '—', colX[3], y);
-        const colisStr = [
-          del.nb_cartons > 0 ? `${del.nb_cartons}C` : '',
-          del.nb_sachets > 0 ? `${del.nb_sachets}S` : '',
-          del.nb_barques > 0 ? `${del.nb_barques}B` : '',
-        ].filter(Boolean).join(' ') || '—';
-        doc.text(colisStr, colX[4], y);
-        if (del.status === 'livre') {
-          doc.setTextColor(0, 130, 60);
-          doc.text('✓ Livré', colX[5], y);
-        } else {
-          doc.setTextColor(200, 100, 0);
-          doc.text('⏳ Attente', colX[5], y);
-        }
-        doc.setTextColor(0, 0, 0);
-        const dateCreation = new Date(del.created_at).toLocaleDateString('fr-FR');
-        const dateLivraison = del.delivered_at ? new Date(del.delivered_at).toLocaleDateString('fr-FR') : '';
-        doc.text(dateLivraison ? `${dateLivraison}` : dateCreation, colX[6], y);
-        y += 6;
-      }
-      y += 6;
     }
 
     const fileName = isSingle
       ? `livraisons-${data[0].driver_name.replace(/\s+/g, '-').toLowerCase()}.pdf`
       : 'livraisons-par-chauffeur.pdf';
-    doc.save(fileName);
+    finalizePdf(ctx, fileName);
     toast.success('PDF livraisons téléchargé');
   }
+
 
   const filteredDeliveryGroups = (() => {
     let groups = selectedDriverId === 'all'
