@@ -23,10 +23,11 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
-import { Plus, Pencil, Trash2, Loader2, Network, Building2, Users, ClipboardList, Package } from 'lucide-react';
+import { Plus, Pencil, Trash2, Loader2, Network, Building2, Users, ClipboardList, Package, FileDown } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { z } from 'zod';
+import jsPDF from 'jspdf';
 
 interface SiteRow {
   id: string;
