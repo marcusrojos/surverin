@@ -22,7 +22,7 @@ import { Box, Loader2, Search, Download } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/lib/auth';
 import { toast } from 'sonner';
-import jsPDF from 'jspdf';
+import { createPdf, sectionTitle, field, table, infoBox, finalizePdf, type TableColumn } from '@/lib/pdf-kit';
 
 interface BacRow {
   pharmacy_id: string;
@@ -90,7 +90,7 @@ export default function BacsPage() {
 
   const totalPending = filtered.reduce((acc, r) => acc + r.pending_bacs, 0);
 
-  const handleDownloadPdf = () => {
+  const handleDownloadPdf = async () => {
     const toRecover = filtered
       .filter((r) => r.pending_bacs > 0)
       .sort((a, b) => b.pending_bacs - a.pending_bacs);
@@ -100,57 +100,31 @@ export default function BacsPage() {
       return;
     }
 
-    const doc = new jsPDF();
-    const pageWidth = doc.internal.pageSize.getWidth();
-    const green: [number, number, number] = [21, 131, 82];
+    const total = toRecover.reduce((acc, r) => acc + r.pending_bacs, 0);
+    const ctx = await createPdf('Bacs à récupérer');
+    field(ctx, 'Pharmacies :', `${toRecover.length} concernée(s)`);
+    field(ctx, 'Total bacs :', `${total} bac(s)`, true);
 
-    doc.setFillColor(...green);
-    doc.rect(0, 0, pageWidth, 28, 'F');
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(16);
-    doc.setFont('helvetica', 'bold');
-    doc.text('DPCI Delivery — Bacs à récupérer', 14, 13);
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'normal');
-    doc.text(
-      `Édité le ${new Date().toLocaleDateString('fr-FR')} à ${new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`,
-      14,
-      21
+    sectionTitle(ctx, 'DÉTAIL PAR PHARMACIE');
+    const columns: TableColumn[] = isSuperAdmin
+      ? [
+          { header: 'Pharmacie', width: 90 },
+          { header: 'Site', width: 60 },
+          { header: 'Bacs', width: 30, align: 'right' },
+        ]
+      : [
+          { header: 'Pharmacie', width: 130 },
+          { header: 'Bacs', width: 30, align: 'right' },
+        ];
+    const rows = toRecover.map((r) =>
+      isSuperAdmin
+        ? [String(r.pharmacy_name), String(r.site_name ?? '—'), String(r.pending_bacs)]
+        : [String(r.pharmacy_name), String(r.pending_bacs)]
     );
+    table(ctx, columns, rows);
 
-    let y = 40;
-    doc.setTextColor(0, 0, 0);
-    doc.setFontSize(11);
-    doc.setFont('helvetica', 'bold');
-    doc.text('Pharmacie', 14, y);
-    if (isSuperAdmin) doc.text('Site', 110, y);
-    doc.text('Bacs', pageWidth - 30, y);
-    doc.setDrawColor(...green);
-    doc.line(14, y + 2, pageWidth - 14, y + 2);
-    y += 9;
-
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(10);
-    let total = 0;
-    toRecover.forEach((r) => {
-      if (y > 280) {
-        doc.addPage();
-        y = 20;
-      }
-      doc.text(String(r.pharmacy_name).slice(0, 55), 14, y);
-      if (isSuperAdmin) doc.text(String(r.site_name).slice(0, 25), 110, y);
-      doc.text(String(r.pending_bacs), pageWidth - 30, y);
-      total += r.pending_bacs;
-      y += 8;
-    });
-
-    doc.setDrawColor(...green);
-    doc.line(14, y, pageWidth - 14, y);
-    y += 8;
-    doc.setFont('helvetica', 'bold');
-    doc.text(`Total : ${total} bac(s) dans ${toRecover.length} pharmacie(s)`, 14, y);
-
-    doc.save(`bacs-a-recuperer-${new Date().toISOString().slice(0, 10)}.pdf`);
+    infoBox(ctx, `Total : ${total} bac(s) à récupérer dans ${toRecover.length} pharmacie(s).`, 'info');
+    finalizePdf(ctx, `bacs-a-recuperer-${new Date().toISOString().slice(0, 10)}.pdf`);
   };
 
   return (

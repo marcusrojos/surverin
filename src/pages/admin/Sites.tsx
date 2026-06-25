@@ -27,7 +27,7 @@ import { Plus, Pencil, Trash2, Loader2, Network, Building2, Users, ClipboardList
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { z } from 'zod';
-import jsPDF from 'jspdf';
+import { createPdf, sectionTitle, field, table, infoBox, finalizePdf } from '@/lib/pdf-kit';
 
 interface SiteRow {
   id: string;
@@ -174,72 +174,82 @@ export default function SitesPage() {
       const pharmaActives = pharmaList.filter((p: any) => p.active);
       const pharmaInactives = pharmaList.filter((p: any) => !p.active);
 
-      const doc = new jsPDF();
-      const pageWidth = doc.internal.pageSize.getWidth();
-      const green: [number, number, number] = [21, 131, 82];
-      let y = 0;
+      const ctx = await createPdf('Rapport de site', 'p', site.name);
 
-      doc.setFillColor(...green);
-      doc.rect(0, 0, pageWidth, 28, 'F');
-      doc.setTextColor(255, 255, 255);
-      doc.setFontSize(16);
-      doc.setFont('helvetica', 'bold');
-      doc.text(`DPCI Delivery — Rapport du site`, 14, 13);
-      doc.setFontSize(11);
-      doc.setFont('helvetica', 'normal');
-      doc.text(site.name, 14, 21);
-      doc.setTextColor(0, 0, 0);
-      y = 36;
+      field(ctx, 'Site :', site.name, true);
+      if (site.address) field(ctx, 'Adresse :', site.address);
+      if (site.phone) field(ctx, 'Téléphone :', site.phone);
+      field(ctx, 'Statut :', site.is_active ? 'Actif' : 'Inactif', true);
+      field(ctx, 'Pharmacies :', `${pharmaActives.length} active(s) · ${pharmaInactives.length} inactive(s)`);
 
-      doc.setFontSize(9);
-      const meta = [
-        site.address ? `Adresse : ${site.address}` : null,
-        site.phone ? `Téléphone : ${site.phone}` : null,
-        `Statut : ${site.is_active ? 'Actif' : 'Inactif'}`,
-        `Édité le ${new Date().toLocaleDateString('fr-FR')} à ${new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`,
-      ].filter(Boolean) as string[];
-      meta.forEach((m) => { doc.text(m, 14, y); y += 5; });
-      y += 4;
+      sectionTitle(ctx, `ADMINISTRATEURS (${admins.length})`);
+      if (admins.length === 0) {
+        infoBox(ctx, 'Aucun administrateur rattaché à ce site.', 'info');
+      } else {
+        table(
+          ctx,
+          [
+            { header: 'Nom', width: 60 },
+            { header: 'Email', width: 75 },
+            { header: 'Téléphone', width: 45 },
+          ],
+          admins.map((a: any) => [a.full_name || a.username || '—', a.email || '—', a.phone || '—'])
+        );
+      }
 
-      const newPageIf = (need = 8) => { if (y > 285 - need) { doc.addPage(); y = 20; } };
-      const section = (title: string) => {
-        newPageIf(14);
-        doc.setFillColor(...green);
-        doc.setTextColor(255, 255, 255);
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(11);
-        doc.rect(14, y - 5, pageWidth - 28, 8, 'F');
-        doc.text(title, 16, y);
-        doc.setTextColor(0, 0, 0);
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(9);
-        y += 10;
-      };
-      const line = (txt: string) => {
-        newPageIf();
-        doc.text(txt, 18, y);
-        y += 5.5;
-      };
-      const empty = () => { doc.setTextColor(120, 120, 120); line('Aucun'); doc.setTextColor(0, 0, 0); };
+      sectionTitle(ctx, `LIVREURS (${livreurs.length})`);
+      if (livreurs.length === 0) {
+        infoBox(ctx, 'Aucun livreur rattaché à ce site.', 'info');
+      } else {
+        table(
+          ctx,
+          [
+            { header: 'Nom', width: 55 },
+            { header: 'Email', width: 70 },
+            { header: 'Téléphone', width: 35 },
+            { header: 'Statut', width: 25, align: 'center' },
+          ],
+          livreurs.map((l: any) => [
+            l.full_name || l.username || '—',
+            l.email || '—',
+            l.phone || '—',
+            l.is_active ? 'Actif' : 'Inactif',
+          ])
+        );
+      }
 
-      section(`Administrateurs (${admins.length})`);
-      if (admins.length === 0) empty();
-      else admins.forEach((a: any) => line(`• ${a.full_name || a.username || '—'}${a.email ? ` — ${a.email}` : ''}${a.phone ? ` — ${a.phone}` : ''}`));
+      sectionTitle(ctx, `PHARMACIES ACTIVES (${pharmaActives.length})`);
+      if (pharmaActives.length === 0) {
+        infoBox(ctx, 'Aucune pharmacie active.', 'info');
+      } else {
+        table(
+          ctx,
+          [
+            { header: 'Pharmacie', width: 65 },
+            { header: 'Code client', width: 35 },
+            { header: 'Téléphone', width: 40 },
+          ],
+          pharmaActives.map((p: any) => [p.name, p.client_code || '—', p.phone || '—'])
+        );
+      }
 
-      section(`Livreurs (${livreurs.length})`);
-      if (livreurs.length === 0) empty();
-      else livreurs.forEach((l: any) => line(`• ${l.full_name || l.username || '—'}${l.email ? ` — ${l.email}` : ''}${l.phone ? ` — ${l.phone}` : ''}${l.is_active ? '' : ' (inactif)'}`));
-
-      section(`Pharmacies actives (${pharmaActives.length})`);
-      if (pharmaActives.length === 0) empty();
-      else pharmaActives.forEach((p: any) => line(`• ${p.name}${p.client_code ? ` [${p.client_code}]` : ''}${p.phone ? ` — ${p.phone}` : ''}`));
-
-      section(`Pharmacies non actives (${pharmaInactives.length})`);
-      if (pharmaInactives.length === 0) empty();
-      else pharmaInactives.forEach((p: any) => line(`• ${p.name}${p.client_code ? ` [${p.client_code}]` : ''}${p.phone ? ` — ${p.phone}` : ''}`));
+      sectionTitle(ctx, `PHARMACIES NON ACTIVES (${pharmaInactives.length})`);
+      if (pharmaInactives.length === 0) {
+        infoBox(ctx, 'Aucune pharmacie inactive.', 'info');
+      } else {
+        table(
+          ctx,
+          [
+            { header: 'Pharmacie', width: 65 },
+            { header: 'Code client', width: 35 },
+            { header: 'Téléphone', width: 40 },
+          ],
+          pharmaInactives.map((p: any) => [p.name, p.client_code || '—', p.phone || '—'])
+        );
+      }
 
       const safeName = site.name.replace(/[^a-z0-9]+/gi, '-').toLowerCase();
-      doc.save(`rapport-site-${safeName}-${new Date().toISOString().slice(0, 10)}.pdf`);
+      finalizePdf(ctx, `rapport-site-${safeName}-${new Date().toISOString().slice(0, 10)}.pdf`);
     } catch (e: any) {
       toast.error('Erreur lors de la génération du rapport');
     } finally {
