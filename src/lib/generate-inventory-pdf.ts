@@ -1,5 +1,6 @@
 import jsPDF from 'jspdf';
 import dpciLogo from '@/assets/dpci-logo.png';
+import { savePdfDoc } from '@/lib/pdf-kit';
 
 interface InventoryScan {
   barcode: string;
@@ -388,5 +389,5 @@ export async function generateInventoryPDF(data: InventoryPDFData) {
     drawFooter();
   }
 
-  doc.save(`inventaire-${data.parcoursName.replace(/\s+/g, '-')}.pdf`);
+  await savePdfDoc(doc, `inventaire-${data.parcoursName.replace(/\s+/g, "-")}.pdf`);
 }
