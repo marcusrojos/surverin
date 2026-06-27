@@ -304,8 +304,8 @@ export function table(ctx: PdfDoc, columns: TableColumn[], rows: string[][]) {
   ctx.y += 4;
 }
 
-/** Apply branded footer to every page and save the file. */
-export function finalizePdf(ctx: PdfDoc, fileName: string) {
+/** Apply branded footer to every page and save the file (Web + native). */
+export async function finalizePdf(ctx: PdfDoc, fileName: string) {
   const { doc, pageWidth, pageHeight, margin } = ctx;
   const totalPages = (doc as any).internal.getNumberOfPages();
   for (let p = 1; p <= totalPages; p++) {
@@ -322,5 +322,5 @@ export function finalizePdf(ctx: PdfDoc, fileName: string) {
     doc.text(`Document généré le ${formatDateFR(new Date())}`, margin, fy + 9.5);
     doc.text(`Page ${p}/${totalPages}`, pageWidth - margin, fy + 9.5, { align: 'right' });
   }
-  doc.save(fileName);
+  await savePdfDoc(doc, fileName);
 }
