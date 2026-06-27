@@ -450,7 +450,7 @@ export async function generateReceiptPDF(data: ReceiptData) {
     drawFooter();
   }
 
-  doc.save(`bon-livraison-${data.reference}.pdf`);
+  await savePdfDoc(doc, `bon-livraison-${data.reference}.pdf`);
 }
 
 /**
