@@ -1,5 +1,6 @@
 import jsPDF from 'jspdf';
 import dpciLogo from '@/assets/dpci-logo.png';
+import { savePdfDoc } from '@/lib/pdf-kit';
 
 interface PackageItem {
   type: string;
@@ -449,7 +450,7 @@ export async function generateReceiptPDF(data: ReceiptData) {
     drawFooter();
   }
 
-  doc.save(`bon-livraison-${data.reference}.pdf`);
+  await savePdfDoc(doc, `bon-livraison-${data.reference}.pdf`);
 }
 
 /**

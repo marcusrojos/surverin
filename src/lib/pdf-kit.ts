@@ -1,5 +1,51 @@
 import jsPDF from 'jspdf';
 import dpciLogo from '@/assets/dpci-logo.png';
+import { Capacitor } from '@capacitor/core';
+
+/**
+ * Save a jsPDF document, handling both Web and native (Capacitor) runtimes.
+ * - Web: triggers a normal browser download (doc.save).
+ * - Native (Android/iOS): writes the PDF as Base64 to Directory.Documents and
+ *   opens it with the system viewer so the user can view/print/save it.
+ */
+export async function savePdfDoc(doc: jsPDF, fileName: string): Promise<void> {
+  if (!Capacitor.isNativePlatform()) {
+    doc.save(fileName);
+    return;
+  }
+
+  try {
+    // jsPDF datauristring -> strip the "data:application/pdf;...;base64," prefix
+    const dataUri = doc.output('datauristring');
+    const base64Data = dataUri.substring(dataUri.indexOf(',') + 1);
+
+    const [{ Filesystem, Directory }, { FileOpener }] = await Promise.all([
+      import('@capacitor/filesystem'),
+      import('@capacitor-community/file-opener'),
+    ]);
+
+    await Filesystem.writeFile({
+      path: fileName,
+      data: base64Data,
+      directory: Directory.Documents,
+      recursive: true,
+    });
+
+    const { uri } = await Filesystem.getUri({
+      directory: Directory.Documents,
+      path: fileName,
+    });
+
+    await FileOpener.open({
+      filePath: uri,
+      contentType: 'application/pdf',
+    });
+  } catch (err) {
+    // Fallback to a regular download if native handling fails
+    console.error('Native PDF save failed, falling back to download', err);
+    doc.save(fileName);
+  }
+}
 
 // ── DPCI brand palette (HSL 152 72% 30%) ──
 export const BRAND_GREEN = { r: 21, g: 131, b: 82 };
@@ -258,8 +304,8 @@ export function table(ctx: PdfDoc, columns: TableColumn[], rows: string[][]) {
   ctx.y += 4;
 }
 
-/** Apply branded footer to every page and save the file. */
-export function finalizePdf(ctx: PdfDoc, fileName: string) {
+/** Apply branded footer to every page and save the file (Web + native). */
+export async function finalizePdf(ctx: PdfDoc, fileName: string) {
   const { doc, pageWidth, pageHeight, margin } = ctx;
   const totalPages = (doc as any).internal.getNumberOfPages();
   for (let p = 1; p <= totalPages; p++) {
@@ -276,5 +322,5 @@ export function finalizePdf(ctx: PdfDoc, fileName: string) {
     doc.text(`Document généré le ${formatDateFR(new Date())}`, margin, fy + 9.5);
     doc.text(`Page ${p}/${totalPages}`, pageWidth - margin, fy + 9.5, { align: 'right' });
   }
-  doc.save(fileName);
+  await savePdfDoc(doc, fileName);
 }
