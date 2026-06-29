@@ -2,8 +2,14 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+// Fallbacks ensure the mobile (Capacitor) build always reaches Supabase,
+// even when build-time env vars are not injected during `npm run build`.
+const SUPABASE_URL =
+  import.meta.env.VITE_SUPABASE_URL ||
+  'https://bfvgvskacesjokqiguph.supabase.co';
+const SUPABASE_PUBLISHABLE_KEY =
+  import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJmdmd2c2thY2Vzam9rcWlndXBoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE1ODA5MjMsImV4cCI6MjA4NzE1NjkyM30.8oAWvbYHzK3HqVH1Ro8d95eiKgAAdgzNrsywmQ7iUJQ';
 
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
