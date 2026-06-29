@@ -350,95 +350,95 @@ export default function UsersPage() {
           />
         </div>
 
-        {/* Table */}
-        <div className="bg-card rounded-xl border shadow-sm overflow-x-auto">
-          {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="w-8 h-8 animate-spin text-primary" />
-            </div>
-          ) : filteredUsers.length === 0 ? (
-            <div className="text-center py-12 text-muted-foreground">
-              <Users className="w-12 h-12 mx-auto mb-3 opacity-50" />
-              <p>Aucun utilisateur trouvé</p>
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Nom</TableHead>
-                  <TableHead className="hidden md:table-cell">Identifiant</TableHead>
-                  <TableHead className="hidden md:table-cell">Email</TableHead>
-                  <TableHead>Rôle</TableHead>
-                  {isSuperAdmin && <TableHead className="hidden lg:table-cell">Site</TableHead>}
-                  <TableHead>Actif</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredUsers.map((user) => (
-                  <TableRow key={user.id} className={!user.is_active ? 'opacity-50' : ''}>
-                    <TableCell className="font-medium">{user.full_name}</TableCell>
-                    <TableCell className="hidden md:table-cell font-mono text-sm text-primary">
-                      {user.username || '-'}
-                    </TableCell>
-                    <TableCell className="hidden md:table-cell text-muted-foreground">
-                      {user.email}
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant={user.role === 'admin' || user.role === 'super_admin' ? 'default' : 'secondary'}
-                        className="gap-1"
-                      >
-                        {user.role === 'super_admin' ? (
-                          <Crown className="w-3 h-3" />
-                        ) : user.role === 'admin' ? (
-                          <Shield className="w-3 h-3" />
-                        ) : (
-                          <Truck className="w-3 h-3" />
-                        )}
-                        {user.role === 'super_admin' ? 'Super admin' : user.role === 'admin' ? 'Admin' : 'Livreur'}
-                      </Badge>
-                    </TableCell>
-                    {isSuperAdmin && (
-                      <TableCell className="hidden lg:table-cell text-muted-foreground">
-                        {siteName(user.site_id)}
-                      </TableCell>
-                    )}
-                    <TableCell>
-                      <Switch
-                        checked={user.is_active}
-                        onCheckedChange={() => handleToggleActive(user)}
-                        disabled={togglingUserId === user.id}
-                      />
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleOpenDialog(user)}
-                        >
-                          <Pencil className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="text-destructive hover:text-destructive"
-                          onClick={() => {
-                            setSelectedUser(user);
-                            setIsDeleteDialogOpen(true);
-                          }}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </div>
+        {/* Sections par rôle */}
+        {loading ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="w-8 h-8 animate-spin text-primary" />
+          </div>
+        ) : filteredUsers.length === 0 ? (
+          <div className="bg-card rounded-xl border shadow-sm text-center py-12 text-muted-foreground">
+            <Users className="w-12 h-12 mx-auto mb-3 opacity-50" />
+            <p>Aucun utilisateur trouvé</p>
+          </div>
+        ) : (
+          <div className="space-y-8">
+            {roleSections.map((section) => {
+              const sectionUsers = filteredUsers.filter((u) => u.role === section.role);
+              if (sectionUsers.length === 0) return null;
+              const SectionIcon = section.icon;
+              return (
+                <div key={section.role}>
+                  <div className="flex items-center gap-2 mb-3">
+                    <SectionIcon className="w-5 h-5 text-primary" />
+                    <h2 className="text-lg font-semibold text-foreground">{section.label}</h2>
+                    <Badge variant="secondary">{sectionUsers.length}</Badge>
+                  </div>
+                  <div className="bg-card rounded-xl border shadow-sm overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Nom</TableHead>
+                          <TableHead className="hidden md:table-cell">Identifiant</TableHead>
+                          <TableHead className="hidden md:table-cell">Email</TableHead>
+                          {isSuperAdmin && <TableHead className="hidden lg:table-cell">Site</TableHead>}
+                          <TableHead>Actif</TableHead>
+                          <TableHead className="text-right">Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {sectionUsers.map((user) => (
+                          <TableRow key={user.id} className={!user.is_active ? 'opacity-50' : ''}>
+                            <TableCell className="font-medium">{user.full_name}</TableCell>
+                            <TableCell className="hidden md:table-cell font-mono text-sm text-primary">
+                              {user.username || '-'}
+                            </TableCell>
+                            <TableCell className="hidden md:table-cell text-muted-foreground">
+                              {user.email}
+                            </TableCell>
+                            {isSuperAdmin && (
+                              <TableCell className="hidden lg:table-cell text-muted-foreground">
+                                {siteName(user.site_id)}
+                              </TableCell>
+                            )}
+                            <TableCell>
+                              <Switch
+                                checked={user.is_active}
+                                onCheckedChange={() => handleToggleActive(user)}
+                                disabled={togglingUserId === user.id}
+                              />
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex items-center justify-end gap-2">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => handleOpenDialog(user)}
+                                >
+                                  <Pencil className="w-4 h-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="text-destructive hover:text-destructive"
+                                  onClick={() => {
+                                    setSelectedUser(user);
+                                    setIsDeleteDialogOpen(true);
+                                  }}
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
 
         {/* Create/Edit Dialog */}
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
