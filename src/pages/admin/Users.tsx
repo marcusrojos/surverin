@@ -308,10 +308,19 @@ export default function UsersPage() {
 
   const filteredUsers = users.filter(
     (u) =>
-      u.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      u.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (u.username && u.username.toLowerCase().includes(searchQuery.toLowerCase()))
+      // Admins (non super) ne gèrent pas les super administrateurs
+      (isSuperAdmin || u.role !== 'super_admin') &&
+      (u.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        u.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (u.username && u.username.toLowerCase().includes(searchQuery.toLowerCase())))
   );
+
+  const roleSections: { role: 'super_admin' | 'admin' | 'livreur'; label: string; icon: typeof Shield }[] = [
+    ...(isSuperAdmin ? [{ role: 'super_admin' as const, label: 'Super administrateurs', icon: Crown }] : []),
+    { role: 'admin', label: 'Administrateurs', icon: Shield },
+    { role: 'livreur', label: 'Livreurs', icon: Truck },
+  ];
+
 
   return (
     <DashboardLayout requiredRole="admin">
