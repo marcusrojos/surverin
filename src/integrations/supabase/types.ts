@@ -196,7 +196,7 @@ export type Database = {
       }
       parcours: {
         Row: {
-          axis_id: string
+          axis_id: string | null
           created_at: string
           driver_id: string
           force_confirmed: boolean
@@ -210,7 +210,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
-          axis_id: string
+          axis_id?: string | null
           created_at?: string
           driver_id: string
           force_confirmed?: boolean
@@ -224,7 +224,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
-          axis_id?: string
+          axis_id?: string | null
           created_at?: string
           driver_id?: string
           force_confirmed?: boolean
