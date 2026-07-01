@@ -329,7 +329,12 @@ export default function AdminLists() {
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <h1 className="text-2xl font-bold">Listes & Documents</h1>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <h1 className="text-2xl font-bold">Listes & Documents</h1>
+          {isSuperAdmin && (
+            <SiteFilterSelect value={siteFilter} onChange={setSiteFilter} sites={sites} />
+          )}
+        </div>
 
         <Tabs defaultValue="drivers">
           <TabsList className="flex flex-wrap">
