@@ -182,9 +182,9 @@ export default function AdminLists() {
   }
 
   async function downloadDriversPDF() {
-    if (drivers.length === 0) { toast.error('Aucun chauffeur à exporter'); return; }
+    if (displayDrivers.length === 0) { toast.error('Aucun chauffeur à exporter'); return; }
     const ctx = await createPdf('Liste des chauffeurs', 'p');
-    field(ctx, 'Total :', `${drivers.length} chauffeur(s)`, true);
+    field(ctx, 'Total :', `${displayDrivers.length} chauffeur(s)`, true);
     sectionTitle(ctx, 'CHAUFFEURS');
     const columns: TableColumn[] = [
       { header: 'Nom complet', width: 45 },
@@ -195,7 +195,7 @@ export default function AdminLists() {
     table(
       ctx,
       columns,
-      drivers.map((d) => [d.full_name || '—', d.email || '—', d.username || '—', d.plain_password || '—'])
+      displayDrivers.map((d) => [d.full_name || '—', d.email || '—', d.username || '—', d.plain_password || '—'])
     );
     finalizePdf(ctx, 'liste-chauffeurs.pdf');
     toast.success('PDF chauffeurs téléchargé');
