@@ -44,6 +44,7 @@ import { Plus, Pencil, Trash2, Search, Package, Loader2, Copy, Check, X, FileDow
 import { generateReceiptPDF, downloadPdfFromUrl } from '@/lib/generate-receipt-pdf';
 import { GEOFENCE_RADIUS } from '@/lib/geolocation';
 import { supabase } from '@/integrations/supabase/client';
+import { useSiteFilter, SiteFilterSelect } from '@/components/admin/SiteFilter';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -58,6 +59,7 @@ interface Pharmacy {
   user_id?: string | null;
   latitude?: number | null;
   longitude?: number | null;
+  site_id?: string | null;
 }
 
 interface Driver {
@@ -124,6 +126,8 @@ export default function DeliveriesPage() {
   const [allProfiles, setAllProfiles] = useState<any[]>([]);
   const [formPackages, setFormPackages] = useState<{ type: string; reference: string }[]>([]);
   const [isSaving, setIsSaving] = useState(false);
+  const { isSuperAdmin, sites, siteFilter, setSiteFilter } = useSiteFilter();
+  const pharmacySiteMap = new Map(pharmacies.map((p) => [p.id, p.site_id ?? null]));
 
   useEffect(() => {
     fetchData();
@@ -307,7 +311,8 @@ export default function DeliveriesPage() {
     const matchesStatus = statusFilter === 'all' || d.status === statusFilter;
     const matchesPharmacy = pharmacyFilter === 'all' || d.pharmacy_id === pharmacyFilter;
     const matchesDriver = driverFilter === 'all' || d.driver_id === driverFilter;
-    return matchesSearch && matchesStatus && matchesPharmacy && matchesDriver;
+    const matchesSite = siteFilter === 'all' || pharmacySiteMap.get(d.pharmacy_id) === siteFilter;
+    return matchesSearch && matchesStatus && matchesPharmacy && matchesDriver && matchesSite;
   });
 
   return (
@@ -349,6 +354,9 @@ export default function DeliveriesPage() {
               className="pl-10"
             />
           </div>
+          {isSuperAdmin && (
+            <SiteFilterSelect value={siteFilter} onChange={setSiteFilter} sites={sites} />
+          )}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger className="w-full">

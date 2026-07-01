@@ -12,12 +12,14 @@ import { useAuth } from '@/lib/auth';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { createPdf, sectionTitle, table, field, finalizePdf, type TableColumn } from '@/lib/pdf-kit';
+import { useSiteFilter, SiteFilterSelect } from '@/components/admin/SiteFilter';
 
 interface DriverInfo {
   full_name: string;
   email: string;
   username: string | null;
   plain_password: string | null;
+  site_id: string | null;
 }
 
 interface PharmacyInfo {
@@ -28,11 +30,13 @@ interface PharmacyInfo {
   phone: string | null;
   profile_email: string | null;
   plain_password: string | null;
+  site_id: string | null;
 }
 
 interface DeliveryByDriver {
   driver_name: string;
   driver_email: string;
+  site_id: string | null;
   deliveries: {
     reference: string;
     pharmacy_name: string;
@@ -52,6 +56,7 @@ interface DeliveryByDriver {
 
 export default function AdminLists() {
   const { role } = useAuth();
+  const { isSuperAdmin, sites, siteFilter, setSiteFilter } = useSiteFilter();
   const navigate = useNavigate();
   const [drivers, setDrivers] = useState<DriverInfo[]>([]);
   const [pharmacies, setPharmacies] = useState<PharmacyInfo[]>([]);
@@ -81,14 +86,14 @@ export default function AdminLists() {
         const driverIds = driverRoles.map(r => r.user_id);
         const { data: driverProfiles } = await supabase
           .from('profiles')
-          .select('full_name, email, username, plain_password')
+          .select('full_name, email, username, plain_password, site_id')
           .in('user_id', driverIds);
         setDrivers((driverProfiles as DriverInfo[]) || []);
       }
 
       const { data: pharmaData } = await supabase
         .from('pharmacies')
-        .select('name, client_code, address, email, phone, user_id');
+        .select('name, client_code, address, email, phone, user_id, site_id');
 
       if (pharmaData) {
         const pharmaWithPasswords: PharmacyInfo[] = [];
@@ -114,6 +119,7 @@ export default function AdminLists() {
             phone: p.phone,
             profile_email,
             plain_password,
+            site_id: (p as any).site_id ?? null,
           });
         }
         setPharmacies(pharmaWithPasswords);
@@ -129,7 +135,7 @@ export default function AdminLists() {
         
         const { data: dProfiles } = await supabase
           .from('profiles')
-          .select('user_id, full_name, email')
+          .select('user_id, full_name, email, site_id')
           .in('user_id', uniqueDriverIds.length > 0 ? uniqueDriverIds : ['none']);
 
         const { data: allPharmacies } = await supabase
@@ -137,7 +143,7 @@ export default function AdminLists() {
           .select('id, name, address');
 
         const pharmaMap = new Map((allPharmacies || []).map(p => [p.id, { name: p.name, address: p.address }]));
-        const driverMap = new Map((dProfiles || []).map(p => [p.user_id, { name: p.full_name, email: p.email }]));
+        const driverMap = new Map((dProfiles || []).map(p => [p.user_id, { name: p.full_name, email: p.email, site_id: (p as any).site_id ?? null }]));
 
         const grouped: Record<string, DeliveryByDriver> = {};
         for (const d of allDeliveries) {
@@ -147,6 +153,7 @@ export default function AdminLists() {
             grouped[driverId] = {
               driver_name: dInfo?.name || 'Non assigné',
               driver_email: dInfo?.email || '',
+              site_id: dInfo?.site_id ?? null,
               deliveries: [],
             };
           }
@@ -175,9 +182,9 @@ export default function AdminLists() {
   }
 
   async function downloadDriversPDF() {
-    if (drivers.length === 0) { toast.error('Aucun chauffeur à exporter'); return; }
+    if (displayDrivers.length === 0) { toast.error('Aucun chauffeur à exporter'); return; }
     const ctx = await createPdf('Liste des chauffeurs', 'p');
-    field(ctx, 'Total :', `${drivers.length} chauffeur(s)`, true);
+    field(ctx, 'Total :', `${displayDrivers.length} chauffeur(s)`, true);
     sectionTitle(ctx, 'CHAUFFEURS');
     const columns: TableColumn[] = [
       { header: 'Nom complet', width: 45 },
@@ -188,16 +195,16 @@ export default function AdminLists() {
     table(
       ctx,
       columns,
-      drivers.map((d) => [d.full_name || '—', d.email || '—', d.username || '—', d.plain_password || '—'])
+      displayDrivers.map((d) => [d.full_name || '—', d.email || '—', d.username || '—', d.plain_password || '—'])
     );
     finalizePdf(ctx, 'liste-chauffeurs.pdf');
     toast.success('PDF chauffeurs téléchargé');
   }
 
   async function downloadPharmaciesPDF() {
-    if (pharmacies.length === 0) { toast.error('Aucune pharmacie à exporter'); return; }
+    if (displayPharmacies.length === 0) { toast.error('Aucune pharmacie à exporter'); return; }
     const ctx = await createPdf('Liste des pharmacies', 'l');
-    field(ctx, 'Total :', `${pharmacies.length} pharmacie(s)`, true);
+    field(ctx, 'Total :', `${displayPharmacies.length} pharmacie(s)`, true);
     sectionTitle(ctx, 'PHARMACIES');
     const columns: TableColumn[] = [
       { header: 'Pharmacie', width: 50 },
@@ -210,7 +217,7 @@ export default function AdminLists() {
     table(
       ctx,
       columns,
-      pharmacies.map((p) => [
+      displayPharmacies.map((p) => [
         p.name || '—',
         p.client_code || '—',
         p.profile_email || p.email || '—',
@@ -287,10 +294,14 @@ export default function AdminLists() {
   }
 
 
+  const displayDrivers = drivers.filter(d => siteFilter === 'all' || d.site_id === siteFilter);
+  const displayPharmacies = pharmacies.filter(p => siteFilter === 'all' || p.site_id === siteFilter);
+  const displayDeliveryGroups = deliveriesByDriver.filter(g => siteFilter === 'all' || g.site_id === siteFilter);
+
   const filteredDeliveryGroups = (() => {
     let groups = selectedDriverId === 'all'
-      ? deliveriesByDriver
-      : deliveriesByDriver.filter(g => g.driver_name === selectedDriverId);
+      ? displayDeliveryGroups
+      : displayDeliveryGroups.filter(g => g.driver_name === selectedDriverId);
 
     if (selectedStatus !== 'all' || selectedDate) {
       groups = groups.map(g => ({
@@ -318,7 +329,12 @@ export default function AdminLists() {
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <h1 className="text-2xl font-bold">Listes & Documents</h1>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <h1 className="text-2xl font-bold">Listes & Documents</h1>
+          {isSuperAdmin && (
+            <SiteFilterSelect value={siteFilter} onChange={setSiteFilter} sites={sites} />
+          )}
+        </div>
 
         <Tabs defaultValue="drivers">
           <TabsList className="flex flex-wrap">
@@ -347,7 +363,7 @@ export default function AdminLists() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {drivers.map((d, i) => (
+                      {displayDrivers.map((d, i) => (
                         <TableRow key={i}>
                           <TableCell className="font-medium">{d.full_name}</TableCell>
                           <TableCell>{d.email}</TableCell>
@@ -355,7 +371,7 @@ export default function AdminLists() {
                           <TableCell className="font-mono text-xs">{d.plain_password || '—'}</TableCell>
                         </TableRow>
                       ))}
-                      {drivers.length === 0 && (
+                      {displayDrivers.length === 0 && (
                         <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground">Aucun chauffeur</TableCell></TableRow>
                       )}
                     </TableBody>
@@ -387,7 +403,7 @@ export default function AdminLists() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {pharmacies.map((p, i) => (
+                      {displayPharmacies.map((p, i) => (
                         <TableRow key={i}>
                           <TableCell className="font-medium">{p.name}</TableCell>
                           <TableCell className="font-mono">{p.client_code}</TableCell>
@@ -397,7 +413,7 @@ export default function AdminLists() {
                           <TableCell className="font-mono text-xs">{p.plain_password || '—'}</TableCell>
                         </TableRow>
                       ))}
-                      {pharmacies.length === 0 && (
+                      {displayPharmacies.length === 0 && (
                         <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground">Aucune pharmacie</TableCell></TableRow>
                       )}
                     </TableBody>
@@ -430,7 +446,7 @@ export default function AdminLists() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">Tous les chauffeurs</SelectItem>
-                      {deliveriesByDriver.map((group, i) => (
+                      {displayDeliveryGroups.map((group, i) => (
                         <SelectItem key={i} value={group.driver_name}>
                           {group.driver_name}
                         </SelectItem>
@@ -495,7 +511,7 @@ export default function AdminLists() {
                     </div>
                   </div>
                 ))}
-                {deliveriesByDriver.length === 0 && (
+                {filteredDeliveryGroups.length === 0 && (
                   <p className="text-center text-muted-foreground py-8">Aucune livraison</p>
                 )}
               </CardContent>

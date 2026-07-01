@@ -24,6 +24,7 @@ import {
   AlertTriangle, CheckCircle2, XCircle, Plus, Building2,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { useSiteFilter, SiteFilterSelect } from '@/components/admin/SiteFilter';
 import { useAuth } from '@/lib/auth';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -36,6 +37,7 @@ interface ParcoursRow {
   status: string;
   created_at: string;
   axis_id: string;
+  site_id: string | null;
   driver_id: string;
   force_confirmed: boolean;
   force_confirmed_by: string | null;
@@ -81,6 +83,7 @@ export default function AdminParcours() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const { isSuperAdmin, sites, siteFilter, setSiteFilter } = useSiteFilter();
 
   // Detail dialog
   const [detailParcours, setDetailParcours] = useState<ParcoursRow | null>(null);
@@ -389,7 +392,8 @@ export default function AdminParcours() {
     const q = searchQuery.toLowerCase();
     const matchesSearch = p.name.toLowerCase().includes(q) || p.axis_name.toLowerCase().includes(q) || p.driver_name.toLowerCase().includes(q);
     const matchesStatus = statusFilter === 'all' || p.status === statusFilter;
-    return matchesSearch && matchesStatus;
+    const matchesSite = siteFilter === 'all' || p.site_id === siteFilter;
+    return matchesSearch && matchesStatus && matchesSite;
   });
 
   return (
@@ -417,6 +421,9 @@ export default function AdminParcours() {
               <SelectItem value="termine">Terminé</SelectItem>
             </SelectContent>
           </Select>
+          {isSuperAdmin && (
+            <SiteFilterSelect value={siteFilter} onChange={setSiteFilter} sites={sites} />
+          )}
         </div>
 
         {/* Table */}
