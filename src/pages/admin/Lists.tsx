@@ -202,9 +202,9 @@ export default function AdminLists() {
   }
 
   async function downloadPharmaciesPDF() {
-    if (pharmacies.length === 0) { toast.error('Aucune pharmacie à exporter'); return; }
+    if (displayPharmacies.length === 0) { toast.error('Aucune pharmacie à exporter'); return; }
     const ctx = await createPdf('Liste des pharmacies', 'l');
-    field(ctx, 'Total :', `${pharmacies.length} pharmacie(s)`, true);
+    field(ctx, 'Total :', `${displayPharmacies.length} pharmacie(s)`, true);
     sectionTitle(ctx, 'PHARMACIES');
     const columns: TableColumn[] = [
       { header: 'Pharmacie', width: 50 },
@@ -217,7 +217,7 @@ export default function AdminLists() {
     table(
       ctx,
       columns,
-      pharmacies.map((p) => [
+      displayPharmacies.map((p) => [
         p.name || '—',
         p.client_code || '—',
         p.profile_email || p.email || '—',
