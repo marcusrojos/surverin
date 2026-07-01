@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { supabase } from '@/integrations/supabase/client';
+import { useSiteFilter, SiteFilterSelect } from '@/components/admin/SiteFilter';
 import { useAuth } from '@/lib/auth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -25,6 +26,7 @@ interface Axis {
   name: string;
   description: string | null;
   created_at: string;
+  site_id: string | null;
   pharmacies: { id: string; pharmacy_id: string; position: number; pharmacy: Pharmacy }[];
 }
 
@@ -42,6 +44,7 @@ export default function AdminAxes() {
   const [formName, setFormName] = useState('');
   const [formDescription, setFormDescription] = useState('');
   const [selectedPharmacies, setSelectedPharmacies] = useState<string[]>([]);
+  const { isSuperAdmin, sites, siteFilter, setSiteFilter } = useSiteFilter();
 
   const fetchData = async () => {
     setLoading(true);
@@ -186,6 +189,7 @@ export default function AdminAxes() {
   };
 
   const pharmaMap = new Map(allPharmacies.map(p => [p.id, p]));
+  const filteredAxes = axes.filter(a => siteFilter === 'all' || a.site_id === siteFilter);
 
   return (
     <DashboardLayout>
@@ -201,9 +205,13 @@ export default function AdminAxes() {
           </Button>
         </div>
 
+        {isSuperAdmin && (
+          <SiteFilterSelect value={siteFilter} onChange={setSiteFilter} sites={sites} />
+        )}
+
         {loading ? (
           <p className="text-muted-foreground">Chargement...</p>
-        ) : axes.length === 0 ? (
+        ) : filteredAxes.length === 0 ? (
           <Card>
             <CardContent className="flex flex-col items-center justify-center py-12">
               <Route className="w-12 h-12 text-muted-foreground mb-4" />
@@ -213,7 +221,7 @@ export default function AdminAxes() {
           </Card>
         ) : (
           <div className="grid gap-4">
-            {axes.map(axis => (
+            {filteredAxes.map(axis => (
               <Card key={axis.id}>
                 <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-3">
                   <div>

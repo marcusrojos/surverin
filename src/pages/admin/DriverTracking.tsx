@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
+import { useSiteFilter, SiteFilterSelect } from '@/components/admin/SiteFilter';
 import { MapPin, Clock, Package, User, CalendarDays, Loader2, CheckCircle2, AlertTriangle, Route } from 'lucide-react';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -11,6 +12,7 @@ import { fr } from 'date-fns/locale';
 interface Driver {
   user_id: string;
   full_name: string;
+  site_id: string | null;
 }
 
 interface DeliveryRecord {
@@ -46,6 +48,7 @@ interface ParcoursGroup {
 
 export default function DriverTrackingPage() {
   const [drivers, setDrivers] = useState<Driver[]>([]);
+  const { isSuperAdmin, sites, siteFilter, setSiteFilter } = useSiteFilter();
   const [selectedDriver, setSelectedDriver] = useState<string>('');
   const [parcoursGroups, setParcoursGroups] = useState<ParcoursGroup[]>([]);
   const [loading, setLoading] = useState(false);
@@ -71,7 +74,7 @@ export default function DriverTrackingPage() {
 
     const { data: profiles } = await supabase
       .from('profiles')
-      .select('user_id, full_name')
+      .select('user_id, full_name, site_id')
       .in('user_id', roles.map(r => r.user_id));
 
     setDrivers(profiles || []);
@@ -232,13 +235,20 @@ export default function DriverTrackingPage() {
 
         {/* Filters */}
         <div className="flex flex-col sm:flex-row gap-4">
+          {isSuperAdmin && (
+            <div className="w-full sm:w-56">
+              <SiteFilterSelect value={siteFilter} onChange={setSiteFilter} sites={sites} />
+            </div>
+          )}
           <div className="w-full sm:w-72">
             <Select value={selectedDriver} onValueChange={setSelectedDriver}>
               <SelectTrigger>
                 <SelectValue placeholder="Sélectionner un chauffeur" />
               </SelectTrigger>
               <SelectContent>
-                {drivers.map(driver => (
+                {drivers
+                  .filter(driver => siteFilter === 'all' || driver.site_id === siteFilter)
+                  .map(driver => (
                   <SelectItem key={driver.user_id} value={driver.user_id}>
                     {driver.full_name}
                   </SelectItem>

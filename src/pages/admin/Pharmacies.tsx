@@ -40,6 +40,7 @@ import {
 import { Switch } from '@/components/ui/switch';
 import { Plus, Pencil, Trash2, Search, Building2, Loader2, User, Eye, EyeOff, MapPin, Filter, ArrowUpDown, Route } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { useSiteFilter, SiteFilterSelect } from '@/components/admin/SiteFilter';
 import { toast } from 'sonner';
 import { PharmacyLocationPicker } from '@/components/PharmacyLocationPicker';
 
@@ -55,6 +56,7 @@ interface Pharmacy {
   latitude: number | null;
   longitude: number | null;
   location_source: string | null;
+  site_id?: string | null;
   _is_active?: boolean;
   _axis_position?: number | null;
   _axes?: { axis_id: string; axis_name: string; position: number }[];
@@ -77,6 +79,7 @@ export default function PharmaciesPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [accountFilter, setAccountFilter] = useState<AccountFilter>('all');
   const [sortMode, setSortMode] = useState<SortMode>('alphabetical');
+  const { isSuperAdmin, sites, siteFilter, setSiteFilter } = useSiteFilter();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [selectedPharmacy, setSelectedPharmacy] = useState<Pharmacy | null>(null);
@@ -393,6 +396,7 @@ export default function PharmaciesPage() {
       p.client_code.toLowerCase().includes(searchQuery.toLowerCase()) ||
       p.address?.toLowerCase().includes(searchQuery.toLowerCase());
     if (!matchesSearch) return false;
+    if (siteFilter !== 'all' && p.site_id !== siteFilter) return false;
 
     switch (accountFilter) {
       case 'with_active':
@@ -558,6 +562,9 @@ export default function PharmaciesPage() {
               <SelectItem value="axis_order">Ordre de l'axe</SelectItem>
             </SelectContent>
           </Select>
+          {isSuperAdmin && (
+            <SiteFilterSelect value={siteFilter} onChange={setSiteFilter} sites={sites} className="w-full sm:w-52" />
+          )}
         </div>
 
         {/* Table */}

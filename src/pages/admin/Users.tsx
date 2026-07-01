@@ -41,6 +41,7 @@ import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Plus, Pencil, Trash2, Search, Users, Loader2, Shield, Truck, Eye, EyeOff, Network, Crown } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { SiteFilterSelect } from '@/components/admin/SiteFilter';
 import { useAuth } from '@/lib/auth';
 import { toast } from 'sonner';
 import { z } from 'zod';
@@ -74,6 +75,7 @@ export default function UsersPage() {
   const [sites, setSites] = useState<{ id: string; name: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [siteFilter, setSiteFilter] = useState('all');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<UserWithRole | null>(null);
@@ -311,6 +313,8 @@ export default function UsersPage() {
     (u) =>
       // Admins (non super) ne gèrent pas les super administrateurs
       (isSuperAdmin || u.role !== 'super_admin') &&
+      // Filtre par site (super admin uniquement). Les super admins n'ont pas de site.
+      (siteFilter === 'all' || u.role === 'super_admin' || u.site_id === siteFilter) &&
       (u.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         u.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
         (u.username && u.username.toLowerCase().includes(searchQuery.toLowerCase())))
@@ -340,15 +344,20 @@ export default function UsersPage() {
           </Button>
         </div>
 
-        {/* Search */}
-        <div className="relative max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            placeholder="Rechercher un utilisateur..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10"
-          />
+        {/* Search + filtre site */}
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="relative flex-1 max-w-md">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              placeholder="Rechercher un utilisateur..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-10"
+            />
+          </div>
+          {isSuperAdmin && (
+            <SiteFilterSelect value={siteFilter} onChange={setSiteFilter} sites={sites} />
+          )}
         </div>
 
         {/* Sous-onglets par rôle */}

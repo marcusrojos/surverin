@@ -12,12 +12,14 @@ import { useAuth } from '@/lib/auth';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { createPdf, sectionTitle, table, field, finalizePdf, type TableColumn } from '@/lib/pdf-kit';
+import { useSiteFilter, SiteFilterSelect } from '@/components/admin/SiteFilter';
 
 interface DriverInfo {
   full_name: string;
   email: string;
   username: string | null;
   plain_password: string | null;
+  site_id: string | null;
 }
 
 interface PharmacyInfo {
@@ -28,11 +30,13 @@ interface PharmacyInfo {
   phone: string | null;
   profile_email: string | null;
   plain_password: string | null;
+  site_id: string | null;
 }
 
 interface DeliveryByDriver {
   driver_name: string;
   driver_email: string;
+  site_id: string | null;
   deliveries: {
     reference: string;
     pharmacy_name: string;
@@ -52,6 +56,7 @@ interface DeliveryByDriver {
 
 export default function AdminLists() {
   const { role } = useAuth();
+  const { isSuperAdmin, sites, siteFilter, setSiteFilter } = useSiteFilter();
   const navigate = useNavigate();
   const [drivers, setDrivers] = useState<DriverInfo[]>([]);
   const [pharmacies, setPharmacies] = useState<PharmacyInfo[]>([]);
@@ -81,14 +86,14 @@ export default function AdminLists() {
         const driverIds = driverRoles.map(r => r.user_id);
         const { data: driverProfiles } = await supabase
           .from('profiles')
-          .select('full_name, email, username, plain_password')
+          .select('full_name, email, username, plain_password, site_id')
           .in('user_id', driverIds);
         setDrivers((driverProfiles as DriverInfo[]) || []);
       }
 
       const { data: pharmaData } = await supabase
         .from('pharmacies')
-        .select('name, client_code, address, email, phone, user_id');
+        .select('name, client_code, address, email, phone, user_id, site_id');
 
       if (pharmaData) {
         const pharmaWithPasswords: PharmacyInfo[] = [];
@@ -114,6 +119,7 @@ export default function AdminLists() {
             phone: p.phone,
             profile_email,
             plain_password,
+            site_id: (p as any).site_id ?? null,
           });
         }
         setPharmacies(pharmaWithPasswords);
@@ -129,7 +135,7 @@ export default function AdminLists() {
         
         const { data: dProfiles } = await supabase
           .from('profiles')
-          .select('user_id, full_name, email')
+          .select('user_id, full_name, email, site_id')
           .in('user_id', uniqueDriverIds.length > 0 ? uniqueDriverIds : ['none']);
 
         const { data: allPharmacies } = await supabase
@@ -137,7 +143,7 @@ export default function AdminLists() {
           .select('id, name, address');
 
         const pharmaMap = new Map((allPharmacies || []).map(p => [p.id, { name: p.name, address: p.address }]));
-        const driverMap = new Map((dProfiles || []).map(p => [p.user_id, { name: p.full_name, email: p.email }]));
+        const driverMap = new Map((dProfiles || []).map(p => [p.user_id, { name: p.full_name, email: p.email, site_id: (p as any).site_id ?? null }]));
 
         const grouped: Record<string, DeliveryByDriver> = {};
         for (const d of allDeliveries) {
@@ -147,6 +153,7 @@ export default function AdminLists() {
             grouped[driverId] = {
               driver_name: dInfo?.name || 'Non assigné',
               driver_email: dInfo?.email || '',
+              site_id: dInfo?.site_id ?? null,
               deliveries: [],
             };
           }
@@ -287,10 +294,14 @@ export default function AdminLists() {
   }
 
 
+  const displayDrivers = drivers.filter(d => siteFilter === 'all' || d.site_id === siteFilter);
+  const displayPharmacies = pharmacies.filter(p => siteFilter === 'all' || p.site_id === siteFilter);
+  const displayDeliveryGroups = deliveriesByDriver.filter(g => siteFilter === 'all' || g.site_id === siteFilter);
+
   const filteredDeliveryGroups = (() => {
     let groups = selectedDriverId === 'all'
-      ? deliveriesByDriver
-      : deliveriesByDriver.filter(g => g.driver_name === selectedDriverId);
+      ? displayDeliveryGroups
+      : displayDeliveryGroups.filter(g => g.driver_name === selectedDriverId);
 
     if (selectedStatus !== 'all' || selectedDate) {
       groups = groups.map(g => ({
