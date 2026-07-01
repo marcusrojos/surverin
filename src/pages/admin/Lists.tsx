@@ -358,7 +358,7 @@ export default function AdminLists() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {drivers.map((d, i) => (
+                      {displayDrivers.map((d, i) => (
                         <TableRow key={i}>
                           <TableCell className="font-medium">{d.full_name}</TableCell>
                           <TableCell>{d.email}</TableCell>
@@ -366,7 +366,7 @@ export default function AdminLists() {
                           <TableCell className="font-mono text-xs">{d.plain_password || '—'}</TableCell>
                         </TableRow>
                       ))}
-                      {drivers.length === 0 && (
+                      {displayDrivers.length === 0 && (
                         <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground">Aucun chauffeur</TableCell></TableRow>
                       )}
                     </TableBody>
@@ -398,7 +398,7 @@ export default function AdminLists() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {pharmacies.map((p, i) => (
+                      {displayPharmacies.map((p, i) => (
                         <TableRow key={i}>
                           <TableCell className="font-medium">{p.name}</TableCell>
                           <TableCell className="font-mono">{p.client_code}</TableCell>
@@ -408,7 +408,7 @@ export default function AdminLists() {
                           <TableCell className="font-mono text-xs">{p.plain_password || '—'}</TableCell>
                         </TableRow>
                       ))}
-                      {pharmacies.length === 0 && (
+                      {displayPharmacies.length === 0 && (
                         <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground">Aucune pharmacie</TableCell></TableRow>
                       )}
                     </TableBody>
@@ -441,7 +441,7 @@ export default function AdminLists() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">Tous les chauffeurs</SelectItem>
-                      {deliveriesByDriver.map((group, i) => (
+                      {displayDeliveryGroups.map((group, i) => (
                         <SelectItem key={i} value={group.driver_name}>
                           {group.driver_name}
                         </SelectItem>
@@ -506,7 +506,7 @@ export default function AdminLists() {
                     </div>
                   </div>
                 ))}
-                {deliveriesByDriver.length === 0 && (
+                {filteredDeliveryGroups.length === 0 && (
                   <p className="text-center text-muted-foreground py-8">Aucune livraison</p>
                 )}
               </CardContent>
