@@ -253,13 +253,24 @@ export async function generateInventoryPDF(data: InventoryPDFData) {
   }
 
   // ── SCANS DETAIL ──
-  // Compute missing from expectedColis cross-referenced with scans for robustness
-  const scannedBarcodes = new Set(data.scans.filter(s => s.status === 'matched').map(s => s.barcode));
+  // Trust the stored scan statuses when an inventory was actually performed.
+  // Only fall back to recomputing from expected colis when no scan rows exist
+  // (e.g. legacy inventories). All comparisons are case-insensitive.
+  const hasScans = data.scans.length > 0;
+  const norm = (s: string) => s.trim().toLowerCase();
+
   const missingFromScans = data.scans.filter(s => s.status === 'missing');
-  const missingFromExpected = data.expectedColis
-    .filter(c => !scannedBarcodes.has(c.barcode) && !missingFromScans.some(m => m.barcode === c.barcode))
-    .map(c => ({ barcode: c.barcode, type: c.type, pharmacy_name: c.pharmacyName, status: 'missing' as const }));
-  const allMissing = [...missingFromScans, ...missingFromExpected];
+  let allMissing: InventoryScan[];
+  if (hasScans) {
+    allMissing = missingFromScans;
+  } else {
+    const scannedBarcodes = new Set(
+      data.scans.filter(s => s.status === 'matched').map(s => norm(s.barcode)),
+    );
+    allMissing = data.expectedColis
+      .filter(c => !scannedBarcodes.has(norm(c.barcode)))
+      .map(c => ({ barcode: c.barcode, type: c.type, pharmacy_name: c.pharmacyName, status: 'missing' as const }));
+  }
 
   const extra = data.scans.filter(s => s.status === 'extra');
 
