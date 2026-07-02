@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Package, Building2, Users, LogOut, Truck, Route, FileText, ClipboardList, Box, Network } from 'lucide-react';
+import { LayoutDashboard, Package, Building2, Users, LogOut, Truck, Route, FileText, ClipboardList, Box, Network, History } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/lib/auth';
 import dpciLogo from '@/assets/dpci-logo.png';
@@ -16,6 +16,7 @@ const adminNavItems: NavItem[] = [
   { icon: Box, label: 'Bacs', href: '/admin/bacs' },
   { icon: FileText, label: 'Listes & PDF', href: '/admin/lists' },
   { icon: Route, label: 'Axes', href: '/admin/axes' },
+  { icon: History, label: 'Historique', href: '/admin/history' },
 ];
 const driverNavItems: NavItem[] = [{ icon: Truck, label: 'Mes Livraisons', href: '/driver' }];
 const pharmacyNavItems: NavItem[] = [{ icon: Package, label: 'Mes Livraisons', href: '/pharmacy' }];
