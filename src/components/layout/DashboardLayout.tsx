@@ -2,6 +2,7 @@ import { ReactNode } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/lib/auth';
 import { Sidebar } from './Sidebar';
+import { ProfileBubble } from './ProfileBubble';
 import { MobileNav } from './MobileNav';
 import { Loader2 } from 'lucide-react';
 
