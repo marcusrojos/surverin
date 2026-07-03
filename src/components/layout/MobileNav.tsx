@@ -54,11 +54,13 @@ export function MobileNav() {
           </div>
           <span className="font-bold">DPCI</span>
         </div>
-        <Sheet open={open} onOpenChange={setOpen}>
-          <SheetTrigger asChild>
-            <button className="p-2 hover:bg-sidebar-accent rounded-lg transition-colors"><Menu className="w-6 h-6" /></button>
-          </SheetTrigger>
-          <SheetContent side="right" className="w-72 bg-sidebar text-sidebar-foreground p-0">
+        <div className="flex items-center gap-2">
+          <ProfileBubble />
+          <Sheet open={open} onOpenChange={setOpen}>
+            <SheetTrigger asChild>
+              <button className="p-2 hover:bg-sidebar-accent rounded-lg transition-colors"><Menu className="w-6 h-6" /></button>
+            </SheetTrigger>
+            <SheetContent side="right" className="w-72 bg-sidebar text-sidebar-foreground p-0">
             <div className="flex flex-col h-full">
               <div className="flex items-center gap-3 px-6 py-5 border-b border-sidebar-border bg-sidebar">
                 <div className="w-8 h-8 bg-card rounded-lg flex items-center justify-center p-0.5">
