@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils';
 import { useAuth } from '@/lib/auth';
 import dpciLogo from '@/assets/dpci-logo.png';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
+import { ProfileBubble } from './ProfileBubble';
 
 interface NavItem { icon: React.ElementType; label: string; href: string; }
 
