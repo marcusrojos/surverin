@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils';
 import { useAuth } from '@/lib/auth';
 import dpciLogo from '@/assets/dpci-logo.png';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
+import { ProfileBubble } from './ProfileBubble';
 
 interface NavItem { icon: React.ElementType; label: string; href: string; }
 
@@ -54,11 +55,13 @@ export function MobileNav() {
           </div>
           <span className="font-bold">DPCI</span>
         </div>
-        <Sheet open={open} onOpenChange={setOpen}>
-          <SheetTrigger asChild>
-            <button className="p-2 hover:bg-sidebar-accent rounded-lg transition-colors"><Menu className="w-6 h-6" /></button>
-          </SheetTrigger>
-          <SheetContent side="right" className="w-72 bg-sidebar text-sidebar-foreground p-0">
+        <div className="flex items-center gap-2">
+          <ProfileBubble />
+          <Sheet open={open} onOpenChange={setOpen}>
+            <SheetTrigger asChild>
+              <button className="p-2 hover:bg-sidebar-accent rounded-lg transition-colors"><Menu className="w-6 h-6" /></button>
+            </SheetTrigger>
+            <SheetContent side="right" className="w-72 bg-sidebar text-sidebar-foreground p-0">
             <div className="flex flex-col h-full">
               <div className="flex items-center gap-3 px-6 py-5 border-b border-sidebar-border bg-sidebar">
                 <div className="w-8 h-8 bg-card rounded-lg flex items-center justify-center p-0.5">
@@ -89,7 +92,8 @@ export function MobileNav() {
               </div>
             </div>
           </SheetContent>
-        </Sheet>
+          </Sheet>
+        </div>
       </header>
     </>
   );
