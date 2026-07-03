@@ -48,7 +48,6 @@ export function ProfileBubble() {
   if (!user) return null;
 
   return (
-    <div className="fixed top-3 right-3 z-[60] lg:top-4 lg:right-6">
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <button
