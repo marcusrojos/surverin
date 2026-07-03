@@ -99,6 +99,5 @@ export function ProfileBubble() {
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-    </div>
   );
 }
