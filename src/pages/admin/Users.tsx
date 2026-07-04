@@ -60,10 +60,10 @@ interface UserWithRole {
 
 const userSchema = z.object({
   full_name: z.string().min(2, 'Le nom doit contenir au moins 2 caractères'),
-  email: z.string().email('Email invalide'),
+  email: z.string().email('Email invalide').optional().or(z.literal('')),
   password: z.string().min(6, 'Le mot de passe doit contenir au moins 6 caractères'),
   role: z.enum(['super_admin', 'admin', 'livreur']),
-  username: z.string().optional(),
+  username: z.string().min(3, "Le nom d'utilisateur doit contenir au moins 3 caractères"),
 });
 
 type EditableRole = 'super_admin' | 'admin' | 'livreur';
