@@ -191,11 +191,11 @@ Deno.serve(async (req) => {
     const profileData: any = {
       user_id: newUserId,
       full_name: full_name.trim(),
-      email: email.trim(),
+      email: authEmail,
       site_id: targetSiteId,
     };
-    if (username) {
-      profileData.username = username.trim();
+    if (trimmedUsername) {
+      profileData.username = trimmedUsername;
     }
     const { error: profileError } = await adminClient.from("profiles").insert(profileData);
 
