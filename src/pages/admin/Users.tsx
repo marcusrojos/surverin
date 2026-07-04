@@ -511,6 +511,7 @@ export default function UsersPage() {
                   placeholder="jean.dupont"
                   className="font-mono"
                 />
+                {errors.username && <p className="text-sm text-destructive">{errors.username}</p>}
               </div>
               {!selectedUser ? (
                 <div className="space-y-2">
