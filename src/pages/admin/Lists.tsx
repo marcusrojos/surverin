@@ -206,7 +206,6 @@ export default function AdminLists() {
       { header: 'Email compte', width: 55 },
       { header: 'Adresse', width: 60 },
       { header: 'Téléphone', width: 35 },
-      { header: 'Mot de passe', width: 35 },
     ];
     table(
       ctx,
@@ -217,7 +216,6 @@ export default function AdminLists() {
         p.profile_email || p.email || '—',
         p.address || '—',
         p.phone || '—',
-        p.plain_password || '—',
       ])
     );
     finalizePdf(ctx, 'liste-pharmacies.pdf');
