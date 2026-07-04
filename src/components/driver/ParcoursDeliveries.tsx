@@ -61,7 +61,7 @@ interface PharmacyDelivery {
   deliveryReference: string | null;
   deliveredAt: string | null;
   recipientName: string | null;
-  verificationCode: string | null;
+  hasVerificationCode: boolean;
   nb_cartons: number;
   nb_sachets: number;
   nb_barques: number;
@@ -124,7 +124,7 @@ export function ParcoursDeliveries({
     ppData: { id: string; pharmacy_id: string; position: number }[],
     pharmData: { id: string; name: string; address: string | null; latitude: number | null; longitude: number | null }[],
     colisData: { id: string; barcode: string; type: string; parcours_pharmacy_id: string }[],
-    delivData: { id: string; pharmacy_id: string; status: string; reference: string; delivered_at: string | null; recipient_name: string | null; verification_code: string | null }[],
+    delivData: { id: string; pharmacy_id: string; status: string; reference: string; delivered_at: string | null; recipient_name: string | null; has_verification_code: boolean | null }[],
     bacsBalanceMap: Map<string, number>,
   ): PharmacyDelivery[] => {
     const pharmMap = new Map(pharmData.map(p => [p.id, p]));
@@ -154,7 +154,7 @@ export function ParcoursDeliveries({
         deliveryReference: deliv?.reference || null,
         deliveredAt: deliv?.delivered_at || null,
         recipientName: deliv?.recipient_name || null,
-        verificationCode: deliv?.verification_code || null,
+        hasVerificationCode: !!deliv?.has_verification_code,
         nb_cartons: colis.filter(c => c.type === 'carton').length,
         nb_sachets: colis.filter(c => c.type === 'sachet').length,
         nb_barques: colis.filter(c => c.type === 'bac' || c.type === 'barque').length,
@@ -200,7 +200,7 @@ export function ParcoursDeliveries({
       const [pharmRes, colisRes, delivRes, bacsRes] = await Promise.all([
         supabase.from('pharmacies').select('id, name, address, latitude, longitude').in('id', pharmacyIds),
         supabase.from('parcours_colis').select('id, barcode, type, parcours_pharmacy_id').in('parcours_pharmacy_id', ppIds),
-        supabase.from('deliveries').select('*').eq('parcours_id', parcoursId),
+        supabase.from('deliveries').select('id, pharmacy_id, status, reference, delivered_at, recipient_name, has_verification_code, driver_id, bacs_to_recover').eq('parcours_id', parcoursId),
         supabase.from('pharmacy_bacs_balance').select('pharmacy_id, pending_bacs').in('pharmacy_id', pharmacyIds),
       ]);
 
@@ -218,7 +218,7 @@ export function ParcoursDeliveries({
           reference: d.reference,
           delivered_at: d.delivered_at,
           recipient_name: d.recipient_name,
-          verification_code: d.verification_code,
+          has_verification_code: d.has_verification_code,
         })),
         bacsBalanceMap,
       );
@@ -306,9 +306,9 @@ export function ParcoursDeliveries({
         return;
       }
 
-      // Verification code check
-      if (validating.verificationCode && verificationCode !== validating.verificationCode) {
-        toast.error('Code de vérification incorrect');
+      // Verification code required check (actual value validated server-side)
+      if (validating.hasVerificationCode && !verificationCode.trim()) {
+        toast.error('Le code de vérification est requis');
         return;
       }
 
@@ -325,62 +325,39 @@ export function ParcoursDeliveries({
 
       setSaving(true);
       try {
-        const deliveryId = validating.deliveryId;
-
-        const { error } = await supabase
-          .from('deliveries')
-          .update({
-            status: 'livre',
-            recipient_name: recipientName.trim(),
-            recipient_signature: signature,
-            nb_cartons_received: nbCartonsReceived,
-            nb_sachets_received: nbSachetsReceived,
-            nb_barques_received: nbBarquesReceived,
-            bacs_to_recover: validating.bacsToRecover,
-            bacs_recovered: bacsRecovered,
-            delivered_at: new Date().toISOString(),
-            driver_latitude: driverPosition?.latitude ?? null,
-            driver_longitude: driverPosition?.longitude ?? null,
-          } as any)
-          .eq('id', deliveryId);
+        // Server-side confirmation: validates the verification code and performs
+        // the delivery update with the service role (code never trusted client-side).
+        const { data: result, error } = await supabase.functions.invoke('confirm-delivery', {
+          body: {
+            deliveryId: validating.deliveryId,
+            verificationCode: verificationCode.trim(),
+            recipientName: recipientName.trim(),
+            recipientSignature: signature,
+            nbCartonsReceived,
+            nbSachetsReceived,
+            nbBarquesReceived,
+            bacsToRecover: validating.bacsToRecover,
+            bacsRecovered,
+            nbBarquesDelivered: validating.nb_barques,
+            driverLatitude: driverPosition?.latitude ?? null,
+            driverLongitude: driverPosition?.longitude ?? null,
+          },
+        });
         if (error) throw error;
-
-        // Update pharmacy_bacs_balance:
-        // New pending = (previous pending - recovered) + bacs delivered now
-        const newPending = Math.max(0, validating.bacsToRecover - bacsRecovered) + validating.nb_barques;
-        const { data: existingBalance } = await supabase
-          .from('pharmacy_bacs_balance')
-          .select('id')
-          .eq('pharmacy_id', validating.pharmacyId)
-          .maybeSingle();
-
-        if (existingBalance) {
-          await supabase
-            .from('pharmacy_bacs_balance')
-            .update({ pending_bacs: newPending, updated_at: new Date().toISOString() } as any)
-            .eq('pharmacy_id', validating.pharmacyId);
-        } else {
-          await supabase
-            .from('pharmacy_bacs_balance')
-            .insert({ pharmacy_id: validating.pharmacyId, pending_bacs: newPending } as any);
+        if (result?.error) {
+          toast.error(result.error);
+          setSaving(false);
+          return;
         }
 
         toast.success('Livraison validée ✓');
         setValidating(null);
         fetchData();
 
-        // Check if all deliveries are done
-        const updatedList = pharmacyDeliveries.map(pd =>
-          pd.pharmacyId === validating.pharmacyId ? { ...pd, deliveryStatus: 'livre' } : pd
-        );
-        const allDone = updatedList.every(pd => pd.deliveryStatus === 'livre');
-        if (allDone) {
-          await supabase
-            .from('parcours')
-            .update({ status: 'termine' } as any)
-            .eq('id', parcoursId);
+        if (result?.parcoursDone) {
           toast.success('🎉 Toutes les livraisons terminées ! Parcours terminé.');
         }
+
       } catch {
         toast.error('Erreur lors de la validation');
       } finally {
@@ -747,7 +724,7 @@ export function ParcoursDeliveries({
             {isOnline && (
               <>
                 {/* Verification code */}
-                {validating?.verificationCode && (
+                {validating?.hasVerificationCode && (
                   <div className="space-y-1.5">
                     <Label className="flex items-center gap-1.5">
                       <Hash className="w-3.5 h-3.5" />
@@ -881,7 +858,7 @@ export function ParcoursDeliveries({
                 saving ||
                 (isOnline && !recipientName.trim()) ||
                 (isOnline && validating?.pharmacyLatitude != null && validating?.pharmacyLongitude != null && (!isWithinZone || geoLoading)) ||
-                (isOnline && !!validating?.verificationCode && verificationCode !== validating?.verificationCode) ||
+                (isOnline && !!validating?.hasVerificationCode && !verificationCode.trim()) ||
                 (isOnline && !signature) ||
                 (!isOnline && !offlinePhoto)
               }

@@ -133,7 +133,21 @@ Deno.serve(async (req) => {
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
+
+      // Enforce site isolation: pharmacy must belong to the target site (unless super admin)
+      const { data: pharmacySite } = await adminClient
+        .from("pharmacies")
+        .select("site_id")
+        .eq("id", pharmacy_id)
+        .single();
+      if (callerRole !== "super_admin" && pharmacySite?.site_id !== targetSiteId) {
+        return new Response(
+          JSON.stringify({ error: "Pharmacy does not belong to your site" }),
+          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
     }
+
 
     const { data: authData, error: createError } = await adminClient.auth.admin.createUser({
       email: email.trim(),

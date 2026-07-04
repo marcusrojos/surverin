@@ -30,15 +30,28 @@ Deno.serve(async (req) => {
       .eq("user_id", caller.id)
       .single();
 
-    if (roleData?.role !== "admin") throw new Error("Accès refusé");
+    const callerRole = roleData?.role;
+    if (callerRole !== "admin" && callerRole !== "super_admin") throw new Error("Accès refusé");
 
     const { user_id, password } = await req.json();
     if (!user_id || !password) throw new Error("user_id et password requis");
     if (password.length < 6) throw new Error("Le mot de passe doit contenir au moins 6 caractères");
 
+    // Enforce site isolation: a regular admin can only reset passwords for users on their own site
+    if (callerRole !== "super_admin") {
+      const [{ data: callerProfile }, { data: targetProfile }] = await Promise.all([
+        supabaseAdmin.from("profiles").select("site_id").eq("user_id", caller.id).maybeSingle(),
+        supabaseAdmin.from("profiles").select("site_id").eq("user_id", user_id).maybeSingle(),
+      ]);
+      if (!targetProfile || !callerProfile || targetProfile.site_id !== callerProfile.site_id) {
+        throw new Error("Accès refusé");
+      }
+    }
+
     // Update auth password
     const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(user_id, { password });
     if (updateError) throw updateError;
+
 
 
 

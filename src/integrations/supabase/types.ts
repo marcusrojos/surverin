@@ -136,6 +136,7 @@ export type Database = {
           driver_id: string | null
           driver_latitude: number | null
           driver_longitude: number | null
+          has_verification_code: boolean | null
           id: string
           nb_barques: number
           nb_barques_received: number | null
@@ -163,6 +164,7 @@ export type Database = {
           driver_id?: string | null
           driver_latitude?: number | null
           driver_longitude?: number | null
+          has_verification_code?: boolean | null
           id?: string
           nb_barques?: number
           nb_barques_received?: number | null
@@ -190,6 +192,7 @@ export type Database = {
           driver_id?: string | null
           driver_latitude?: number | null
           driver_longitude?: number | null
+          has_verification_code?: boolean | null
           id?: string
           nb_barques?: number
           nb_barques_received?: number | null

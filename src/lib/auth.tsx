@@ -4,28 +4,6 @@ import { supabase } from '@/integrations/supabase/client';
 
 type AppRole = 'super_admin' | 'admin' | 'livreur' | 'pharmacie';
 
-const ROLE_CACHE_KEY = 'dpci_user_role';
-
-function getCachedRole(): AppRole | null {
-  try {
-    const cached = localStorage.getItem(ROLE_CACHE_KEY);
-    if (cached && ['super_admin', 'admin', 'livreur', 'pharmacie'].includes(cached)) {
-      return cached as AppRole;
-    }
-  } catch {}
-  return null;
-}
-
-function setCachedRole(role: AppRole | null) {
-  try {
-    if (role) {
-      localStorage.setItem(ROLE_CACHE_KEY, role);
-    } else {
-      localStorage.removeItem(ROLE_CACHE_KEY);
-    }
-  } catch {}
-}
-
 interface AuthContextType {
   user: User | null;
   session: Session | null;
@@ -46,24 +24,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   const fetchUserRole = async (userId: string) => {
+    // Never trust a client-cached role — always resolve from the server.
+    // On failure, force role to null so no elevated UI is shown.
     try {
       const { data, error } = await supabase
         .from('user_roles')
         .select('role')
         .eq('user_id', userId)
         .maybeSingle();
-      
+
       if (!error && data) {
-        const r = data.role as AppRole;
-        setRole(r);
-        setCachedRole(r);
+        setRole(data.role as AppRole);
       } else {
-        const cached = getCachedRole();
-        setRole(cached);
+        setRole(null);
       }
     } catch {
-      const cached = getCachedRole();
-      setRole(cached);
+      setRole(null);
     }
 
     try {
@@ -77,6 +53,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSiteId(null);
     }
   };
+
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
@@ -139,7 +116,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSession(null);
     setRole(null);
     setSiteId(null);
-    setCachedRole(null);
+
   };
 
   return (
