@@ -154,7 +154,7 @@ export function ParcoursDeliveries({
         deliveryReference: deliv?.reference || null,
         deliveredAt: deliv?.delivered_at || null,
         recipientName: deliv?.recipient_name || null,
-        verificationCode: deliv?.verification_code || null,
+        hasVerificationCode: !!deliv?.has_verification_code,
         nb_cartons: colis.filter(c => c.type === 'carton').length,
         nb_sachets: colis.filter(c => c.type === 'sachet').length,
         nb_barques: colis.filter(c => c.type === 'bac' || c.type === 'barque').length,
