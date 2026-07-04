@@ -724,7 +724,7 @@ export function ParcoursDeliveries({
             {isOnline && (
               <>
                 {/* Verification code */}
-                {validating?.verificationCode && (
+                {validating?.hasVerificationCode && (
                   <div className="space-y-1.5">
                     <Label className="flex items-center gap-1.5">
                       <Hash className="w-3.5 h-3.5" />
@@ -858,7 +858,7 @@ export function ParcoursDeliveries({
                 saving ||
                 (isOnline && !recipientName.trim()) ||
                 (isOnline && validating?.pharmacyLatitude != null && validating?.pharmacyLongitude != null && (!isWithinZone || geoLoading)) ||
-                (isOnline && !!validating?.verificationCode && verificationCode !== validating?.verificationCode) ||
+                (isOnline && !!validating?.hasVerificationCode && !verificationCode.trim()) ||
                 (isOnline && !signature) ||
                 (!isOnline && !offlinePhoto)
               }
