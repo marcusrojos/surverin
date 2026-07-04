@@ -218,7 +218,7 @@ export function ParcoursDeliveries({
           reference: d.reference,
           delivered_at: d.delivered_at,
           recipient_name: d.recipient_name,
-          verification_code: d.verification_code,
+          has_verification_code: d.has_verification_code,
         })),
         bacsBalanceMap,
       );
