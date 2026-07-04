@@ -6,7 +6,7 @@ const corsHeaders = {
 };
 
 interface CreateUserRequest {
-  email: string;
+  email?: string;
   password: string;
   full_name: string;
   role: "super_admin" | "admin" | "livreur" | "pharmacie";
