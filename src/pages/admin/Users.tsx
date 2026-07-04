@@ -256,7 +256,7 @@ export default function UsersPage() {
       } else {
         const response = await supabase.functions.invoke('create-user', {
           body: {
-            email: formData.email.trim(),
+            email: formData.email.trim() || undefined,
             password: formData.password,
             full_name: formData.full_name.trim(),
             role: formData.role,
