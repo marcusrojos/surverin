@@ -76,7 +76,6 @@ Deno.serve(async (req) => {
       user_id: userId,
       email,
       full_name: fullName,
-      plain_password: password,
     })
 
     // Create super admin role (first account oversees all sites)
