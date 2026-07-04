@@ -18,7 +18,6 @@ interface DriverInfo {
   full_name: string;
   email: string;
   username: string | null;
-  plain_password: string | null;
   site_id: string | null;
 }
 
@@ -29,7 +28,6 @@ interface PharmacyInfo {
   email: string | null;
   phone: string | null;
   profile_email: string | null;
-  plain_password: string | null;
   site_id: string | null;
 }
 
