@@ -389,7 +389,6 @@ export default function AdminLists() {
                         <TableHead>Email</TableHead>
                         <TableHead>Adresse</TableHead>
                         <TableHead>Téléphone</TableHead>
-                        <TableHead>Mot de passe</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -400,11 +399,10 @@ export default function AdminLists() {
                           <TableCell>{p.profile_email || p.email || '—'}</TableCell>
                           <TableCell>{p.address || '—'}</TableCell>
                           <TableCell>{p.phone || '—'}</TableCell>
-                          <TableCell className="font-mono text-xs">{p.plain_password || '—'}</TableCell>
                         </TableRow>
                       ))}
                       {displayPharmacies.length === 0 && (
-                        <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground">Aucune pharmacie</TableCell></TableRow>
+                        <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground">Aucune pharmacie</TableCell></TableRow>
                       )}
                     </TableBody>
                   </Table>
