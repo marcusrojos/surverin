@@ -40,11 +40,7 @@ Deno.serve(async (req) => {
     const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(user_id, { password });
     if (updateError) throw updateError;
 
-    // Update plain_password in profiles
-    await supabaseAdmin
-      .from("profiles")
-      .update({ plain_password: password })
-      .eq("user_id", user_id);
+
 
     return new Response(JSON.stringify({ success: true }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
