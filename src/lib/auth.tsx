@@ -116,7 +116,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSession(null);
     setRole(null);
     setSiteId(null);
-    setCachedRole(null);
+
   };
 
   return (
