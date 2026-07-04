@@ -411,7 +411,7 @@ export default function UsersPage() {
                                 {user.username || '-'}
                               </TableCell>
                               <TableCell className="hidden md:table-cell text-muted-foreground">
-                                {user.email}
+                                {user.email && !user.email.endsWith('@dpci.local') ? user.email : '—'}
                               </TableCell>
                               {isSuperAdmin && (
                                 <TableCell className="hidden lg:table-cell text-muted-foreground">
