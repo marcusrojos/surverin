@@ -200,7 +200,7 @@ export function ParcoursDeliveries({
       const [pharmRes, colisRes, delivRes, bacsRes] = await Promise.all([
         supabase.from('pharmacies').select('id, name, address, latitude, longitude').in('id', pharmacyIds),
         supabase.from('parcours_colis').select('id, barcode, type, parcours_pharmacy_id').in('parcours_pharmacy_id', ppIds),
-        supabase.from('deliveries').select('*').eq('parcours_id', parcoursId),
+        supabase.from('deliveries').select('id, pharmacy_id, status, reference, delivered_at, recipient_name, has_verification_code, driver_id, bacs_to_recover').eq('parcours_id', parcoursId),
         supabase.from('pharmacy_bacs_balance').select('pharmacy_id, pending_bacs').in('pharmacy_id', pharmacyIds),
       ]);
 
