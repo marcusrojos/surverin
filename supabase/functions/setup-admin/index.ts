@@ -9,6 +9,16 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders })
 
   try {
+    // Require a shared setup secret to prevent unauthenticated bootstrap/takeover
+    const setupSecret = Deno.env.get('SETUP_SECRET')
+    const providedSecret = req.headers.get('x-setup-secret')
+    if (!setupSecret || providedSecret !== setupSecret) {
+      return new Response(
+        JSON.stringify({ error: 'Forbidden' }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
@@ -23,11 +33,13 @@ Deno.serve(async (req) => {
       .limit(1)
 
     if (existingAdmins && existingAdmins.length > 0) {
+      // Generic response — do not leak internal state
       return new Response(
-        JSON.stringify({ error: 'Un administrateur existe déjà' }),
+        JSON.stringify({ error: 'Forbidden' }),
         { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
+
 
     const { email, password, fullName } = await req.json()
 
