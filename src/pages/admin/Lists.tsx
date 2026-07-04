@@ -18,7 +18,6 @@ interface DriverInfo {
   full_name: string;
   email: string;
   username: string | null;
-  plain_password: string | null;
   site_id: string | null;
 }
 
@@ -29,7 +28,6 @@ interface PharmacyInfo {
   email: string | null;
   phone: string | null;
   profile_email: string | null;
-  plain_password: string | null;
   site_id: string | null;
 }
 
@@ -86,7 +84,7 @@ export default function AdminLists() {
         const driverIds = driverRoles.map(r => r.user_id);
         const { data: driverProfiles } = await supabase
           .from('profiles')
-          .select('full_name, email, username, plain_password, site_id')
+          .select('full_name, email, username, site_id')
           .in('user_id', driverIds);
         setDrivers((driverProfiles as DriverInfo[]) || []);
       }
@@ -99,16 +97,14 @@ export default function AdminLists() {
         const pharmaWithPasswords: PharmacyInfo[] = [];
         for (const p of pharmaData) {
           let profile_email: string | null = null;
-          let plain_password: string | null = null;
           if (p.user_id) {
             const { data: prof } = await supabase
               .from('profiles')
-              .select('email, plain_password')
+              .select('email')
               .eq('user_id', p.user_id)
               .single();
             if (prof) {
               profile_email = prof.email;
-              plain_password = (prof as any).plain_password;
             }
           }
           pharmaWithPasswords.push({
@@ -118,7 +114,6 @@ export default function AdminLists() {
             email: p.email,
             phone: p.phone,
             profile_email,
-            plain_password,
             site_id: (p as any).site_id ?? null,
           });
         }
@@ -190,12 +185,11 @@ export default function AdminLists() {
       { header: 'Nom complet', width: 45 },
       { header: 'Email', width: 55 },
       { header: 'Username', width: 35 },
-      { header: 'Mot de passe', width: 35 },
     ];
     table(
       ctx,
       columns,
-      displayDrivers.map((d) => [d.full_name || '—', d.email || '—', d.username || '—', d.plain_password || '—'])
+      displayDrivers.map((d) => [d.full_name || '—', d.email || '—', d.username || '—'])
     );
     finalizePdf(ctx, 'liste-chauffeurs.pdf');
     toast.success('PDF chauffeurs téléchargé');
@@ -212,7 +206,6 @@ export default function AdminLists() {
       { header: 'Email compte', width: 55 },
       { header: 'Adresse', width: 60 },
       { header: 'Téléphone', width: 35 },
-      { header: 'Mot de passe', width: 35 },
     ];
     table(
       ctx,
@@ -223,7 +216,6 @@ export default function AdminLists() {
         p.profile_email || p.email || '—',
         p.address || '—',
         p.phone || '—',
-        p.plain_password || '—',
       ])
     );
     finalizePdf(ctx, 'liste-pharmacies.pdf');
@@ -359,7 +351,6 @@ export default function AdminLists() {
                         <TableHead>Nom complet</TableHead>
                         <TableHead>Email</TableHead>
                         <TableHead>Username</TableHead>
-                        <TableHead>Mot de passe</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -368,11 +359,10 @@ export default function AdminLists() {
                           <TableCell className="font-medium">{d.full_name}</TableCell>
                           <TableCell>{d.email}</TableCell>
                           <TableCell>{d.username || '—'}</TableCell>
-                          <TableCell className="font-mono text-xs">{d.plain_password || '—'}</TableCell>
                         </TableRow>
                       ))}
                       {displayDrivers.length === 0 && (
-                        <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground">Aucun chauffeur</TableCell></TableRow>
+                        <TableRow><TableCell colSpan={3} className="text-center text-muted-foreground">Aucun chauffeur</TableCell></TableRow>
                       )}
                     </TableBody>
                   </Table>
@@ -399,7 +389,6 @@ export default function AdminLists() {
                         <TableHead>Email</TableHead>
                         <TableHead>Adresse</TableHead>
                         <TableHead>Téléphone</TableHead>
-                        <TableHead>Mot de passe</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -410,11 +399,10 @@ export default function AdminLists() {
                           <TableCell>{p.profile_email || p.email || '—'}</TableCell>
                           <TableCell>{p.address || '—'}</TableCell>
                           <TableCell>{p.phone || '—'}</TableCell>
-                          <TableCell className="font-mono text-xs">{p.plain_password || '—'}</TableCell>
                         </TableRow>
                       ))}
                       {displayPharmacies.length === 0 && (
-                        <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground">Aucune pharmacie</TableCell></TableRow>
+                        <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground">Aucune pharmacie</TableCell></TableRow>
                       )}
                     </TableBody>
                   </Table>

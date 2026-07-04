@@ -164,7 +164,6 @@ Deno.serve(async (req) => {
       user_id: newUserId,
       full_name: full_name.trim(),
       email: email.trim(),
-      plain_password: password,
       site_id: targetSiteId,
     };
     if (username) {
