@@ -60,12 +60,26 @@ Deno.serve(async (req) => {
 
     const { email, password, full_name, role, pharmacy_id, username, site_id }: CreateUserRequest = await req.json();
 
-    if (!email || !password || !full_name || !role) {
+    if (!password || !full_name || !role) {
       return new Response(
         JSON.stringify({ error: "Missing required fields" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    // Email is optional: username is the primary login identifier.
+    const trimmedEmail = email?.trim() || "";
+    const trimmedUsername = username?.trim() || "";
+    if (!trimmedEmail && !trimmedUsername) {
+      return new Response(
+        JSON.stringify({ error: "Un nom d'utilisateur ou un email est requis" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Auth requires an email; when none is provided, derive a synthetic login email from the username.
+    const sanitizedUsername = trimmedUsername.toLowerCase().replace(/[^a-z0-9._-]/g, "");
+    const authEmail = trimmedEmail || `${sanitizedUsername || crypto.randomUUID()}@dpci.local`;
 
     if (password.length < 6) {
       return new Response(
