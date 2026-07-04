@@ -124,7 +124,7 @@ export function ParcoursDeliveries({
     ppData: { id: string; pharmacy_id: string; position: number }[],
     pharmData: { id: string; name: string; address: string | null; latitude: number | null; longitude: number | null }[],
     colisData: { id: string; barcode: string; type: string; parcours_pharmacy_id: string }[],
-    delivData: { id: string; pharmacy_id: string; status: string; reference: string; delivered_at: string | null; recipient_name: string | null; verification_code: string | null }[],
+    delivData: { id: string; pharmacy_id: string; status: string; reference: string; delivered_at: string | null; recipient_name: string | null; has_verification_code: boolean | null }[],
     bacsBalanceMap: Map<string, number>,
   ): PharmacyDelivery[] => {
     const pharmMap = new Map(pharmData.map(p => [p.id, p]));
