@@ -500,9 +500,9 @@ export default function UsersPage() {
                 {errors.email && <p className="text-sm text-destructive">{errors.email}</p>}
               </div>
               <div className="space-y-2">
-                <Label htmlFor="username">Nom d'utilisateur</Label>
+                <Label htmlFor="username">Nom d'utilisateur *</Label>
                 <p className="text-xs text-muted-foreground">
-                  L'utilisateur pourra se connecter avec ce nom au lieu de l'email
+                  Identifiant principal de connexion (avec le mot de passe)
                 </p>
                 <Input
                   id="username"
