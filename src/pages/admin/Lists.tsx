@@ -351,7 +351,6 @@ export default function AdminLists() {
                         <TableHead>Nom complet</TableHead>
                         <TableHead>Email</TableHead>
                         <TableHead>Username</TableHead>
-                        <TableHead>Mot de passe</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -360,11 +359,10 @@ export default function AdminLists() {
                           <TableCell className="font-medium">{d.full_name}</TableCell>
                           <TableCell>{d.email}</TableCell>
                           <TableCell>{d.username || '—'}</TableCell>
-                          <TableCell className="font-mono text-xs">{d.plain_password || '—'}</TableCell>
                         </TableRow>
                       ))}
                       {displayDrivers.length === 0 && (
-                        <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground">Aucun chauffeur</TableCell></TableRow>
+                        <TableRow><TableCell colSpan={3} className="text-center text-muted-foreground">Aucun chauffeur</TableCell></TableRow>
                       )}
                     </TableBody>
                   </Table>
