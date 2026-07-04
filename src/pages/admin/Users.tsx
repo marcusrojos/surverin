@@ -60,10 +60,10 @@ interface UserWithRole {
 
 const userSchema = z.object({
   full_name: z.string().min(2, 'Le nom doit contenir au moins 2 caractères'),
-  email: z.string().email('Email invalide'),
+  email: z.string().email('Email invalide').optional().or(z.literal('')),
   password: z.string().min(6, 'Le mot de passe doit contenir au moins 6 caractères'),
   role: z.enum(['super_admin', 'admin', 'livreur']),
-  username: z.string().optional(),
+  username: z.string().min(3, "Le nom d'utilisateur doit contenir au moins 3 caractères"),
 });
 
 type EditableRole = 'super_admin' | 'admin' | 'livreur';
@@ -172,7 +172,7 @@ export default function UsersPage() {
       setSelectedUser(user);
       setFormData({
         full_name: user.full_name,
-        email: user.email,
+        email: user.email && !user.email.endsWith('@dpci.local') ? user.email : '',
         password: '',
         role: (user.role === 'super_admin' || user.role === 'admin') ? user.role : 'livreur',
         username: user.username || '',
@@ -212,9 +212,11 @@ export default function UsersPage() {
       if (selectedUser) {
         const updateData: any = {
           full_name: formData.full_name.trim(),
-          email: formData.email.trim(),
           username: formData.username.trim() || null,
         };
+        if (formData.email.trim()) {
+          updateData.email = formData.email.trim();
+        }
         if (isSuperAdmin && formData.role !== 'super_admin' && formData.site_id) {
           updateData.site_id = formData.site_id;
         }
@@ -256,7 +258,7 @@ export default function UsersPage() {
       } else {
         const response = await supabase.functions.invoke('create-user', {
           body: {
-            email: formData.email.trim(),
+            email: formData.email.trim() || undefined,
             password: formData.password,
             full_name: formData.full_name.trim(),
             role: formData.role,
@@ -411,7 +413,7 @@ export default function UsersPage() {
                                 {user.username || '-'}
                               </TableCell>
                               <TableCell className="hidden md:table-cell text-muted-foreground">
-                                {user.email}
+                                {user.email && !user.email.endsWith('@dpci.local') ? user.email : '—'}
                               </TableCell>
                               {isSuperAdmin && (
                                 <TableCell className="hidden lg:table-cell text-muted-foreground">
@@ -487,7 +489,7 @@ export default function UsersPage() {
                 )}
               </div>
               <div className="space-y-2">
-                <Label htmlFor="email">Email *</Label>
+                <Label htmlFor="email">Email (facultatif)</Label>
                 <Input
                   id="email"
                   type="email"
@@ -500,9 +502,9 @@ export default function UsersPage() {
                 {errors.email && <p className="text-sm text-destructive">{errors.email}</p>}
               </div>
               <div className="space-y-2">
-                <Label htmlFor="username">Nom d'utilisateur</Label>
+                <Label htmlFor="username">Nom d'utilisateur *</Label>
                 <p className="text-xs text-muted-foreground">
-                  L'utilisateur pourra se connecter avec ce nom au lieu de l'email
+                  Identifiant principal de connexion (avec le mot de passe)
                 </p>
                 <Input
                   id="username"
@@ -511,6 +513,7 @@ export default function UsersPage() {
                   placeholder="jean.dupont"
                   className="font-mono"
                 />
+                {errors.username && <p className="text-sm text-destructive">{errors.username}</p>}
               </div>
               {!selectedUser ? (
                 <div className="space-y-2">

@@ -6,7 +6,7 @@ const corsHeaders = {
 };
 
 interface CreateUserRequest {
-  email: string;
+  email?: string;
   password: string;
   full_name: string;
   role: "super_admin" | "admin" | "livreur" | "pharmacie";
@@ -60,12 +60,26 @@ Deno.serve(async (req) => {
 
     const { email, password, full_name, role, pharmacy_id, username, site_id }: CreateUserRequest = await req.json();
 
-    if (!email || !password || !full_name || !role) {
+    if (!password || !full_name || !role) {
       return new Response(
         JSON.stringify({ error: "Missing required fields" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    // Email is optional: username is the primary login identifier.
+    const trimmedEmail = email?.trim() || "";
+    const trimmedUsername = username?.trim() || "";
+    if (!trimmedEmail && !trimmedUsername) {
+      return new Response(
+        JSON.stringify({ error: "Un nom d'utilisateur ou un email est requis" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Auth requires an email; when none is provided, derive a synthetic login email from the username.
+    const sanitizedUsername = trimmedUsername.toLowerCase().replace(/[^a-z0-9._-]/g, "");
+    const authEmail = trimmedEmail || `${sanitizedUsername || crypto.randomUUID()}@dpci.local`;
 
     if (password.length < 6) {
       return new Response(
@@ -150,7 +164,7 @@ Deno.serve(async (req) => {
 
 
     const { data: authData, error: createError } = await adminClient.auth.admin.createUser({
-      email: email.trim(),
+      email: authEmail,
       password: password,
       email_confirm: true,
       user_metadata: { full_name: full_name.trim() },
@@ -177,11 +191,11 @@ Deno.serve(async (req) => {
     const profileData: any = {
       user_id: newUserId,
       full_name: full_name.trim(),
-      email: email.trim(),
+      email: authEmail,
       site_id: targetSiteId,
     };
-    if (username) {
-      profileData.username = username.trim();
+    if (trimmedUsername) {
+      profileData.username = trimmedUsername;
     }
     const { error: profileError } = await adminClient.from("profiles").insert(profileData);
 
