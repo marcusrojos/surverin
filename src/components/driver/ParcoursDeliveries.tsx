@@ -61,7 +61,7 @@ interface PharmacyDelivery {
   deliveryReference: string | null;
   deliveredAt: string | null;
   recipientName: string | null;
-  verificationCode: string | null;
+  hasVerificationCode: boolean;
   nb_cartons: number;
   nb_sachets: number;
   nb_barques: number;
