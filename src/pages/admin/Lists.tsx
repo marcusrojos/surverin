@@ -185,12 +185,11 @@ export default function AdminLists() {
       { header: 'Nom complet', width: 45 },
       { header: 'Email', width: 55 },
       { header: 'Username', width: 35 },
-      { header: 'Mot de passe', width: 35 },
     ];
     table(
       ctx,
       columns,
-      displayDrivers.map((d) => [d.full_name || '—', d.email || '—', d.username || '—', d.plain_password || '—'])
+      displayDrivers.map((d) => [d.full_name || '—', d.email || '—', d.username || '—'])
     );
     finalizePdf(ctx, 'liste-chauffeurs.pdf');
     toast.success('PDF chauffeurs téléchargé');
