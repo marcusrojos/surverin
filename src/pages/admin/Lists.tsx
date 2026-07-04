@@ -84,7 +84,7 @@ export default function AdminLists() {
         const driverIds = driverRoles.map(r => r.user_id);
         const { data: driverProfiles } = await supabase
           .from('profiles')
-          .select('full_name, email, username, plain_password, site_id')
+          .select('full_name, email, username, site_id')
           .in('user_id', driverIds);
         setDrivers((driverProfiles as DriverInfo[]) || []);
       }
@@ -97,16 +97,14 @@ export default function AdminLists() {
         const pharmaWithPasswords: PharmacyInfo[] = [];
         for (const p of pharmaData) {
           let profile_email: string | null = null;
-          let plain_password: string | null = null;
           if (p.user_id) {
             const { data: prof } = await supabase
               .from('profiles')
-              .select('email, plain_password')
+              .select('email')
               .eq('user_id', p.user_id)
               .single();
             if (prof) {
               profile_email = prof.email;
-              plain_password = (prof as any).plain_password;
             }
           }
           pharmaWithPasswords.push({
@@ -116,7 +114,6 @@ export default function AdminLists() {
             email: p.email,
             phone: p.phone,
             profile_email,
-            plain_password,
             site_id: (p as any).site_id ?? null,
           });
         }
