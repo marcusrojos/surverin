@@ -306,9 +306,9 @@ export function ParcoursDeliveries({
         return;
       }
 
-      // Verification code check
-      if (validating.verificationCode && verificationCode !== validating.verificationCode) {
-        toast.error('Code de vérification incorrect');
+      // Verification code required check (actual value validated server-side)
+      if (validating.hasVerificationCode && !verificationCode.trim()) {
+        toast.error('Le code de vérification est requis');
         return;
       }
 
@@ -325,62 +325,39 @@ export function ParcoursDeliveries({
 
       setSaving(true);
       try {
-        const deliveryId = validating.deliveryId;
-
-        const { error } = await supabase
-          .from('deliveries')
-          .update({
-            status: 'livre',
-            recipient_name: recipientName.trim(),
-            recipient_signature: signature,
-            nb_cartons_received: nbCartonsReceived,
-            nb_sachets_received: nbSachetsReceived,
-            nb_barques_received: nbBarquesReceived,
-            bacs_to_recover: validating.bacsToRecover,
-            bacs_recovered: bacsRecovered,
-            delivered_at: new Date().toISOString(),
-            driver_latitude: driverPosition?.latitude ?? null,
-            driver_longitude: driverPosition?.longitude ?? null,
-          } as any)
-          .eq('id', deliveryId);
+        // Server-side confirmation: validates the verification code and performs
+        // the delivery update with the service role (code never trusted client-side).
+        const { data: result, error } = await supabase.functions.invoke('confirm-delivery', {
+          body: {
+            deliveryId: validating.deliveryId,
+            verificationCode: verificationCode.trim(),
+            recipientName: recipientName.trim(),
+            recipientSignature: signature,
+            nbCartonsReceived,
+            nbSachetsReceived,
+            nbBarquesReceived,
+            bacsToRecover: validating.bacsToRecover,
+            bacsRecovered,
+            nbBarquesDelivered: validating.nb_barques,
+            driverLatitude: driverPosition?.latitude ?? null,
+            driverLongitude: driverPosition?.longitude ?? null,
+          },
+        });
         if (error) throw error;
-
-        // Update pharmacy_bacs_balance:
-        // New pending = (previous pending - recovered) + bacs delivered now
-        const newPending = Math.max(0, validating.bacsToRecover - bacsRecovered) + validating.nb_barques;
-        const { data: existingBalance } = await supabase
-          .from('pharmacy_bacs_balance')
-          .select('id')
-          .eq('pharmacy_id', validating.pharmacyId)
-          .maybeSingle();
-
-        if (existingBalance) {
-          await supabase
-            .from('pharmacy_bacs_balance')
-            .update({ pending_bacs: newPending, updated_at: new Date().toISOString() } as any)
-            .eq('pharmacy_id', validating.pharmacyId);
-        } else {
-          await supabase
-            .from('pharmacy_bacs_balance')
-            .insert({ pharmacy_id: validating.pharmacyId, pending_bacs: newPending } as any);
+        if (result?.error) {
+          toast.error(result.error);
+          setSaving(false);
+          return;
         }
 
         toast.success('Livraison validée ✓');
         setValidating(null);
         fetchData();
 
-        // Check if all deliveries are done
-        const updatedList = pharmacyDeliveries.map(pd =>
-          pd.pharmacyId === validating.pharmacyId ? { ...pd, deliveryStatus: 'livre' } : pd
-        );
-        const allDone = updatedList.every(pd => pd.deliveryStatus === 'livre');
-        if (allDone) {
-          await supabase
-            .from('parcours')
-            .update({ status: 'termine' } as any)
-            .eq('id', parcoursId);
+        if (result?.parcoursDone) {
           toast.success('🎉 Toutes les livraisons terminées ! Parcours terminé.');
         }
+
       } catch {
         toast.error('Erreur lors de la validation');
       } finally {
