@@ -212,9 +212,11 @@ export default function UsersPage() {
       if (selectedUser) {
         const updateData: any = {
           full_name: formData.full_name.trim(),
-          email: formData.email.trim(),
           username: formData.username.trim() || null,
         };
+        if (formData.email.trim()) {
+          updateData.email = formData.email.trim();
+        }
         if (isSuperAdmin && formData.role !== 'super_admin' && formData.site_id) {
           updateData.site_id = formData.site_id;
         }
