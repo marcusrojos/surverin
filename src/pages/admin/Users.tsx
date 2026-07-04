@@ -172,7 +172,7 @@ export default function UsersPage() {
       setSelectedUser(user);
       setFormData({
         full_name: user.full_name,
-        email: user.email,
+        email: user.email && !user.email.endsWith('@dpci.local') ? user.email : '',
         password: '',
         role: (user.role === 'super_admin' || user.role === 'admin') ? user.role : 'livreur',
         username: user.username || '',
