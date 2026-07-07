@@ -20,7 +20,7 @@ export interface CompressedImage {
  */
 export async function compressImage(
   file: File | Blob,
-  options?: { maxSize?: number; maxDimension?: number; quality?: number }
+  options?: { maxSize?: number; maxDimension?: number; quality?: number; outputType?: 'image/webp' | 'image/jpeg' }
 ): Promise<CompressedImage> {
   const maxSize = options?.maxSize ?? MAX_FILE_SIZE;
   const maxDim = options?.maxDimension ?? MAX_DIMENSION;
@@ -65,9 +65,14 @@ export async function compressImage(
       };
 
       (async () => {
-        let blob = await tryFormat('image/webp', quality);
-        if (!blob || blob.size > maxSize) {
+        let blob: Blob | null = null;
+        if (options?.outputType === 'image/jpeg') {
           blob = await tryFormat('image/jpeg', quality);
+        } else {
+          blob = await tryFormat('image/webp', quality);
+          if (!blob || blob.size > maxSize) {
+            blob = await tryFormat('image/jpeg', quality);
+          }
         }
         // If still too big, reduce quality further
         if (blob && blob.size > maxSize) {

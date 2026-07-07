@@ -23,6 +23,9 @@ export interface PendingValidation {
     nb_cartons_received?: number | null;
     nb_sachets_received?: number | null;
     nb_barques_received?: number | null;
+    bacs_to_recover?: number | null;
+    bacs_recovered?: number | null;
+    nb_barques_delivered?: number | null;
     driver_latitude?: number | null;
     driver_longitude?: number | null;
     verification_code?: string;
@@ -300,7 +303,7 @@ export const SyncQueue = {
           }
         }
 
-        const { has_offline_photo, ...restPayload } = item.payload;
+        const { has_offline_photo, nb_barques_delivered, ...restPayload } = item.payload;
         let receiptPdfUrl: string | null = null;
 
         if (has_offline_photo) {
@@ -348,6 +351,50 @@ export const SyncQueue = {
 
         if (error) {
           throw error;
+        }
+
+        if (has_offline_photo) {
+          const deliveredBacs = Number(nb_barques_delivered) || 0;
+          if (deliveredBacs > 0) {
+            const { data: currentBalance, error: balanceReadError } = await supabase
+              .from('pharmacy_bacs_balance')
+              .select('pending_bacs')
+              .eq('pharmacy_id', item.pharmacy_id)
+              .maybeSingle();
+
+            if (balanceReadError) throw balanceReadError;
+
+            const nextPending = Math.max(0, Number(currentBalance?.pending_bacs) || 0) + deliveredBacs;
+
+            if (currentBalance) {
+              const { error: balanceUpdateError } = await supabase
+                .from('pharmacy_bacs_balance')
+                .update({ pending_bacs: nextPending, updated_at: new Date().toISOString() })
+                .eq('pharmacy_id', item.pharmacy_id);
+              if (balanceUpdateError) throw balanceUpdateError;
+            } else {
+              const { error: balanceInsertError } = await supabase
+                .from('pharmacy_bacs_balance')
+                .insert({ pharmacy_id: item.pharmacy_id, pending_bacs: nextPending });
+              if (balanceInsertError) throw balanceInsertError;
+            }
+          }
+        }
+
+        const { data: remainingDeliveries, error: remainingError } = await supabase
+          .from('deliveries')
+          .select('id')
+          .eq('parcours_id', item.parcours_id)
+          .neq('status', 'livre')
+          .limit(1);
+
+        if (remainingError) throw remainingError;
+        if (!remainingDeliveries || remainingDeliveries.length === 0) {
+          const { error: parcoursUpdateError } = await supabase
+            .from('parcours')
+            .update({ status: 'termine' })
+            .eq('id', item.parcours_id);
+          if (parcoursUpdateError) throw parcoursUpdateError;
         }
 
         await syncStore.removeItem(item.id);

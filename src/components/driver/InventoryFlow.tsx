@@ -27,6 +27,7 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { fetchAndCacheParcoursDeliveries } from '@/services/parcoursDeliveriesCache';
 
 interface ExpectedColis {
   id: string;
@@ -256,7 +257,9 @@ export function InventoryFlow({
         .update({ status: 'en_cours' } as any)
         .eq('id', parcoursId);
 
-      toast.success('Inventaire validé avec succès');
+      await fetchAndCacheParcoursDeliveries(parcoursId);
+
+      toast.success('Inventaire validé — livraisons chargées en local');
       onOpenChange(false);
       onCompleted();
     } catch (error: any) {
@@ -292,7 +295,9 @@ export function InventoryFlow({
         .update({ status: 'en_cours' } as any)
         .eq('id', parcoursId);
 
-      toast.info('Inventaire ignoré — parcours démarré');
+      await fetchAndCacheParcoursDeliveries(parcoursId);
+
+      toast.info('Inventaire ignoré — livraisons chargées en local');
       onOpenChange(false);
       onCompleted();
     } catch (error: any) {

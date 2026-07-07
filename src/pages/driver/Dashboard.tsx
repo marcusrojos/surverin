@@ -11,6 +11,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
+import localforage from 'localforage';
 
 interface Parcours {
   id: string;
@@ -22,6 +23,8 @@ interface Parcours {
   pharmacies_count: number;
   force_confirmed: boolean;
 }
+
+const driverParcoursStore = localforage.createInstance({ name: 'dpci', storeName: 'driver_parcours_cache' });
 
 const statusLabels: Record<string, { label: string; className: string }> = {
   en_attente_inventaire: {
@@ -65,6 +68,13 @@ export default function DriverDashboard() {
   const fetchParcours = useCallback(async () => {
     if (!user?.id) return;
     try {
+      if (!navigator.onLine) {
+        const cached = await driverParcoursStore.getItem<Parcours[]>(`driver_${user.id}`);
+        setParcoursList(cached || []);
+        setLoading(false);
+        return;
+      }
+
       // Fetch parcours assigned to this driver
       const { data: parcoursData, error } = await supabase
         .from('parcours')
@@ -123,8 +133,15 @@ export default function DriverDashboard() {
       }));
 
       setParcoursList(mapped);
+      await driverParcoursStore.setItem(`driver_${user.id}`, mapped);
     } catch (err) {
-      toast.error('Erreur lors du chargement des parcours');
+      const cached = await driverParcoursStore.getItem<Parcours[]>(`driver_${user.id}`);
+      if (cached && cached.length > 0) {
+        setParcoursList(cached);
+        toast.warning('Parcours chargés depuis le cache local');
+      } else {
+        toast.error('Erreur lors du chargement des parcours');
+      }
     } finally {
       setLoading(false);
     }
