@@ -37,7 +37,7 @@ import { SignaturePad } from '@/components/ui/signature-pad';
 import { useOfflineSync } from '@/hooks/use-offline-sync';
 import { useGeolocation } from '@/hooks/use-geolocation';
 import { GEOFENCE_RADIUS } from '@/lib/geolocation';
-import { processImageUpload } from '@/lib/image-compress';
+import { compressImage } from '@/lib/image-compress';
 import {
   fetchAndCacheParcoursDeliveries,
   loadCachedParcoursDeliveries,
@@ -178,11 +178,11 @@ export function ParcoursDeliveries({
     const file = e.target.files?.[0];
     if (!file) return;
     try {
-      const processed = await processImageUpload(file);
-      if (!processed) {
+      if (!file.type.startsWith('image/')) {
         toast.error('Veuillez prendre une photo valide');
         return;
       }
+      const processed = await compressImage(file, { outputType: 'image/jpeg' });
       setOfflinePhoto(processed.dataUrl);
     } catch {
       toast.error('Erreur lors du traitement de la photo');
