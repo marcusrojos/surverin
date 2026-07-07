@@ -283,6 +283,7 @@ export function ParcoursDeliveries({
           nb_barques_received: null,
           bacs_to_recover: validating.bacsToRecover,
           bacs_recovered: 0,
+          nb_barques_delivered: validating.nb_barques,
         },
         offlinePhoto,
         {
