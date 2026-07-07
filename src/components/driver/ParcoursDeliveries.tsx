@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback } from 'react';
-import localforage from 'localforage';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import {
@@ -38,6 +37,13 @@ import { SignaturePad } from '@/components/ui/signature-pad';
 import { useOfflineSync } from '@/hooks/use-offline-sync';
 import { useGeolocation } from '@/hooks/use-geolocation';
 import { GEOFENCE_RADIUS } from '@/lib/geolocation';
+import { processImageUpload } from '@/lib/image-compress';
+import {
+  fetchAndCacheParcoursDeliveries,
+  loadCachedParcoursDeliveries,
+  saveCachedParcoursDeliveries,
+  type PharmacyDelivery,
+} from '@/services/parcoursDeliveriesCache';
 
 interface ParcoursDeliveriesProps {
   parcoursId: string;
@@ -46,31 +52,6 @@ interface ParcoursDeliveriesProps {
   forceConfirmed: boolean;
   onBack: () => void;
 }
-
-interface PharmacyDelivery {
-  pharmacyId: string;
-  pharmacyName: string;
-  pharmacyAddress: string | null;
-  pharmacyLatitude: number | null;
-  pharmacyLongitude: number | null;
-  position: number;
-  colis: { id: string; barcode: string; type: string }[];
-  // Existing delivery record (if any)
-  deliveryId: string | null;
-  deliveryStatus: string | null;
-  deliveryReference: string | null;
-  deliveredAt: string | null;
-  recipientName: string | null;
-  hasVerificationCode: boolean;
-  nb_cartons: number;
-  nb_sachets: number;
-  nb_barques: number;
-  // Bacs recovery
-  bacsToRecover: number;
-}
-
-// Stable cache store — created once outside component renders
-const parcoursCacheStore = localforage.createInstance({ name: 'dpci', storeName: 'parcours_deliveries_cache' });
 
 export function ParcoursDeliveries({
   parcoursId,
@@ -102,66 +83,19 @@ export function ParcoursDeliveries({
     enabled: !!validating && isOnline,
   });
 
-  // ── IndexedDB cache for parcours deliveries ──
-  const CACHE_KEY = `parcours_${parcoursId}`;
-
   const saveToCache = useCallback(async (data: PharmacyDelivery[]) => {
     try {
-      await parcoursCacheStore.setItem(CACHE_KEY, { data, cachedAt: Date.now() });
+      await saveCachedParcoursDeliveries(parcoursId, data);
     } catch (e) {
       console.warn('[Cache] Failed to save:', e);
     }
-  }, [CACHE_KEY]);
+  }, [parcoursId]);
 
   const loadFromCache = useCallback(async (): Promise<PharmacyDelivery[] | null> => {
     try {
-      const cached = await parcoursCacheStore.getItem<{ data: PharmacyDelivery[]; cachedAt: number }>(CACHE_KEY);
-      return cached?.data || null;
+      return await loadCachedParcoursDeliveries(parcoursId);
     } catch { return null; }
-  }, [CACHE_KEY]);
-
-  const buildMappedData = (
-    ppData: { id: string; pharmacy_id: string; position: number }[],
-    pharmData: { id: string; name: string; address: string | null; latitude: number | null; longitude: number | null }[],
-    colisData: { id: string; barcode: string; type: string; parcours_pharmacy_id: string }[],
-    delivData: { id: string; pharmacy_id: string; status: string; reference: string; delivered_at: string | null; recipient_name: string | null; has_verification_code: boolean | null }[],
-    bacsBalanceMap: Map<string, number>,
-  ): PharmacyDelivery[] => {
-    const pharmMap = new Map(pharmData.map(p => [p.id, p]));
-    const colisMap = new Map<string, { id: string; barcode: string; type: string }[]>();
-    colisData.forEach(c => {
-      const list = colisMap.get(c.parcours_pharmacy_id) || [];
-      list.push({ id: c.id, barcode: c.barcode, type: c.type });
-      colisMap.set(c.parcours_pharmacy_id, list);
-    });
-    const delivMap = new Map<string, (typeof delivData)[number]>();
-    delivData.forEach(d => delivMap.set(d.pharmacy_id, d));
-
-    return ppData.map(pp => {
-      const pharm = pharmMap.get(pp.pharmacy_id);
-      const colis = colisMap.get(pp.id) || [];
-      const deliv = delivMap.get(pp.pharmacy_id);
-      return {
-        pharmacyId: pp.pharmacy_id,
-        pharmacyName: pharm?.name || 'Inconnu',
-        pharmacyAddress: pharm?.address || null,
-        pharmacyLatitude: pharm?.latitude ?? null,
-        pharmacyLongitude: pharm?.longitude ?? null,
-        position: pp.position,
-        colis,
-        deliveryId: deliv?.id || null,
-        deliveryStatus: deliv?.status || null,
-        deliveryReference: deliv?.reference || null,
-        deliveredAt: deliv?.delivered_at || null,
-        recipientName: deliv?.recipient_name || null,
-        hasVerificationCode: !!deliv?.has_verification_code,
-        nb_cartons: colis.filter(c => c.type === 'carton').length,
-        nb_sachets: colis.filter(c => c.type === 'sachet').length,
-        nb_barques: colis.filter(c => c.type === 'bac' || c.type === 'barque').length,
-        bacsToRecover: bacsBalanceMap.get(pp.pharmacy_id) || 0,
-      };
-    });
-  };
+  }, [parcoursId]);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -181,51 +115,8 @@ export function ParcoursDeliveries({
     }
 
     try {
-      const { data: ppData, error: ppError } = await supabase
-        .from('parcours_pharmacies')
-        .select('id, pharmacy_id, position')
-        .eq('parcours_id', parcoursId)
-        .order('position', { ascending: true });
-
-      if (ppError) throw ppError;
-      if (!ppData || ppData.length === 0) {
-        setPharmacyDeliveries([]);
-        setLoading(false);
-        return;
-      }
-
-      const pharmacyIds = ppData.map(pp => pp.pharmacy_id);
-      const ppIds = ppData.map(pp => pp.id);
-
-      const [pharmRes, colisRes, delivRes, bacsRes] = await Promise.all([
-        supabase.from('pharmacies').select('id, name, address, latitude, longitude').in('id', pharmacyIds),
-        supabase.from('parcours_colis').select('id, barcode, type, parcours_pharmacy_id').in('parcours_pharmacy_id', ppIds),
-        supabase.from('deliveries').select('id, pharmacy_id, status, reference, delivered_at, recipient_name, has_verification_code, driver_id, bacs_to_recover').eq('parcours_id', parcoursId),
-        supabase.from('pharmacy_bacs_balance').select('pharmacy_id, pending_bacs').in('pharmacy_id', pharmacyIds),
-      ]);
-
-      const bacsBalanceMap = new Map<string, number>();
-      (bacsRes.data || []).forEach((b: any) => bacsBalanceMap.set(b.pharmacy_id, b.pending_bacs));
-
-      const mapped = buildMappedData(
-        ppData,
-        pharmRes.data || [],
-        colisRes.data || [],
-        (delivRes.data || []).map(d => ({
-          id: d.id,
-          pharmacy_id: d.pharmacy_id,
-          status: d.status,
-          reference: d.reference,
-          delivered_at: d.delivered_at,
-          recipient_name: d.recipient_name,
-          has_verification_code: d.has_verification_code,
-        })),
-        bacsBalanceMap,
-      );
-
+      const mapped = await fetchAndCacheParcoursDeliveries(parcoursId);
       setPharmacyDeliveries(mapped);
-      // Save to cache for offline use
-      saveToCache(mapped);
     } catch {
       // Network error — try cache fallback
       const cached = await loadFromCache();
@@ -239,7 +130,7 @@ export function ParcoursDeliveries({
     } finally {
       setLoading(false);
     }
-  }, [parcoursId, driverId, loadFromCache, saveToCache]);
+  }, [parcoursId, loadFromCache]);
 
   useEffect(() => {
     fetchData();
@@ -283,12 +174,19 @@ export function ParcoursDeliveries({
     setBacsRecovered(0);
   };
 
-  const handlePhotoCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePhotoCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => setOfflinePhoto(reader.result as string);
-    reader.readAsDataURL(file);
+    try {
+      const processed = await processImageUpload(file);
+      if (!processed) {
+        toast.error('Veuillez prendre une photo valide');
+        return;
+      }
+      setOfflinePhoto(processed.dataUrl);
+    } catch {
+      toast.error('Erreur lors du traitement de la photo');
+    }
   };
 
   const handleValidateDelivery = async () => {
@@ -380,6 +278,11 @@ export function ParcoursDeliveries({
           recipient_name: 'Validation hors-ligne',
           recipient_signature: null,
           delivered_at: deliveredAt,
+          nb_cartons_received: null,
+          nb_sachets_received: null,
+          nb_barques_received: null,
+          bacs_to_recover: validating.bacsToRecover,
+          bacs_recovered: 0,
         },
         offlinePhoto,
         {
