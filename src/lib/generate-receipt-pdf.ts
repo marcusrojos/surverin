@@ -510,8 +510,14 @@ export async function generatePhotoPDF(photoBase64: string, _reference: string, 
  * Works in Edge, Chrome, Android WebView and Capacitor.
  */
 export async function downloadPdfFromUrl(pdfUrl: string, filename: string): Promise<void> {
+  let resolvedUrl = pdfUrl;
   try {
-    const response = await fetch(pdfUrl);
+    resolvedUrl = await resolveReceiptSignedUrl(pdfUrl);
+  } catch (err) {
+    console.error('[downloadPdfFromUrl] Could not sign URL, using stored value:', err);
+  }
+  try {
+    const response = await fetch(resolvedUrl);
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const blob = await response.blob();
     const objectUrl = URL.createObjectURL(blob);
