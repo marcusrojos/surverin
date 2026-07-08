@@ -4,6 +4,7 @@ import {
   calculateDistance,
   GEOFENCE_RADIUS,
   watchPosition,
+  clearWatch,
 } from '@/lib/geolocation';
 
 interface UseGeolocationOptions {
