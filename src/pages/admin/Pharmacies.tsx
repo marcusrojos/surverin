@@ -267,12 +267,22 @@ export default function PharmaciesPage() {
           const { data: pwData, error: pwError } = await supabase.functions.invoke('update-password', {
             body: { user_id: selectedPharmacy.user_id, password: formData.password },
           });
-          if (pwError || pwData?.error) {
-            toast.error(pwData?.error || 'Erreur lors de la mise à jour du mot de passe');
+          let pwErrMsg: string | null = pwData?.error || null;
+          if (pwError && !pwErrMsg) {
+            try {
+              const ctx = await (pwError as any).context?.json?.();
+              pwErrMsg = ctx?.error || pwError.message;
+            } catch {
+              pwErrMsg = pwError.message;
+            }
+          }
+          if (pwErrMsg) {
+            toast.error(pwErrMsg || 'Erreur lors de la mise à jour du mot de passe');
             setIsSaving(false);
             return;
           }
           toast.success('Pharmacie modifiée et mot de passe mis à jour');
+
         } else if (formData.password && !selectedPharmacy.user_id) {
           // Create account for pharmacy without one
           const { data, error: userError } = await supabase.functions.invoke('create-user', {

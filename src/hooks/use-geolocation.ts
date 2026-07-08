@@ -4,6 +4,7 @@ import {
   calculateDistance,
   GEOFENCE_RADIUS,
   watchPosition,
+  clearWatch,
 } from '@/lib/geolocation';
 
 interface UseGeolocationOptions {
@@ -55,7 +56,7 @@ export function useGeolocation({
 
     return () => {
       if (watchIdRef.current !== null) {
-        navigator.geolocation.clearWatch(watchIdRef.current);
+        clearWatch(watchIdRef.current);
         watchIdRef.current = null;
       }
     };
