@@ -231,47 +231,43 @@ export function PharmacyLocationPicker({
   };
 
   const handleUseCurrentPosition = async () => {
-    if (!navigator.geolocation) {
-      return;
-    }
     setGettingLocation(true);
     setLocationSuccess(false);
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        const lat = position.coords.latitude;
-        const lng = position.coords.longitude;
-        setMarkerPos([lat, lng]);
+    try {
+      const position = await getCurrentPosition();
+      const lat = position.latitude;
+      const lng = position.longitude;
+      setMarkerPos([lat, lng]);
 
-        if (mapInstanceRef.current) {
-          mapInstanceRef.current.setView([lat, lng], 16);
-          updateMarker(mapInstanceRef.current, lat, lng);
-        }
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.setView([lat, lng], 16);
+        updateMarker(mapInstanceRef.current, lat, lng);
+      }
 
-        // Reverse geocode
-        try {
-          const resp = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`
-          );
-          const data = await resp.json();
-          const addr = data.display_name || `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
-          setSelectedAddress(addr);
-          onLocationSelect({ latitude: lat, longitude: lng, address: addr, source: 'gps' });
-        } catch {
-          const addr = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
-          setSelectedAddress(addr);
-          onLocationSelect({ latitude: lat, longitude: lng, address: addr, source: 'gps' });
-        }
+      // Reverse geocode
+      try {
+        const resp = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`
+        );
+        const data = await resp.json();
+        const addr = data.display_name || `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+        setSelectedAddress(addr);
+        onLocationSelect({ latitude: lat, longitude: lng, address: addr, source: 'gps' });
+      } catch {
+        const addr = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+        setSelectedAddress(addr);
+        onLocationSelect({ latitude: lat, longitude: lng, address: addr, source: 'gps' });
+      }
 
-        setGettingLocation(false);
-        setLocationSuccess(true);
-        setTimeout(() => setLocationSuccess(false), 2000);
-      },
-      () => {
-        setGettingLocation(false);
-      },
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
-    );
+      setGettingLocation(false);
+      setLocationSuccess(true);
+      setTimeout(() => setLocationSuccess(false), 2000);
+    } catch (err: any) {
+      setGettingLocation(false);
+      toast.error(err?.message || 'Impossible d\'obtenir votre position');
+    }
   };
+
 
   return (
     <div className="space-y-3">
