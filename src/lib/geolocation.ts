@@ -1,6 +1,31 @@
 /**
  * Geolocation utilities for distance calculation and position tracking
  */
+import { Capacitor } from '@capacitor/core';
+import { Geolocation } from '@capacitor/geolocation';
+
+const isNative = () => Capacitor.isNativePlatform();
+
+/**
+ * Ensure location permission is granted on native platforms.
+ * Triggers the OS permission prompt if needed. No-op on the web
+ * (the browser prompts automatically when a position is requested).
+ */
+export async function ensureLocationPermission(): Promise<boolean> {
+  if (!isNative()) return true;
+  try {
+    const status = await Geolocation.checkPermissions();
+    if (status.location === 'granted' || status.coarseLocation === 'granted') {
+      return true;
+    }
+    const req = await Geolocation.requestPermissions();
+    return req.location === 'granted' || req.coarseLocation === 'granted';
+  } catch (err) {
+    console.error('[geolocation] permission error:', err);
+    return false;
+  }
+}
+
 
 // Haversine formula to calculate distance between two GPS coordinates in meters
 export function calculateDistance(
