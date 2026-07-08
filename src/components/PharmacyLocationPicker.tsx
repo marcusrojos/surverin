@@ -4,6 +4,8 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
 import { MapPin, Search, X, Loader2, Navigation, Crosshair, Check } from 'lucide-react';
+import { toast } from 'sonner';
+import { getCurrentPosition } from '@/lib/geolocation';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
