@@ -328,10 +328,8 @@ export const SyncQueue = {
             throw new Error(uploadError.message);
           }
 
-          const { data: urlData } = supabase.storage
-            .from('delivery-receipts')
-            .getPublicUrl(fileName);
-          receiptPdfUrl = urlData.publicUrl;
+          // Bucket is private; store the storage path and resolve to a signed URL on read
+          receiptPdfUrl = fileName;
           console.log(`[SyncQueue] PDF uploaded successfully: ${receiptPdfUrl}`);
         }
 
