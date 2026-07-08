@@ -535,6 +535,6 @@ export async function downloadPdfFromUrl(pdfUrl: string, filename: string): Prom
   } catch (err) {
     console.error('[downloadPdfFromUrl] Failed:', err);
     // Fallback: open in new tab
-    window.open(pdfUrl, '_blank');
+    window.open(resolvedUrl, '_blank');
   }
 }
