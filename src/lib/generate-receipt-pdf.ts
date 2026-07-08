@@ -1,6 +1,31 @@
 import jsPDF from 'jspdf';
 import dpciLogo from '@/assets/dpci-logo.png';
 import { savePdfDoc } from '@/lib/pdf-kit';
+import { supabase } from '@/integrations/supabase/client';
+
+const RECEIPTS_BUCKET = 'delivery-receipts';
+
+/**
+ * Resolve a stored receipt reference (either a storage path/filename or a legacy
+ * public URL) to a short-lived signed URL, since the bucket is now private.
+ */
+export async function resolveReceiptSignedUrl(stored: string): Promise<string> {
+  let path = stored;
+  const marker = `${RECEIPTS_BUCKET}/`;
+  const idx = stored.indexOf(marker);
+  if (idx !== -1) {
+    path = stored.slice(idx + marker.length);
+  }
+  // Strip any query string leftover from a legacy public URL
+  path = path.split('?')[0];
+  const { data, error } = await supabase.storage
+    .from(RECEIPTS_BUCKET)
+    .createSignedUrl(path, 60 * 60);
+  if (error || !data?.signedUrl) {
+    throw new Error(error?.message || 'Impossible de générer le lien du bon');
+  }
+  return data.signedUrl;
+}
 
 interface PackageItem {
   type: string;
