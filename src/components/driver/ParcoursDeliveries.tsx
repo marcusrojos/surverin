@@ -23,7 +23,6 @@ import {
   Hash,
   Navigation,
   WifiOff,
-  Camera,
   MapPinOff,
   LocateFixed,
   Database,
@@ -37,7 +36,6 @@ import { SignaturePad } from '@/components/ui/signature-pad';
 import { useOfflineSync } from '@/hooks/use-offline-sync';
 import { useGeolocation } from '@/hooks/use-geolocation';
 import { GEOFENCE_RADIUS } from '@/lib/geolocation';
-import { compressImage } from '@/lib/image-compress';
 import {
   fetchAndCacheParcoursDeliveries,
   loadCachedParcoursDeliveries,
@@ -73,7 +71,6 @@ export function ParcoursDeliveries({
   const [nbSachetsReceived, setNbSachetsReceived] = useState(0);
   const [nbBarquesReceived, setNbBarquesReceived] = useState(0);
   const [bacsRecovered, setBacsRecovered] = useState(0);
-  const [offlinePhoto, setOfflinePhoto] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   // GPS verification for online mode
@@ -167,26 +164,10 @@ export function ParcoursDeliveries({
     setRecipientName('');
     setVerificationCode('');
     setSignature('');
-    setOfflinePhoto(null);
     setNbCartonsReceived(pd.nb_cartons);
     setNbSachetsReceived(pd.nb_sachets);
     setNbBarquesReceived(pd.nb_barques);
     setBacsRecovered(0);
-  };
-
-  const handlePhotoCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    try {
-      if (!file.type.startsWith('image/')) {
-        toast.error('Veuillez prendre une photo valide');
-        return;
-      }
-      const processed = await compressImage(file, { outputType: 'image/jpeg' });
-      setOfflinePhoto(processed.dataUrl);
-    } catch {
-      toast.error('Erreur lors du traitement de la photo');
-    }
   };
 
   const handleValidateDelivery = async () => {
@@ -262,12 +243,7 @@ export function ParcoursDeliveries({
         setSaving(false);
       }
     } else {
-      // ── Offline mode: same form (minus GPS & verification code) + paper slip photo ──
-      if (!offlinePhoto) {
-        toast.error('La photo du bon de livraison est obligatoire en mode hors-ligne');
-        return;
-      }
-
+      // ── Offline mode: same form (minus GPS & verification code), no photo ──
       setSaving(true);
       try {
         const deliveredAt = new Date().toISOString();
@@ -287,7 +263,7 @@ export function ParcoursDeliveries({
             bacs_recovered: bacsRecovered,
             nb_barques_delivered: validating.nb_barques,
           },
-          offlinePhoto,
+          null,
           {
             pharmacy_id: validating.pharmacyId,
             parcours_id: parcoursId,
@@ -730,35 +706,6 @@ export function ParcoursDeliveries({
               <SignaturePad onSignatureChange={setSignature} className="border rounded-lg" />
             </div>
 
-            {/* ─── OFFLINE ONLY: paper slip photo ─── */}
-            {!isOnline && (
-              <div className="space-y-1.5">
-                <Label className="flex items-center gap-1.5">
-                  <Camera className="w-3.5 h-3.5" />
-                  Photo du bon de livraison papier *
-                </Label>
-                <Input
-                  type="file"
-                  accept="image/*"
-                  capture="environment"
-                  onChange={handlePhotoCapture}
-                  className="text-xs"
-                />
-                {offlinePhoto && (
-                  <div className="relative">
-                    <img src={offlinePhoto} alt="Photo bon" className="w-full h-40 object-cover rounded-lg border" />
-                    <button
-                      type="button"
-                      onClick={() => setOfflinePhoto(null)}
-                      className="absolute top-1 right-1 bg-background/80 rounded-full p-1 text-xs text-muted-foreground hover:text-destructive"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-
             <Button
               className="w-full"
               onClick={handleValidateDelivery}
@@ -767,8 +714,7 @@ export function ParcoursDeliveries({
                 !recipientName.trim() ||
                 !signature ||
                 (isOnline && validating?.pharmacyLatitude != null && validating?.pharmacyLongitude != null && (!isWithinZone || geoLoading)) ||
-                (isOnline && !!validating?.hasVerificationCode && !verificationCode.trim()) ||
-                (!isOnline && !offlinePhoto)
+                (isOnline && !!validating?.hasVerificationCode && !verificationCode.trim())
               }
             >
               {saving ? (
