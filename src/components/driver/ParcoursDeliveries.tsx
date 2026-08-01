@@ -23,7 +23,6 @@ import {
   Hash,
   Navigation,
   WifiOff,
-  Camera,
   MapPinOff,
   LocateFixed,
   Database,
@@ -37,7 +36,6 @@ import { SignaturePad } from '@/components/ui/signature-pad';
 import { useOfflineSync } from '@/hooks/use-offline-sync';
 import { useGeolocation } from '@/hooks/use-geolocation';
 import { GEOFENCE_RADIUS } from '@/lib/geolocation';
-import { compressImage } from '@/lib/image-compress';
 import {
   fetchAndCacheParcoursDeliveries,
   loadCachedParcoursDeliveries,
@@ -73,7 +71,6 @@ export function ParcoursDeliveries({
   const [nbSachetsReceived, setNbSachetsReceived] = useState(0);
   const [nbBarquesReceived, setNbBarquesReceived] = useState(0);
   const [bacsRecovered, setBacsRecovered] = useState(0);
-  const [offlinePhoto, setOfflinePhoto] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   // GPS verification for online mode
@@ -167,26 +164,10 @@ export function ParcoursDeliveries({
     setRecipientName('');
     setVerificationCode('');
     setSignature('');
-    setOfflinePhoto(null);
     setNbCartonsReceived(pd.nb_cartons);
     setNbSachetsReceived(pd.nb_sachets);
     setNbBarquesReceived(pd.nb_barques);
     setBacsRecovered(0);
-  };
-
-  const handlePhotoCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    try {
-      if (!file.type.startsWith('image/')) {
-        toast.error('Veuillez prendre une photo valide');
-        return;
-      }
-      const processed = await compressImage(file, { outputType: 'image/jpeg' });
-      setOfflinePhoto(processed.dataUrl);
-    } catch {
-      toast.error('Erreur lors du traitement de la photo');
-    }
   };
 
   const handleValidateDelivery = async () => {
