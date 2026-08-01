@@ -262,12 +262,7 @@ export function ParcoursDeliveries({
         setSaving(false);
       }
     } else {
-      // ── Offline mode: same form (minus GPS & verification code) + paper slip photo ──
-      if (!offlinePhoto) {
-        toast.error('La photo du bon de livraison est obligatoire en mode hors-ligne');
-        return;
-      }
-
+      // ── Offline mode: same form (minus GPS & verification code), no photo ──
       setSaving(true);
       try {
         const deliveredAt = new Date().toISOString();
@@ -287,7 +282,7 @@ export function ParcoursDeliveries({
             bacs_recovered: bacsRecovered,
             nb_barques_delivered: validating.nb_barques,
           },
-          offlinePhoto,
+          null,
           {
             pharmacy_id: validating.pharmacyId,
             parcours_id: parcoursId,
@@ -730,35 +725,6 @@ export function ParcoursDeliveries({
               <SignaturePad onSignatureChange={setSignature} className="border rounded-lg" />
             </div>
 
-            {/* ─── OFFLINE ONLY: paper slip photo ─── */}
-            {!isOnline && (
-              <div className="space-y-1.5">
-                <Label className="flex items-center gap-1.5">
-                  <Camera className="w-3.5 h-3.5" />
-                  Photo du bon de livraison papier *
-                </Label>
-                <Input
-                  type="file"
-                  accept="image/*"
-                  capture="environment"
-                  onChange={handlePhotoCapture}
-                  className="text-xs"
-                />
-                {offlinePhoto && (
-                  <div className="relative">
-                    <img src={offlinePhoto} alt="Photo bon" className="w-full h-40 object-cover rounded-lg border" />
-                    <button
-                      type="button"
-                      onClick={() => setOfflinePhoto(null)}
-                      className="absolute top-1 right-1 bg-background/80 rounded-full p-1 text-xs text-muted-foreground hover:text-destructive"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-
             <Button
               className="w-full"
               onClick={handleValidateDelivery}
@@ -767,8 +733,7 @@ export function ParcoursDeliveries({
                 !recipientName.trim() ||
                 !signature ||
                 (isOnline && validating?.pharmacyLatitude != null && validating?.pharmacyLongitude != null && (!isWithinZone || geoLoading)) ||
-                (isOnline && !!validating?.hasVerificationCode && !verificationCode.trim()) ||
-                (!isOnline && !offlinePhoto)
+                (isOnline && !!validating?.hasVerificationCode && !verificationCode.trim())
               }
             >
               {saving ? (
