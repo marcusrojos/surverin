@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/lib/auth";
+import { BackgroundSync } from "@/components/BackgroundSync";
 import { lazy, Suspense } from "react";
 import { Loader2 } from "lucide-react";
 
@@ -57,6 +58,7 @@ const App = () => (
       <TooltipProvider>
         <Toaster />
         <Sonner />
+        <BackgroundSync />
         <BrowserRouter>
           <Suspense fallback={<PageLoader />}>
             <Routes>

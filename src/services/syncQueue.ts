@@ -351,31 +351,32 @@ export const SyncQueue = {
           throw error;
         }
 
-        if (has_offline_photo) {
-          const deliveredBacs = Number(nb_barques_delivered) || 0;
-          if (deliveredBacs > 0) {
-            const { data: currentBalance, error: balanceReadError } = await supabase
+        // Rolling bacs balance: (pending - recovered) + delivered now
+        {
+          const deliveredBacs = Math.max(0, Number(nb_barques_delivered) || 0);
+          const toRecover = Math.max(0, Number(item.payload.bacs_to_recover) || 0);
+          const recovered = Math.max(0, Number(item.payload.bacs_recovered) || 0);
+          const nextPending = Math.max(0, toRecover - recovered) + deliveredBacs;
+
+          const { data: currentBalance, error: balanceReadError } = await supabase
+            .from('pharmacy_bacs_balance')
+            .select('pharmacy_id')
+            .eq('pharmacy_id', item.pharmacy_id)
+            .maybeSingle();
+
+          if (balanceReadError) throw balanceReadError;
+
+          if (currentBalance) {
+            const { error: balanceUpdateError } = await supabase
               .from('pharmacy_bacs_balance')
-              .select('pending_bacs')
-              .eq('pharmacy_id', item.pharmacy_id)
-              .maybeSingle();
-
-            if (balanceReadError) throw balanceReadError;
-
-            const nextPending = Math.max(0, Number(currentBalance?.pending_bacs) || 0) + deliveredBacs;
-
-            if (currentBalance) {
-              const { error: balanceUpdateError } = await supabase
-                .from('pharmacy_bacs_balance')
-                .update({ pending_bacs: nextPending, updated_at: new Date().toISOString() })
-                .eq('pharmacy_id', item.pharmacy_id);
-              if (balanceUpdateError) throw balanceUpdateError;
-            } else {
-              const { error: balanceInsertError } = await supabase
-                .from('pharmacy_bacs_balance')
-                .insert({ pharmacy_id: item.pharmacy_id, pending_bacs: nextPending });
-              if (balanceInsertError) throw balanceInsertError;
-            }
+              .update({ pending_bacs: nextPending, updated_at: new Date().toISOString() })
+              .eq('pharmacy_id', item.pharmacy_id);
+            if (balanceUpdateError) throw balanceUpdateError;
+          } else if (nextPending > 0) {
+            const { error: balanceInsertError } = await supabase
+              .from('pharmacy_bacs_balance')
+              .insert({ pharmacy_id: item.pharmacy_id, pending_bacs: nextPending });
+            if (balanceInsertError) throw balanceInsertError;
           }
         }
 
