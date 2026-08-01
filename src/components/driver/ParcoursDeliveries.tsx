@@ -191,8 +191,14 @@ export function ParcoursDeliveries({
 
   const handleValidateDelivery = async () => {
     if (!validating) return;
-    if (isOnline && !recipientName.trim()) {
+
+    // ── Common fields (online + offline) ──
+    if (!recipientName.trim()) {
       toast.error('Le nom du destinataire est requis');
+      return;
+    }
+    if (!signature) {
+      toast.error('La signature est requise');
       return;
     }
 
@@ -207,12 +213,6 @@ export function ParcoursDeliveries({
       // Verification code required check (actual value validated server-side)
       if (validating.hasVerificationCode && !verificationCode.trim()) {
         toast.error('Le code de vérification est requis');
-        return;
-      }
-
-      // Signature check
-      if (!signature) {
-        toast.error('La signature est requise');
         return;
       }
 
@@ -262,47 +262,57 @@ export function ParcoursDeliveries({
         setSaving(false);
       }
     } else {
-      // Offline mode: only local validation is required
+      // ── Offline mode: same form (minus GPS & verification code) + paper slip photo ──
       if (!offlinePhoto) {
         toast.error('La photo du bon de livraison est obligatoire en mode hors-ligne');
         return;
       }
 
-      const deliveredAt = new Date().toISOString();
-      const reference = validating.deliveryReference || `${parcoursName}-${validating.pharmacyName}`;
-      await queueDelivery(
-        validating.deliveryId,
-        reference,
-        {
-          status: 'livre',
-          recipient_name: 'Validation hors-ligne',
-          recipient_signature: null,
-          delivered_at: deliveredAt,
-          nb_cartons_received: null,
-          nb_sachets_received: null,
-          nb_barques_received: null,
-          bacs_to_recover: validating.bacsToRecover,
-          bacs_recovered: 0,
-          nb_barques_delivered: validating.nb_barques,
-        },
-        offlinePhoto,
-        {
-          pharmacy_id: validating.pharmacyId,
-          parcours_id: parcoursId,
-          driver_id: driverId,
-        }
-      );
-      toast.success('Livraison sauvegardée hors-ligne');
-      setValidating(null);
-      setPharmacyDeliveries(prev => {
-        const updated = prev.map(pd =>
-          pd.pharmacyId === validating.pharmacyId
-            ? { ...pd, deliveryStatus: 'livre', recipientName: 'Validation hors-ligne', deliveredAt }
-            : pd
+      setSaving(true);
+      try {
+        const deliveredAt = new Date().toISOString();
+        const reference = validating.deliveryReference || `${parcoursName}-${validating.pharmacyName}`;
+        await queueDelivery(
+          validating.deliveryId,
+          reference,
+          {
+            status: 'livre',
+            recipient_name: recipientName.trim(),
+            recipient_signature: signature,
+            delivered_at: deliveredAt,
+            nb_cartons_received: nbCartonsReceived,
+            nb_sachets_received: nbSachetsReceived,
+            nb_barques_received: nbBarquesReceived,
+            bacs_to_recover: validating.bacsToRecover,
+            bacs_recovered: bacsRecovered,
+            nb_barques_delivered: validating.nb_barques,
+          },
+          offlinePhoto,
+          {
+            pharmacy_id: validating.pharmacyId,
+            parcours_id: parcoursId,
+            driver_id: driverId,
+          }
         );
-        void saveToCache(updated);
-        return updated;
-      });
+        toast.success('Livraison sauvegardée hors-ligne — synchronisation automatique au retour du réseau');
+        const validatedName = recipientName.trim();
+        const validatedPharmacyId = validating.pharmacyId;
+        setValidating(null);
+        setPharmacyDeliveries(prev => {
+          const updated = prev.map(pd =>
+            pd.pharmacyId === validatedPharmacyId
+              ? { ...pd, deliveryStatus: 'livre', recipientName: validatedName, deliveredAt }
+              : pd
+          );
+          void saveToCache(updated);
+          return updated;
+        });
+      } catch (err) {
+        console.error('[Offline validation] failed:', err);
+        toast.error('Erreur lors de la sauvegarde hors-ligne');
+      } finally {
+        setSaving(false);
+      }
     }
   };
 
