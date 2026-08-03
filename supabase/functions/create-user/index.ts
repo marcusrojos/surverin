@@ -245,7 +245,26 @@ Deno.serve(async (req) => {
       }
     }
 
-    console.log(`User created successfully: ${email} with role ${role}`);
+    // Archive the login credentials, encrypted at rest, for admin PDF export.
+    try {
+      await adminClient.from("user_credentials").upsert(
+        {
+          user_id: newUserId,
+          full_name: full_name.trim(),
+          role: role,
+          site_id: targetSiteId,
+          identifier: trimmedUsername || authEmail,
+          password_encrypted: await encryptSecret(password),
+        },
+        { onConflict: "user_id" },
+      );
+    } catch (e) {
+      console.error("Credentials archive failed:", e);
+    }
+
+    console.log(`User created successfully with role ${role}`);
+
+
 
     return new Response(
       JSON.stringify({ 
