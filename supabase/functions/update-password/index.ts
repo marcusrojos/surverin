@@ -54,6 +54,39 @@ Deno.serve(async (req) => {
     const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(user_id, { password });
     if (updateError) throw updateError;
 
+    // Keep the secure credentials archive in sync (encrypted at rest).
+    try {
+      const { data: profile } = await supabaseAdmin
+        .from("profiles")
+        .select("full_name, username, email, site_id")
+        .eq("user_id", user_id)
+        .maybeSingle();
+      const { data: targetRole } = await supabaseAdmin
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", user_id)
+        .maybeSingle();
+
+      if (profile && targetRole) {
+        await supabaseAdmin.from("user_credentials").upsert(
+          {
+            user_id,
+            full_name: profile.full_name,
+            role: targetRole.role,
+            site_id: profile.site_id,
+            identifier: profile.username || profile.email,
+            password_encrypted: await encryptSecret(password),
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "user_id" },
+        );
+      }
+    } catch (e) {
+      console.error("Credentials archive update failed:", e);
+    }
+
+
+
 
 
 
