@@ -9,10 +9,12 @@ interface AuthContextType {
   session: Session | null;
   role: AppRole | null;
   siteId: string | null;
+  siteName: string | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
 }
+
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
