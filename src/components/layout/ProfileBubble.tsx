@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { LogOut, User as UserIcon } from 'lucide-react';
+import { LogOut, User as UserIcon, Building2 } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
 import { supabase } from '@/integrations/supabase/client';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -28,7 +28,7 @@ function initials(name: string | null, email: string | null) {
 }
 
 export function ProfileBubble() {
-  const { user, role, signOut } = useAuth();
+  const { user, role, siteName, signOut } = useAuth();
   const [fullName, setFullName] = useState<string | null>(null);
   const [username, setUsername] = useState<string | null>(null);
 
@@ -63,7 +63,10 @@ export function ProfileBubble() {
               <span className="text-sm font-medium truncate max-w-[160px]">
                 {fullName || username || user.email}
               </span>
-              <span className="text-[11px] text-muted-foreground">{roleLabel(role)}</span>
+              <span className="text-[11px] text-muted-foreground truncate max-w-[160px]">
+                {roleLabel(role)}
+                {role === 'super_admin' ? ' · Tous les sites' : siteName ? ` · ${siteName}` : ''}
+              </span>
             </div>
           </button>
         </DropdownMenuTrigger>
@@ -78,6 +81,10 @@ export function ProfileBubble() {
               <span className="text-sm font-medium truncate">{fullName || username || 'Utilisateur'}</span>
               <span className="text-xs text-muted-foreground truncate">{user.email}</span>
               <span className="text-[11px] text-primary font-medium mt-0.5">{roleLabel(role)}</span>
+              <span className="text-[11px] text-muted-foreground truncate flex items-center gap-1 mt-0.5">
+                <Building2 className="h-3 w-3 shrink-0" />
+                {role === 'super_admin' ? 'Tous les sites' : siteName || 'Aucun site'}
+              </span>
             </div>
           </DropdownMenuLabel>
           {username && (
