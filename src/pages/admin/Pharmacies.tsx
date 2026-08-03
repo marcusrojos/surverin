@@ -533,10 +533,12 @@ export default function PharmaciesPage() {
               Gérez les pharmacies destinataires
             </p>
           </div>
-          <Button onClick={() => handleOpenDialog()} className="shadow-primary">
-            <Plus className="w-4 h-4 mr-2" />
-            Nouvelle Pharmacie
-          </Button>
+          {!isSuperAdmin && (
+            <Button onClick={() => handleOpenDialog()} className="shadow-primary">
+              <Plus className="w-4 h-4 mr-2" />
+              Nouvelle Pharmacie
+            </Button>
+          )}
         </div>
 
         {/* Search + Filters */}
