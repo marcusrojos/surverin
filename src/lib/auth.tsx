@@ -23,6 +23,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [role, setRole] = useState<AppRole | null>(null);
   const [siteId, setSiteId] = useState<string | null>(null);
+  const [siteName, setSiteName] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   const fetchUserRole = async (userId: string) => {
@@ -47,12 +48,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const { data: profile } = await supabase
         .from('profiles')
-        .select('site_id')
+        .select('site_id, sites:site_id(name)')
         .eq('user_id', userId)
         .maybeSingle();
       setSiteId((profile as any)?.site_id ?? null);
+      setSiteName((profile as any)?.sites?.name ?? null);
     } catch {
       setSiteId(null);
+      setSiteName(null);
     }
   };
 
@@ -70,6 +73,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } else {
           setRole(null);
           setSiteId(null);
+          setSiteName(null);
         }
         setLoading(false);
       }
@@ -124,11 +128,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSession(null);
     setRole(null);
     setSiteId(null);
+    setSiteName(null);
 
   };
 
   return (
-    <AuthContext.Provider value={{ user, session, role, siteId, loading, signIn, signOut }}>
+    <AuthContext.Provider value={{ user, session, role, siteId, siteName, loading, signIn, signOut }}>
       {children}
     </AuthContext.Provider>
   );
