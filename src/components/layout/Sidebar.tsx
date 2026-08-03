@@ -42,7 +42,7 @@ function roleLabel(role: string | null) {
 
 export function Sidebar() {
   const location = useLocation();
-  const { role, signOut, user } = useAuth();
+  const { role, signOut, user, siteName } = useAuth();
   const navItems = getNavItems(role);
 
   return (
@@ -71,6 +71,9 @@ export function Sidebar() {
         <div className="px-4 py-2 mb-2">
           <p className="text-sm font-medium truncate">{user?.email}</p>
           <p className="text-xs text-sidebar-foreground/60">{roleLabel(role)}</p>
+          <p className="text-xs text-sidebar-foreground/60 truncate">
+            {role === 'super_admin' ? 'Tous les sites' : siteName || 'Aucun site'}
+          </p>
         </div>
         <button onClick={signOut} className="flex items-center gap-3 w-full px-4 py-3 rounded-lg text-sm font-medium text-sidebar-foreground/80 hover:bg-destructive/20 hover:text-destructive transition-all duration-200">
           <LogOut className="w-5 h-5" />

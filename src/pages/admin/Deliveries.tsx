@@ -326,10 +326,12 @@ export default function DeliveriesPage() {
               Gérez toutes les livraisons de colis
             </p>
           </div>
-          <Button onClick={() => setIsParcoursWizardOpen(true)} className="shadow-primary">
-            <Route className="w-4 h-4 mr-2" />
-            Créer un parcours
-          </Button>
+          {!isSuperAdmin && (
+            <Button onClick={() => setIsParcoursWizardOpen(true)} className="shadow-primary">
+              <Route className="w-4 h-4 mr-2" />
+              Créer un parcours
+            </Button>
+          )}
         </div>
 
         <Tabs defaultValue="bons" className="w-full">

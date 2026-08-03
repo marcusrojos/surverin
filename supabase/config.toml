@@ -11,3 +11,6 @@ verify_jwt = false
 
 [functions.setup-admin]
 verify_jwt = false
+
+[functions.user-access-export]
+verify_jwt = false

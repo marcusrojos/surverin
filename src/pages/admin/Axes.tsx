@@ -199,10 +199,12 @@ export default function AdminAxes() {
             <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Gestion des axes</h1>
             <p className="text-muted-foreground">Définissez les parcours de livraison</p>
           </div>
-          <Button onClick={openCreate} className="w-full sm:w-auto">
-            <Plus className="w-4 h-4 mr-2" />
-            Nouvel axe
-          </Button>
+          {!isSuperAdmin && (
+            <Button onClick={openCreate} className="w-full sm:w-auto">
+              <Plus className="w-4 h-4 mr-2" />
+              Nouvel axe
+            </Button>
+          )}
         </div>
 
         {isSuperAdmin && (
