@@ -6,13 +6,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
-import { Download, Truck, Building2, Package } from 'lucide-react';
+import { Download, Truck, Building2, Package, KeyRound } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/lib/auth';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { createPdf, sectionTitle, table, field, finalizePdf, type TableColumn } from '@/lib/pdf-kit';
 import { useSiteFilter, SiteFilterSelect } from '@/components/admin/SiteFilter';
+import { UserAccessExport } from '@/components/admin/UserAccessExport';
 
 interface DriverInfo {
   full_name: string;
@@ -333,7 +334,15 @@ export default function AdminLists() {
             <TabsTrigger value="drivers" className="gap-2"><Truck className="w-4 h-4" /> Chauffeurs</TabsTrigger>
             <TabsTrigger value="pharmacies" className="gap-2"><Building2 className="w-4 h-4" /> Pharmacies</TabsTrigger>
             <TabsTrigger value="deliveries" className="gap-2"><Package className="w-4 h-4" /> Livraisons</TabsTrigger>
+            <TabsTrigger value="access" className="gap-2"><KeyRound className="w-4 h-4" /> Accès utilisateurs</TabsTrigger>
           </TabsList>
+
+          <TabsContent value="access">
+            <UserAccessExport
+              siteFilter={siteFilter}
+              siteName={sites.find((s) => s.id === siteFilter)?.name ?? null}
+            />
+          </TabsContent>
 
           <TabsContent value="drivers">
             <Card>
