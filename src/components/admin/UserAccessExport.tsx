@@ -17,8 +17,8 @@ interface AccessRow {
   site_id: string | null;
   site_name: string | null;
   identifier: string;
-  password: string;
-  updated_at: string;
+  password: string | null;
+  updated_at: string | null;
 }
 
 function roleLabel(role: string) {
