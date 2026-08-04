@@ -2,49 +2,129 @@ import jsPDF from 'jspdf';
 import dpciLogo from '@/assets/dpci-logo.png';
 import { Capacitor } from '@capacitor/core';
 
+/** Desktop (Electron) bridge exposed by electron/preload.cjs. */
+interface DesktopBridge {
+  savePdf: (fileName: string, base64: string) => Promise<{ ok: boolean; path?: string; error?: string }>;
+}
+
+function getDesktopBridge(): DesktopBridge | null {
+  const bridge = (globalThis as any).dpciDesktop;
+  return bridge && typeof bridge.savePdf === 'function' ? (bridge as DesktopBridge) : null;
+}
+
+function isElectronRuntime(): boolean {
+  if (getDesktopBridge()) return true;
+  const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
+  return /electron/i.test(ua);
+}
+
+function toBase64(doc: jsPDF): string {
+  // jsPDF datauristring -> strip the "data:application/pdf;...;base64," prefix
+  const dataUri = doc.output('datauristring');
+  return dataUri.substring(dataUri.indexOf(',') + 1);
+}
+
+/** Browser download via an object URL (works on web and inside Electron). */
+function downloadViaBlob(doc: jsPDF, fileName: string): boolean {
+  try {
+    const blob = doc.output('blob');
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    link.rel = 'noopener';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    return true;
+  } catch (err) {
+    console.error('Blob download failed', err);
+    return false;
+  }
+}
+
+/** Last-resort: open the PDF in a new window/tab so the user can save or print it. */
+function openInNewWindow(doc: jsPDF): boolean {
+  try {
+    const blob = doc.output('blob');
+    const url = URL.createObjectURL(blob);
+    const win = window.open(url, '_blank');
+    if (!win) {
+      URL.revokeObjectURL(url);
+      return false;
+    }
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    return true;
+  } catch (err) {
+    console.error('Opening PDF in a new window failed', err);
+    return false;
+  }
+}
+
 /**
- * Save a jsPDF document, handling both Web and native (Capacitor) runtimes.
- * - Web: triggers a normal browser download (doc.save).
- * - Native (Android/iOS): writes the PDF as Base64 to Directory.Documents and
- *   opens it with the system viewer so the user can view/print/save it.
+ * Save a jsPDF document on every supported runtime:
+ * - Web browser: object-URL download (fallback: new tab).
+ * - Mobile (Capacitor Android/iOS): writes to Documents and opens the system viewer.
+ * - Desktop (Electron .exe): native "Save as" dialog through the preload bridge,
+ *   with a blob download / new-window fallback when the bridge is unavailable.
+ * The function never throws: it always ends on a working fallback.
  */
 export async function savePdfDoc(doc: jsPDF, fileName: string): Promise<void> {
-  if (!Capacitor.isNativePlatform()) {
+  // ── 1. Mobile native (Capacitor) ──
+  if (Capacitor.isNativePlatform()) {
+    try {
+      const base64Data = toBase64(doc);
+      const [{ Filesystem, Directory }, { FileOpener }] = await Promise.all([
+        import('@capacitor/filesystem'),
+        import('@capacitor-community/file-opener'),
+      ]);
+
+      await Filesystem.writeFile({
+        path: fileName,
+        data: base64Data,
+        directory: Directory.Documents,
+        recursive: true,
+      });
+
+      const { uri } = await Filesystem.getUri({
+        directory: Directory.Documents,
+        path: fileName,
+      });
+
+      await FileOpener.open({ filePath: uri, contentType: 'application/pdf' });
+      return;
+    } catch (err) {
+      console.error('Native PDF save failed, falling back', err);
+      if (downloadViaBlob(doc, fileName)) return;
+      if (openInNewWindow(doc)) return;
+      doc.save(fileName);
+      return;
+    }
+  }
+
+  // ── 2. Desktop (Electron) ──
+  if (isElectronRuntime()) {
+    const bridge = getDesktopBridge();
+    if (bridge) {
+      try {
+        const result = await bridge.savePdf(fileName, toBase64(doc));
+        if (result?.ok) return;
+        if (result?.error) console.error('Desktop PDF save error:', result.error);
+      } catch (err) {
+        console.error('Desktop bridge save failed, falling back', err);
+      }
+    }
+    if (downloadViaBlob(doc, fileName)) return;
+    if (openInNewWindow(doc)) return;
     doc.save(fileName);
     return;
   }
 
-  try {
-    // jsPDF datauristring -> strip the "data:application/pdf;...;base64," prefix
-    const dataUri = doc.output('datauristring');
-    const base64Data = dataUri.substring(dataUri.indexOf(',') + 1);
-
-    const [{ Filesystem, Directory }, { FileOpener }] = await Promise.all([
-      import('@capacitor/filesystem'),
-      import('@capacitor-community/file-opener'),
-    ]);
-
-    await Filesystem.writeFile({
-      path: fileName,
-      data: base64Data,
-      directory: Directory.Documents,
-      recursive: true,
-    });
-
-    const { uri } = await Filesystem.getUri({
-      directory: Directory.Documents,
-      path: fileName,
-    });
-
-    await FileOpener.open({
-      filePath: uri,
-      contentType: 'application/pdf',
-    });
-  } catch (err) {
-    // Fallback to a regular download if native handling fails
-    console.error('Native PDF save failed, falling back to download', err);
-    doc.save(fileName);
-  }
+  // ── 3. Web browser ──
+  if (downloadViaBlob(doc, fileName)) return;
+  if (openInNewWindow(doc)) return;
+  doc.save(fileName);
 }
 
 // ── DPCI brand palette (HSL 152 72% 30%) ──
