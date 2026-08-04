@@ -205,26 +205,32 @@ export function UserAccessExport({ siteFilter, siteName }: Props) {
                   </TableCell>
                   <TableCell className="font-mono text-sm text-primary">{r.identifier}</TableCell>
                   <TableCell>
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono text-sm">
-                        {revealed[r.user_id] ? r.password : '••••••••'}
+                    {r.password ? (
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-sm">
+                          {revealed[r.user_id] ? r.password : '••••••••'}
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          onClick={() =>
+                            setRevealed((prev) => ({ ...prev, [r.user_id]: !prev[r.user_id] }))
+                          }
+                          aria-label="Afficher le mot de passe"
+                        >
+                          {revealed[r.user_id] ? (
+                            <EyeOff className="w-3.5 h-3.5" />
+                          ) : (
+                            <Eye className="w-3.5 h-3.5" />
+                          )}
+                        </Button>
+                      </div>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">
+                        Non archivé — réinitialisez le mot de passe pour l'archiver
                       </span>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7"
-                        onClick={() =>
-                          setRevealed((prev) => ({ ...prev, [r.user_id]: !prev[r.user_id] }))
-                        }
-                        aria-label="Afficher le mot de passe"
-                      >
-                        {revealed[r.user_id] ? (
-                          <EyeOff className="w-3.5 h-3.5" />
-                        ) : (
-                          <Eye className="w-3.5 h-3.5" />
-                        )}
-                      </Button>
-                    </div>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}
