@@ -3,6 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "main": "electron/main.cjs",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -10,7 +11,9 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "desktop": "npm run build && electron .",
+    "desktop:package": "npm run build && electron-packager . \"DPCI Delivery\" --platform=win32 --arch=x64 --out=electron-release --overwrite --ignore=\"node_modules\" --ignore=\"^/src\" --ignore=\"^/public\" --ignore=\"^/android\" --ignore=\"^/electron-release\""
   },
   "dependencies": {
     "@capacitor-community/file-opener": "^8.0.1",
