@@ -119,7 +119,7 @@ export function UserAccessExport({ siteFilter, siteName }: Props) {
           roleLabel(r.role),
           r.site_name || '—',
           r.identifier,
-          r.password,
+          r.password || 'Non archivé',
         ]),
       );
 
