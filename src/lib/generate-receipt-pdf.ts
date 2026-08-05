@@ -1,6 +1,6 @@
 import jsPDF from 'jspdf';
 import { PDF_LOGO_DATA_URL as dpciLogo, loadPdfImage } from '@/lib/pdf-assets';
-import { savePdfDoc } from '@/lib/pdf-kit';
+import { savePdfDoc, savePdfBlob, openPdfBlob } from '@/lib/pdf-kit';
 import { supabase } from '@/integrations/supabase/client';
 
 const RECEIPTS_BUCKET = 'delivery-receipts';
