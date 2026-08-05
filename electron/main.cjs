@@ -44,8 +44,29 @@ function startStaticServer() {
           res.writeHead(403).end('Forbidden');
           return;
         }
-        // SPA fallback: any unknown route serves index.html
-        if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
+        const hasExtension = path.extname(urlPath) !== '';
+        const exists = fs.existsSync(filePath) && !fs.statSync(filePath).isDirectory();
+
+        if (!exists && hasExtension) {
+          // Vite is built with base './' so assets requested from a nested route
+          // arrive as /admin/assets/xxx.js -> re-resolve them under dist/assets.
+          const assetIdx = urlPath.lastIndexOf('/assets/');
+          const retry =
+            assetIdx !== -1
+              ? path.join(DIST_DIR, urlPath.slice(assetIdx))
+              : path.join(DIST_DIR, path.basename(urlPath));
+
+          if (retry.startsWith(DIST_DIR) && fs.existsSync(retry)) {
+            filePath = retry;
+          } else {
+            // Never serve index.html for a missing file: that hides real 404s
+            // and breaks scripts/images (ERR_FILE_NOT_FOUND look-alikes).
+            res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+            res.end('Not found');
+            return;
+          }
+        } else if (!exists) {
+          // SPA fallback: unknown *routes* (no extension) serve index.html
           filePath = path.join(DIST_DIR, 'index.html');
         }
 
@@ -94,6 +115,20 @@ async function createWindow() {
 }
 
 /** Native "Save as" dialog + write the PDF, then open it with the default viewer. */
+/** Write the PDF to a temp file and open it with the system default viewer. */
+ipcMain.handle('dpci:open-pdf', async (_event, fileName, base64) => {
+  try {
+    const safeName = String(fileName || 'document.pdf').replace(/[^\w.\-]+/g, '_');
+    const filePath = path.join(app.getPath('temp'), safeName);
+    fs.writeFileSync(filePath, Buffer.from(base64, 'base64'));
+    const error = await shell.openPath(filePath);
+    if (error) return { ok: false, error };
+    return { ok: true, path: filePath };
+  } catch (error) {
+    return { ok: false, error: String(error) };
+  }
+});
+
 ipcMain.handle('dpci:save-pdf', async (_event, fileName, base64) => {
   try {
     const win = BrowserWindow.getFocusedWindow() || BrowserWindow.getAllWindows()[0];
