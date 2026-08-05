@@ -37,11 +37,15 @@ export function pdfBytes(doc: jsPDF): Uint8Array {
   return new Uint8Array(doc.output('arraybuffer') as ArrayBuffer);
 }
 
+/** Blob PDF construit à partir des octets bruts (aucun fetch). */
+function toPdfBlob(bytes: Uint8Array): Blob {
+  return new Blob([bytes as unknown as BlobPart], { type: 'application/pdf' });
+}
+
 /** Téléchargement navigateur via object URL (web, et repli Electron/WebView). */
 function downloadViaBlob(bytes: Uint8Array, fileName: string): boolean {
   try {
-    const blob = new Blob([bytes], { type: 'application/pdf' });
-    const url = URL.createObjectURL(blob);
+    const url = URL.createObjectURL(toPdfBlob(bytes));
     const link = document.createElement('a');
     link.href = url;
     link.download = fileName;
@@ -60,8 +64,7 @@ function downloadViaBlob(bytes: Uint8Array, fileName: string): boolean {
 /** Dernier repli : ouvrir le PDF dans un onglet/fenêtre pour l'enregistrer ou l'imprimer. */
 function openInNewWindow(bytes: Uint8Array): boolean {
   try {
-    const blob = new Blob([bytes], { type: 'application/pdf' });
-    const url = URL.createObjectURL(blob);
+    const url = URL.createObjectURL(toPdfBlob(bytes));
     const win = window.open(url, '_blank');
     if (!win) {
       URL.revokeObjectURL(url);
