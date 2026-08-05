@@ -496,37 +496,55 @@ export async function generatePhotoPDF(photoBase64: string, _reference: string, 
   return doc.output('datauristring');
 }
 
+/** Extrait le chemin de stockage à partir d'une valeur stockée (chemin ou ancienne URL publique). */
+function storagePathOf(stored: string): string {
+  const marker = `${RECEIPTS_BUCKET}/`;
+  const idx = stored.indexOf(marker);
+  const path = idx !== -1 ? stored.slice(idx + marker.length) : stored;
+  return path.split('?')[0];
+}
+
 /**
- * Download a PDF from a Supabase Storage URL in a cross-browser compatible way.
- * Uses fetch → blob → object URL → dynamic <a> click.
- * Works in Edge, Chrome, Android WebView and Capacitor.
+ * Récupère les octets d'un bon archivé dans Supabase Storage.
+ * On utilise `storage.download()` (client Supabase) au lieu d'un `fetch` manuel :
+ * les en-têtes d'authentification sont gérés, et il n'y a plus d'appel à une URL
+ * signée depuis le renderer Electron (source des erreurs « Failed to fetch »).
+ */
+async function fetchReceiptBlob(stored: string): Promise<Blob> {
+  const path = storagePathOf(stored);
+  const { data, error } = await supabase.storage.from(RECEIPTS_BUCKET).download(path);
+  if (error || !data) {
+    throw new Error(error?.message || 'Bon de livraison introuvable dans le stockage');
+  }
+  return data;
+}
+
+/**
+ * Télécharge un bon archivé : Web → téléchargement navigateur, Capacitor → Documents
+ * + ouverture, Electron → dialogue natif. Passe par la couche unique de pdf-kit.
  */
 export async function downloadPdfFromUrl(pdfUrl: string, filename: string): Promise<void> {
-  let resolvedUrl = pdfUrl;
   try {
-    resolvedUrl = await resolveReceiptSignedUrl(pdfUrl);
+    const blob = await fetchReceiptBlob(pdfUrl);
+    await savePdfBlob(blob, filename);
   } catch (err) {
-    console.error('[downloadPdfFromUrl] Could not sign URL, using stored value:', err);
-  }
-  try {
-    const response = await fetch(resolvedUrl);
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const blob = await response.blob();
-    const objectUrl = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = objectUrl;
-    link.download = filename;
-    link.style.display = 'none';
-    document.body.appendChild(link);
-    link.click();
-    // Cleanup after a short delay
-    setTimeout(() => {
-      document.body.removeChild(link);
-      URL.revokeObjectURL(objectUrl);
-    }, 250);
-  } catch (err) {
-    console.error('[downloadPdfFromUrl] Failed:', err);
-    // Fallback: open in new tab
-    window.open(resolvedUrl, '_blank');
+    console.error('[downloadPdfFromUrl] Échec :', err);
+    throw new Error(
+      `Téléchargement du bon impossible : ${String((err as Error)?.message || err)}`,
+    );
   }
 }
+
+/** Consultation / prévisualisation d'un bon archivé (même couche unique). */
+export async function viewPdfFromUrl(pdfUrl: string, filename: string): Promise<void> {
+  try {
+    const blob = await fetchReceiptBlob(pdfUrl);
+    await openPdfBlob(blob, filename);
+  } catch (err) {
+    console.error('[viewPdfFromUrl] Échec :', err);
+    throw new Error(
+      `Consultation du bon impossible : ${String((err as Error)?.message || err)}`,
+    );
+  }
+}
+
