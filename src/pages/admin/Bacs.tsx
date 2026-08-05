@@ -124,7 +124,7 @@ export default function BacsPage() {
     table(ctx, columns, rows);
 
     infoBox(ctx, `Total : ${total} bac(s) à récupérer dans ${toRecover.length} pharmacie(s).`, 'info');
-    finalizePdf(ctx, `bacs-a-recuperer-${new Date().toISOString().slice(0, 10)}.pdf`);
+    await finalizePdf(ctx, `bacs-a-recuperer-${new Date().toISOString().slice(0, 10)}.pdf`);
   };
 
   return (

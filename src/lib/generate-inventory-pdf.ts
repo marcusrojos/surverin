@@ -1,5 +1,5 @@
 import jsPDF from 'jspdf';
-import dpciLogo from '@/assets/dpci-logo.png';
+import { PDF_LOGO_DATA_URL as dpciLogo, loadPdfImage } from '@/lib/pdf-assets';
 import { savePdfDoc } from '@/lib/pdf-kit';
 
 interface InventoryScan {
@@ -37,15 +37,7 @@ const TEXT_DARK = { r: 30, g: 30, b: 30 };
 const TEXT_MUTED = { r: 120, g: 120, b: 120 };
 const BORDER_LIGHT = { r: 200, g: 220, b: 210 };
 
-function loadImage(src: string): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => resolve(img);
-    img.onerror = reject;
-    img.src = src;
-  });
-}
+const loadImage = loadPdfImage;
 
 function formatDateFR(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString('fr-FR', {
