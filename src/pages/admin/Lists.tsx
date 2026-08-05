@@ -192,7 +192,7 @@ export default function AdminLists() {
       columns,
       displayDrivers.map((d) => [d.full_name || '—', d.email || '—', d.username || '—'])
     );
-    finalizePdf(ctx, 'liste-chauffeurs.pdf');
+    await finalizePdf(ctx, 'liste-chauffeurs.pdf');
     toast.success('PDF chauffeurs téléchargé');
   }
 
@@ -219,7 +219,7 @@ export default function AdminLists() {
         p.phone || '—',
       ])
     );
-    finalizePdf(ctx, 'liste-pharmacies.pdf');
+    await finalizePdf(ctx, 'liste-pharmacies.pdf');
     toast.success('PDF pharmacies téléchargé');
   }
 
@@ -282,7 +282,7 @@ export default function AdminLists() {
     const fileName = isSingle
       ? `livraisons-${data[0].driver_name.replace(/\s+/g, '-').toLowerCase()}.pdf`
       : 'livraisons-par-chauffeur.pdf';
-    finalizePdf(ctx, fileName);
+    await finalizePdf(ctx, fileName);
     toast.success('PDF livraisons téléchargé');
   }
 

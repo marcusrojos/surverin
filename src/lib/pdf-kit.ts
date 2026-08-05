@@ -1,5 +1,6 @@
 import jsPDF from 'jspdf';
 import { Capacitor } from '@capacitor/core';
+import { toast } from 'sonner';
 import { PDF_LOGO_DATA_URL, loadPdfImage } from '@/lib/pdf-assets';
 
 const dpciLogo = PDF_LOGO_DATA_URL;
@@ -139,7 +140,10 @@ export async function savePdfData(bytes: Uint8Array, fileName: string): Promise<
   if (openInNewWindow(bytes)) return;
 
   const detail = errors.length ? ` (${errors.join(' | ')})` : '';
-  throw new Error(`Impossible d'enregistrer le PDF « ${fileName} »${detail}`);
+  const message = `Impossible d'enregistrer le PDF « ${fileName} »`;
+  console.error(`[PDF] ${message}${detail}`);
+  toast.error(`${message}. Vérifiez l'espace disque et les autorisations.`);
+  throw new Error(`${message}${detail}`);
 }
 
 /** Enregistre un document jsPDF (point d'entrée historique, conservé). */
@@ -184,7 +188,10 @@ export async function openPdfData(bytes: Uint8Array, fileName: string): Promise<
 
   if (openInNewWindow(bytes)) return;
   if (downloadViaBlob(bytes, fileName)) return;
-  throw new Error(`Impossible d'ouvrir le PDF « ${fileName} »`);
+  const message = `Impossible d'ouvrir le PDF « ${fileName} »`;
+  console.error(`[PDF] ${message}`);
+  toast.error(message);
+  throw new Error(message);
 }
 
 /** Ouvre un PDF déjà disponible sous forme de Blob. */

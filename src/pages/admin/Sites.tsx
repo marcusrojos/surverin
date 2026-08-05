@@ -249,7 +249,7 @@ export default function SitesPage() {
       }
 
       const safeName = site.name.replace(/[^a-z0-9]+/gi, '-').toLowerCase();
-      finalizePdf(ctx, `rapport-site-${safeName}-${new Date().toISOString().slice(0, 10)}.pdf`);
+      await finalizePdf(ctx, `rapport-site-${safeName}-${new Date().toISOString().slice(0, 10)}.pdf`);
     } catch (e: any) {
       toast.error('Erreur lors de la génération du rapport');
     } finally {
