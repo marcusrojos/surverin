@@ -1,16 +1,16 @@
 /**
  * Assets embarqués dans les PDF.
  *
- * Le logo est importé avec le suffixe Vite `?inline`, ce qui le transforme en
- * data URI (`data:image/png;base64,...`) directement dans le bundle JavaScript.
- * Conséquence : aucune requête réseau, aucun chemin `/assets/...`, donc aucun
- * `ERR_FILE_NOT_FOUND` ni `Failed to fetch` dans Electron (file:// ou serveur
- * local) ni dans la WebView Capacitor.
+ * Le logo est un data URI défini dans le code source (voir
+ * `src/assets/dpci-logo-base64.ts`) : aucune requête réseau, aucun chemin
+ * `/assets/...`, donc aucun `ERR_FILE_NOT_FOUND` ni `Failed to fetch` dans
+ * Electron (file:// ou serveur local) ni dans la WebView Capacitor.
  */
-import logoDataUrl from '@/assets/dpci-logo.png?inline';
+import { DPCI_LOGO_PNG_BASE64 } from '@/assets/dpci-logo-base64';
 
 /** Logo DPCI sous forme de data URI, disponible hors ligne sur toutes les plateformes. */
-export const PDF_LOGO_DATA_URL: string = logoDataUrl as unknown as string;
+export const PDF_LOGO_DATA_URL: string = DPCI_LOGO_PNG_BASE64;
+
 
 /**
  * Charge une image (data URI, base64 ou URL) pour `doc.addImage()`.
