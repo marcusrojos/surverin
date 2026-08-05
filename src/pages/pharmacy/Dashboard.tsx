@@ -35,6 +35,7 @@ export default function PharmacyDashboard() {
 
   const handleReceipt = async (d: Delivery & { pharmacy?: Pharmacy }) => {
     if (!d.pharmacy) return;
+    try {
     // If delivery has a photo-based PDF (offline), download it directly
     if ((d as any).receipt_pdf_url) {
       await downloadPdfFromUrl(
@@ -67,6 +68,10 @@ export default function PharmacyDashboard() {
       geofenceRadius: GEOFENCE_RADIUS,
       isOffline: !d.driver_latitude && !d.driver_longitude,
     });
+    } catch (err) {
+      console.error('[PharmacyDashboard] Bon de livraison :', err);
+      toast.error((err as Error)?.message || 'Génération du bon de livraison impossible');
+    }
   };
 
   const pending = deliveries.filter(d => d.status === 'en_attente');
