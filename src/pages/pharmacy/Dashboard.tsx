@@ -9,6 +9,7 @@ import { generateReceiptPDF, downloadPdfFromUrl } from '@/lib/generate-receipt-p
 import { GEOFENCE_RADIUS } from '@/lib/geolocation';
 import { Package, CheckCircle, FileText, Loader2, KeyRound, Barcode, Clock } from 'lucide-react';
 import { Database } from '@/integrations/supabase/types';
+import { toast } from 'sonner';
 
 type Delivery = Database['public']['Tables']['deliveries']['Row'];
 type Pharmacy = Database['public']['Tables']['pharmacies']['Row'];
