@@ -197,10 +197,16 @@ export default function SitesPage() {
           ctx,
           [
             { header: 'Nom', width: 60 },
-            { header: 'Email', width: 75 },
-            { header: 'Téléphone', width: 45 },
+            { header: "Identifiant", width: 55 },
+            { header: 'Email', width: 40 },
+            { header: 'Statut', width: 25, align: 'center' },
           ],
-          admins.map((a: any) => [a.full_name || a.username || '—', a.email || '—', a.phone || '—'])
+          admins.map((a: any) => [
+            a.full_name || '—',
+            a.username || '—',
+            a.email || '—',
+            a.is_active ? 'Actif' : 'Inactif',
+          ])
         );
       }
 
@@ -211,15 +217,15 @@ export default function SitesPage() {
         table(
           ctx,
           [
-            { header: 'Nom', width: 55 },
-            { header: 'Email', width: 70 },
-            { header: 'Téléphone', width: 35 },
+            { header: 'Nom', width: 60 },
+            { header: "Identifiant", width: 55 },
+            { header: 'Email', width: 40 },
             { header: 'Statut', width: 25, align: 'center' },
           ],
           livreurs.map((l: any) => [
-            l.full_name || l.username || '—',
+            l.full_name || '—',
+            l.username || '—',
             l.email || '—',
-            l.phone || '—',
             l.is_active ? 'Actif' : 'Inactif',
           ])
         );
