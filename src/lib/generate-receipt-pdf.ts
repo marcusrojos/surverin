@@ -93,7 +93,8 @@ function calculateDistance(
 
 function formatDateFR(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString('fr-FR', {
-    day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit'
+    day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit',
+    timeZone: 'Africa/Abidjan',
   });
 }
 

@@ -213,9 +213,12 @@ type RGB = { r: number; g: number; b: number };
 const loadImage = loadPdfImage;
 
 
+export const APP_TIME_ZONE = 'Africa/Abidjan';
+
 export function formatDateFR(dateStr: string | Date): string {
   return new Date(dateStr).toLocaleDateString('fr-FR', {
     day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit',
+    timeZone: APP_TIME_ZONE,
   });
 }
 
