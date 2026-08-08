@@ -151,11 +151,17 @@ export default function SitesPage() {
   const generateReport = async (site: SiteRow) => {
     setReportingId(site.id);
     try {
-      const [{ data: profiles }, { data: roles }, { data: pharmacies }] = await Promise.all([
-        supabase.from('profiles').select('user_id, full_name, email, username, phone, is_active, site_id').eq('site_id', site.id),
+      const [profRes, rolesRes, pharmaRes] = await Promise.all([
+        supabase.from('profiles').select('user_id, full_name, email, username, is_active, site_id').eq('site_id', site.id),
         supabase.from('user_roles').select('user_id, role'),
         supabase.from('pharmacies').select('id, name, address, phone, client_code, user_id, site_id').eq('site_id', site.id),
       ]);
+      if (profRes.error) throw profRes.error;
+      if (rolesRes.error) throw rolesRes.error;
+      if (pharmaRes.error) throw pharmaRes.error;
+      const profiles = profRes.data;
+      const roles = rolesRes.data;
+      const pharmacies = pharmaRes.data;
 
       const roleMap = new Map<string, string[]>();
       (roles || []).forEach((r: any) => {
@@ -169,7 +175,8 @@ export default function SitesPage() {
       const livreurs = (profiles || []).filter((p: any) => (roleMap.get(p.user_id) || []).includes('livreur'));
       const pharmaList = (pharmacies || []).map((ph: any) => {
         const prof = ph.user_id ? profByUser.get(ph.user_id) : null;
-        return { ...ph, active: prof ? prof.is_active : false };
+        // Une pharmacie sans compte utilisateur reste considérée comme active (aucun compte à désactiver)
+        return { ...ph, active: ph.user_id ? (prof?.is_active ?? true) : true };
       });
       const pharmaActives = pharmaList.filter((p: any) => p.active);
       const pharmaInactives = pharmaList.filter((p: any) => !p.active);
