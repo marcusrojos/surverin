@@ -101,19 +101,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     
     // Check if account and site are active
     if (signInData?.user) {
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('is_active, sites:site_id(is_active)')
-        .eq('user_id', signInData.user.id)
-        .maybeSingle();
+      const [{ data: profile }, { data: roleRow }] = await Promise.all([
+        supabase
+          .from('profiles')
+          .select('is_active, sites:site_id(is_active)')
+          .eq('user_id', signInData.user.id)
+          .maybeSingle(),
+        supabase
+          .from('user_roles')
+          .select('role')
+          .eq('user_id', signInData.user.id)
+          .maybeSingle(),
+      ]);
 
       if (profile && (profile as any).is_active === false) {
         await supabase.auth.signOut();
         return { error: new Error('Votre compte a été désactivé. Contactez un administrateur.') };
       }
 
+      // Les super admins gèrent tous les sites : la désactivation d'un site ne les bloque jamais
+      const isSuperAdmin = (roleRow as any)?.role === 'super_admin';
       const site = (profile as any)?.sites;
-      if (site && site.is_active === false) {
+      if (!isSuperAdmin && site && site.is_active === false) {
         await supabase.auth.signOut();
         return { error: new Error('Votre site a été désactivé. Contactez un administrateur.') };
       }
