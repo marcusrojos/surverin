@@ -280,18 +280,32 @@ export default function SitesPage() {
     }
   };
 
+  const [isDeleting, setIsDeleting] = useState(false);
+
   const handleDelete = async () => {
     if (!selected) return;
+    setIsDeleting(true);
     try {
-      const { error } = await supabase.from('sites').delete().eq('id', selected.id);
+      const { data, error } = await supabase.functions.invoke('delete-site', {
+        body: { siteId: selected.id },
+      });
       if (error) throw error;
-      toast.success('Site supprimé');
+      if ((data as any)?.error) throw new Error((data as any).error);
+      const d = (data as any)?.deleted;
+      toast.success(
+        d
+          ? `Site supprimé — ${d.users} compte(s), ${d.pharmacies} pharmacie(s), ${d.parcours} parcours supprimés`
+          : 'Site supprimé'
+      );
       setIsDeleteOpen(false);
       fetchSites();
     } catch (e: any) {
       toast.error(e.message || 'Erreur lors de la suppression');
+    } finally {
+      setIsDeleting(false);
     }
   };
+
 
   const totals = sites.reduce(
     (acc, s) => ({
