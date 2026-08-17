@@ -14,3 +14,7 @@ verify_jwt = false
 
 [functions.user-access-export]
 verify_jwt = false
+
+[functions.delete-site]
+verify_jwt = false
+
