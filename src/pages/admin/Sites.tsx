@@ -280,18 +280,32 @@ export default function SitesPage() {
     }
   };
 
+  const [isDeleting, setIsDeleting] = useState(false);
+
   const handleDelete = async () => {
     if (!selected) return;
+    setIsDeleting(true);
     try {
-      const { error } = await supabase.from('sites').delete().eq('id', selected.id);
+      const { data, error } = await supabase.functions.invoke('delete-site', {
+        body: { siteId: selected.id },
+      });
       if (error) throw error;
-      toast.success('Site supprimé');
+      if ((data as any)?.error) throw new Error((data as any).error);
+      const d = (data as any)?.deleted;
+      toast.success(
+        d
+          ? `Site supprimé — ${d.users} compte(s), ${d.pharmacies} pharmacie(s), ${d.parcours} parcours supprimés`
+          : 'Site supprimé'
+      );
       setIsDeleteOpen(false);
       fetchSites();
     } catch (e: any) {
       toast.error(e.message || 'Erreur lors de la suppression');
+    } finally {
+      setIsDeleting(false);
     }
   };
+
 
   const totals = sites.reduce(
     (acc, s) => ({
@@ -425,15 +439,23 @@ export default function SitesPage() {
             <AlertDialogHeader>
               <AlertDialogTitle>Supprimer ce site ?</AlertDialogTitle>
               <AlertDialogDescription>
-                Le site « {selected?.name} » sera supprimé. Les données associées (pharmacies, parcours, etc.) ne seront plus rattachées à aucun site.
+                Le site « {selected?.name} » et TOUTES ses données seront définitivement supprimés :
+                comptes utilisateurs (admins, livreurs, pharmacies), pharmacies, axes, parcours et livraisons.
+                Les personnes rattachées à ce site ne pourront plus se connecter. Cette action est irréversible.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>Annuler</AlertDialogCancel>
-              <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-                Supprimer
+              <AlertDialogAction
+                onClick={(e) => { e.preventDefault(); handleDelete(); }}
+                disabled={isDeleting}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                {isDeleting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                Supprimer définitivement
               </AlertDialogAction>
             </AlertDialogFooter>
+
           </AlertDialogContent>
         </AlertDialog>
       </div>

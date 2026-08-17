@@ -104,7 +104,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const [{ data: profile }, { data: roleRow }] = await Promise.all([
         supabase
           .from('profiles')
-          .select('is_active, sites:site_id(is_active)')
+          .select('is_active, site_id, sites:site_id(is_active)')
           .eq('user_id', signInData.user.id)
           .maybeSingle(),
         supabase
@@ -119,13 +119,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { error: new Error('Votre compte a été désactivé. Contactez un administrateur.') };
       }
 
-      // Les super admins gèrent tous les sites : la désactivation d'un site ne les bloque jamais
+      // Les super admins gèrent tous les sites : ni la désactivation ni la suppression d'un site ne les bloque
       const isSuperAdmin = (roleRow as any)?.role === 'super_admin';
       const site = (profile as any)?.sites;
-      if (!isSuperAdmin && site && site.is_active === false) {
-        await supabase.auth.signOut();
-        return { error: new Error('Votre site a été désactivé. Contactez un administrateur.') };
+      if (!isSuperAdmin) {
+        // Site supprimé (site_id devenu nul) => aucun accès à la plateforme
+        if (!profile || !(profile as any).site_id || !site) {
+          await supabase.auth.signOut();
+          return { error: new Error("Votre site n'existe plus. Contactez un administrateur.") };
+        }
+        if (site.is_active === false) {
+          await supabase.auth.signOut();
+          return { error: new Error('Votre site a été désactivé. Contactez un administrateur.') };
+        }
       }
+
     }
     
     return { error: null };
