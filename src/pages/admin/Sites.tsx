@@ -439,15 +439,23 @@ export default function SitesPage() {
             <AlertDialogHeader>
               <AlertDialogTitle>Supprimer ce site ?</AlertDialogTitle>
               <AlertDialogDescription>
-                Le site « {selected?.name} » sera supprimé. Les données associées (pharmacies, parcours, etc.) ne seront plus rattachées à aucun site.
+                Le site « {selected?.name} » et TOUTES ses données seront définitivement supprimés :
+                comptes utilisateurs (admins, livreurs, pharmacies), pharmacies, axes, parcours et livraisons.
+                Les personnes rattachées à ce site ne pourront plus se connecter. Cette action est irréversible.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>Annuler</AlertDialogCancel>
-              <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-                Supprimer
+              <AlertDialogAction
+                onClick={(e) => { e.preventDefault(); handleDelete(); }}
+                disabled={isDeleting}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                {isDeleting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                Supprimer définitivement
               </AlertDialogAction>
             </AlertDialogFooter>
+
           </AlertDialogContent>
         </AlertDialog>
       </div>
