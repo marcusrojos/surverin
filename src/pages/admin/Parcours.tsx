@@ -63,7 +63,9 @@ interface ParcoursColis {
   type: string;
   parcours_pharmacy_id: string;
   pharmacy_name: string;
+  pharmacy_id: string;
 }
+
 
 interface AxisPharmacyOption {
   pharmacy_id: string;
