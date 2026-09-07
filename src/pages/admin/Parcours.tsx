@@ -186,11 +186,14 @@ export default function AdminParcours() {
       }));
 
       const pharmNameMap = new Map(pharmacies.map(pp => [pp.id, pp.pharmacy_name]));
+      const pharmIdByPPId = new Map(pharmacies.map(pp => [pp.id, pp.pharmacy_id]));
 
       const colis: ParcoursColis[] = (colisRes.data || []).map((c: any) => ({
         ...c,
         pharmacy_name: pharmNameMap.get(c.parcours_pharmacy_id) || 'Inconnu',
+        pharmacy_id: pharmIdByPPId.get(c.parcours_pharmacy_id) || '',
       }));
+
 
       setDetailPharmacies(pharmacies);
       setDetailColis(colis);
