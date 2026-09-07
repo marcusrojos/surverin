@@ -63,7 +63,9 @@ interface ParcoursColis {
   type: string;
   parcours_pharmacy_id: string;
   pharmacy_name: string;
+  pharmacy_id: string;
 }
+
 
 interface AxisPharmacyOption {
   pharmacy_id: string;
@@ -98,14 +100,19 @@ export default function AdminParcours() {
   const [editName, setEditName] = useState('');
   const [editSaving, setEditSaving] = useState(false);
   const [editLoading, setEditLoading] = useState(false);
-  // Pharmacies editing
+  // Pharmacies editing (all pharmacies of the site are selectable, axis ones first)
   const [editAxisPharmacies, setEditAxisPharmacies] = useState<AxisPharmacyOption[]>([]);
   const [editSelectedPharmacyIds, setEditSelectedPharmacyIds] = useState<Set<string>>(new Set());
   const [editCurrentPharmacyIds, setEditCurrentPharmacyIds] = useState<Set<string>>(new Set());
+  const [editPharmacySearch, setEditPharmacySearch] = useState('');
+  // Driver editing
+  const [editDrivers, setEditDrivers] = useState<{ user_id: string; full_name: string }[]>([]);
+  const [editDriverId, setEditDriverId] = useState('');
   // Colis editing
   const [editColisList, setEditColisList] = useState<ParcoursColis[]>([]);
   // Parcours pharmacies map (pharmacy_id -> parcours_pharmacy_id)
   const [editPharmIdMap, setEditPharmIdMap] = useState<Map<string, string>>(new Map());
+
 
   // Force confirm
   const [forceDialog, setForceDialog] = useState<ParcoursRow | null>(null);
@@ -184,11 +191,14 @@ export default function AdminParcours() {
       }));
 
       const pharmNameMap = new Map(pharmacies.map(pp => [pp.id, pp.pharmacy_name]));
+      const pharmIdByPPId = new Map(pharmacies.map(pp => [pp.id, pp.pharmacy_id]));
 
       const colis: ParcoursColis[] = (colisRes.data || []).map((c: any) => ({
         ...c,
         pharmacy_name: pharmNameMap.get(c.parcours_pharmacy_id) || 'Inconnu',
+        pharmacy_id: pharmIdByPPId.get(c.parcours_pharmacy_id) || '',
       }));
+
 
       setDetailPharmacies(pharmacies);
       setDetailColis(colis);
@@ -212,13 +222,20 @@ export default function AdminParcours() {
   const openEditDialog = async (p: ParcoursRow) => {
     setEditParcours(p);
     setEditName(p.name);
+    setEditDriverId(p.driver_id);
+    setEditPharmacySearch('');
     setEditLoading(true);
     try {
-      // Fetch current parcours pharmacies
-      const [ppRes, colisRes, axisPharmRes] = await Promise.all([
+      // Fetch current parcours pharmacies, colis, axis pharmacies, all pharmacies of the site and drivers
+      let allPharmQuery = supabase.from('pharmacies').select('id, name, client_code, site_id').order('name');
+      if (p.site_id) allPharmQuery = allPharmQuery.eq('site_id', p.site_id);
+
+      const [ppRes, colisRes, axisPharmRes, allPharmRes, rolesRes] = await Promise.all([
         supabase.from('parcours_pharmacies').select('id, pharmacy_id, position, pharmacy:pharmacies(name)').eq('parcours_id', p.id).order('position'),
         supabase.from('parcours_colis').select('id, barcode, type, parcours_pharmacy_id').eq('parcours_id', p.id),
         supabase.from('axis_pharmacies').select('pharmacy_id, position, pharmacy:pharmacies(name)').eq('axis_id', p.axis_id).order('position'),
+        allPharmQuery,
+        supabase.from('user_roles').select('user_id').eq('role', 'livreur'),
       ]);
 
       // Current parcours pharmacies
@@ -228,32 +245,60 @@ export default function AdminParcours() {
         position: pp.position,
         pharmacy_name: Array.isArray(pp.pharmacy) ? pp.pharmacy[0]?.name : pp.pharmacy?.name || 'Inconnu',
       }));
-      const currentIds = new Set(currentPP.map((pp: any) => pp.pharmacy_id));
+      const currentIds = new Set<string>(currentPP.map((pp: any) => pp.pharmacy_id));
       setEditCurrentPharmacyIds(currentIds);
       setEditSelectedPharmacyIds(new Set(currentIds));
 
       // Map pharmacy_id -> parcours_pharmacy_id
-      const idMap = new Map(currentPP.map((pp: any) => [pp.pharmacy_id, pp.id]));
+      const idMap = new Map<string, string>(currentPP.map((pp: any) => [pp.pharmacy_id, pp.id]));
       setEditPharmIdMap(idMap);
 
-      // All axis pharmacies
+      // Selectable pharmacies: axis pharmacies first (in axis order), then the other pharmacies of the site
       const axisPharms: AxisPharmacyOption[] = (axisPharmRes.data || []).map((ap: any) => ({
         pharmacy_id: ap.pharmacy_id,
         pharmacy_name: Array.isArray(ap.pharmacy) ? ap.pharmacy[0]?.name : ap.pharmacy?.name || 'Inconnu',
         position: ap.position,
       }));
-      setEditAxisPharmacies(axisPharms);
+      const known = new Set(axisPharms.map(ap => ap.pharmacy_id));
+      const extraPharms: AxisPharmacyOption[] = (allPharmRes.data || [])
+        .filter((ph: any) => !known.has(ph.id))
+        .map((ph: any, i: number) => ({
+          pharmacy_id: ph.id,
+          pharmacy_name: ph.name,
+          position: axisPharms.length + i,
+        }));
+      const options = [...axisPharms, ...extraPharms];
+      setEditAxisPharmacies(options);
 
-      // Colis
-      const pharmNameMap = new Map(currentPP.map((pp: any) => [pp.id, pp.pharmacy_name]));
+      // Drivers list (active only)
+      const driverIds = (rolesRes.data || []).map((r: any) => r.user_id);
+      if (driverIds.length > 0) {
+        let driverQuery = supabase.from('profiles').select('user_id, full_name, site_id').in('user_id', driverIds).eq('is_active', true);
+        if (p.site_id) driverQuery = driverQuery.eq('site_id', p.site_id);
+        const { data: driversData } = await driverQuery;
+        const list = (driversData || []).map((d: any) => ({ user_id: d.user_id, full_name: d.full_name }));
+        // Always keep the currently assigned driver visible
+        if (!list.some(d => d.user_id === p.driver_id)) {
+          list.unshift({ user_id: p.driver_id, full_name: p.driver_name });
+        }
+        setEditDrivers(list);
+      } else {
+        setEditDrivers([{ user_id: p.driver_id, full_name: p.driver_name }]);
+      }
+
+      // Colis (keyed by pharmacy_id so pharmacies added later work too)
+      const pharmNameMap = new Map<string, string>(currentPP.map((pp: any) => [pp.id, pp.pharmacy_name]));
+      const pharmIdMapByPP = new Map<string, string>(currentPP.map((pp: any) => [pp.id, pp.pharmacy_id]));
       const colis: ParcoursColis[] = (colisRes.data || []).map((c: any) => ({
         ...c,
         pharmacy_name: pharmNameMap.get(c.parcours_pharmacy_id) || 'Inconnu',
+        pharmacy_id: pharmIdMapByPP.get(c.parcours_pharmacy_id) || '',
       }));
       setEditColisList(colis);
     } catch { toast.error('Erreur de chargement'); }
     finally { setEditLoading(false); }
   };
+
 
   const handleEditSave = async () => {
     if (!editParcours || !editName.trim()) return;
