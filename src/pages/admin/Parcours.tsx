@@ -100,14 +100,19 @@ export default function AdminParcours() {
   const [editName, setEditName] = useState('');
   const [editSaving, setEditSaving] = useState(false);
   const [editLoading, setEditLoading] = useState(false);
-  // Pharmacies editing
+  // Pharmacies editing (all pharmacies of the site are selectable, axis ones first)
   const [editAxisPharmacies, setEditAxisPharmacies] = useState<AxisPharmacyOption[]>([]);
   const [editSelectedPharmacyIds, setEditSelectedPharmacyIds] = useState<Set<string>>(new Set());
   const [editCurrentPharmacyIds, setEditCurrentPharmacyIds] = useState<Set<string>>(new Set());
+  const [editPharmacySearch, setEditPharmacySearch] = useState('');
+  // Driver editing
+  const [editDrivers, setEditDrivers] = useState<{ user_id: string; full_name: string }[]>([]);
+  const [editDriverId, setEditDriverId] = useState('');
   // Colis editing
   const [editColisList, setEditColisList] = useState<ParcoursColis[]>([]);
   // Parcours pharmacies map (pharmacy_id -> parcours_pharmacy_id)
   const [editPharmIdMap, setEditPharmIdMap] = useState<Map<string, string>>(new Map());
+
 
   // Force confirm
   const [forceDialog, setForceDialog] = useState<ParcoursRow | null>(null);
