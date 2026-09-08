@@ -306,8 +306,19 @@ export default function AdminAxes() {
               )}
 
               {/* All pharmacies checklist */}
+              <div className="relative mb-2">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  value={pharmacySearch}
+                  onChange={e => setPharmacySearch(e.target.value)}
+                  placeholder="Rechercher une pharmacie..."
+                  className="pl-9"
+                />
+              </div>
               <div className="border rounded-lg max-h-48 overflow-y-auto">
-                {allPharmacies.map(p => (
+                {visiblePharmacies.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-4">Aucune pharmacie trouvée</p>
+                ) : visiblePharmacies.map(p => (
                   <label key={p.id} className="flex items-center gap-3 px-3 py-2 hover:bg-muted/50 cursor-pointer">
                     <Checkbox
                       checked={selectedPharmacies.includes(p.id)}
@@ -318,6 +329,7 @@ export default function AdminAxes() {
                   </label>
                 ))}
               </div>
+
             </div>
 
             <div className="flex justify-end gap-2 pt-2">
