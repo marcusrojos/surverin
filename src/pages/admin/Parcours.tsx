@@ -681,10 +681,22 @@ export default function AdminParcours() {
                   <Building2 className="w-3.5 h-3.5 text-primary" />
                   Pharmacies ({editSelectedPharmacyIds.size}/{editAxisPharmacies.length})
                 </Label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    value={editPharmacySearch}
+                    onChange={e => setEditPharmacySearch(e.target.value)}
+                    placeholder="Rechercher une pharmacie..."
+                    className="pl-9 h-9"
+                  />
+                </div>
                 <div className="space-y-1 max-h-[25vh] overflow-y-auto border rounded-lg p-2">
                   {editAxisPharmacies.length === 0 ? (
                     <p className="text-xs text-muted-foreground text-center py-4">Aucune pharmacie sur cet axe</p>
-                  ) : editAxisPharmacies.map((ap, i) => (
+                  ) : visibleEditPharmacies.length === 0 ? (
+                    <p className="text-xs text-muted-foreground text-center py-4">Aucune pharmacie trouvée</p>
+                  ) : visibleEditPharmacies.map(({ ap, i }) => (
+
                     <label
                       key={ap.pharmacy_id}
                       className={cn(
