@@ -675,6 +675,22 @@ export default function AdminParcours() {
                 <Input value={editName} onChange={e => setEditName(e.target.value)} maxLength={100} />
               </div>
 
+              {/* Driver */}
+              <div className="space-y-1.5">
+                <Label className="flex items-center gap-1.5">
+                  <User className="w-3.5 h-3.5 text-primary" />
+                  Chauffeur affecté
+                </Label>
+                <SearchableSelect
+                  options={editDrivers.map(d => ({ value: d.user_id, label: d.full_name }))}
+                  value={editDriverId}
+                  onChange={setEditDriverId}
+                  placeholder="Sélectionner un chauffeur"
+                  searchPlaceholder="Rechercher un chauffeur…"
+                />
+              </div>
+
+
               {/* Pharmacies */}
               <div className="space-y-2">
                 <Label className="flex items-center gap-1.5">
