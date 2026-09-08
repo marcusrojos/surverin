@@ -18,10 +18,13 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog';
-import { ArrowRight, ArrowLeft, Route, MapPin, User, Loader2, Building2, CheckCircle2, Plus, Trash2, Package, Barcode, AlertCircle } from 'lucide-react';
+import { ArrowRight, ArrowLeft, Route, MapPin, User, Loader2, Building2, CheckCircle2, Plus, Trash2, Package, Barcode, AlertCircle, Search } from 'lucide-react';
+import { SearchableSelect } from '@/components/ui/searchable-select';
+import { BarcodeScanButton } from '@/components/ui/barcode-scan-button';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+
 
 interface Axis {
   id: string;
