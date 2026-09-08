@@ -12,7 +12,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
-import { Plus, Pencil, Trash2, GripVertical, Route, ArrowUp, ArrowDown } from 'lucide-react';
+import { Plus, Pencil, Trash2, GripVertical, Route, ArrowUp, ArrowDown, Search } from 'lucide-react';
 
 interface Pharmacy {
   id: string;
@@ -44,6 +44,8 @@ export default function AdminAxes() {
   const [formName, setFormName] = useState('');
   const [formDescription, setFormDescription] = useState('');
   const [selectedPharmacies, setSelectedPharmacies] = useState<string[]>([]);
+  const [pharmacySearch, setPharmacySearch] = useState('');
+
   const { isSuperAdmin, sites, siteFilter, setSiteFilter } = useSiteFilter();
 
   const fetchData = async () => {
@@ -189,6 +191,14 @@ export default function AdminAxes() {
   };
 
   const pharmaMap = new Map(allPharmacies.map(p => [p.id, p]));
+  const visiblePharmacies = allPharmacies.filter(p => {
+    const q = pharmacySearch.trim().toLowerCase();
+    if (!q) return true;
+    return p.name.toLowerCase().includes(q)
+      || p.client_code.toLowerCase().includes(q)
+      || (p.address || '').toLowerCase().includes(q);
+  });
+
   const filteredAxes = axes.filter(a => siteFilter === 'all' || a.site_id === siteFilter);
 
   return (
@@ -306,8 +316,19 @@ export default function AdminAxes() {
               )}
 
               {/* All pharmacies checklist */}
+              <div className="relative mb-2">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  value={pharmacySearch}
+                  onChange={e => setPharmacySearch(e.target.value)}
+                  placeholder="Rechercher une pharmacie..."
+                  className="pl-9"
+                />
+              </div>
               <div className="border rounded-lg max-h-48 overflow-y-auto">
-                {allPharmacies.map(p => (
+                {visiblePharmacies.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-4">Aucune pharmacie trouvée</p>
+                ) : visiblePharmacies.map(p => (
                   <label key={p.id} className="flex items-center gap-3 px-3 py-2 hover:bg-muted/50 cursor-pointer">
                     <Checkbox
                       checked={selectedPharmacies.includes(p.id)}
@@ -318,6 +339,7 @@ export default function AdminAxes() {
                   </label>
                 ))}
               </div>
+
             </div>
 
             <div className="flex justify-end gap-2 pt-2">

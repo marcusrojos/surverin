@@ -18,10 +18,13 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog';
-import { ArrowRight, ArrowLeft, Route, MapPin, User, Loader2, Building2, CheckCircle2, Plus, Trash2, Package, Barcode, AlertCircle } from 'lucide-react';
+import { ArrowRight, ArrowLeft, Route, MapPin, User, Loader2, Building2, CheckCircle2, Plus, Trash2, Package, Barcode, AlertCircle, Search } from 'lucide-react';
+import { SearchableSelect } from '@/components/ui/searchable-select';
+import { BarcodeScanButton } from '@/components/ui/barcode-scan-button';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+
 
 interface Axis {
   id: string;
@@ -78,6 +81,8 @@ export function CreateParcoursWizard({ open, onOpenChange, onCreated }: CreatePa
   // Step 2
   const [axisPharmacies, setAxisPharmacies] = useState<AxisPharmacy[]>([]);
   const [selectedPharmacyIds, setSelectedPharmacyIds] = useState<Set<string>>(new Set());
+  const [pharmacySearch, setPharmacySearch] = useState('');
+
 
   // Step 3
   const [pharmacyPackages, setPharmacyPackages] = useState<PharmacyPackages>({});
@@ -90,6 +95,8 @@ export function CreateParcoursWizard({ open, onOpenChange, onCreated }: CreatePa
       setSelectedDriver('');
       setAxisPharmacies([]);
       setSelectedPharmacyIds(new Set());
+      setPharmacySearch('');
+
       setPharmacyPackages({});
       fetchData();
     }
@@ -397,6 +404,17 @@ export function CreateParcoursWizard({ open, onOpenChange, onCreated }: CreatePa
   // Get selected pharmacies in axis order for step 3
   const selectedPharmaciesOrdered = axisPharmacies.filter(ap => selectedPharmacyIds.has(ap.pharmacy_id));
 
+  // Pharmacies matching the search (keeps the original axis numbering)
+  const visibleAxisPharmacies = axisPharmacies
+    .map((ap, index) => ({ ap, index }))
+    .filter(({ ap }) => {
+      const q = pharmacySearch.trim().toLowerCase();
+      if (!q) return true;
+      return ap.pharmacy.name.toLowerCase().includes(q)
+        || (ap.pharmacy.address || '').toLowerCase().includes(q);
+    });
+
+
   const totalColis = Object.values(pharmacyPackages).flat().length;
 
   const stepLabels = [
@@ -484,21 +502,14 @@ export function CreateParcoursWizard({ open, onOpenChange, onCreated }: CreatePa
                         <MapPin className="w-4 h-4 text-primary" />
                         Axe de livraison
                       </Label>
-                      <Select value={selectedAxis} onValueChange={setSelectedAxis}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Sélectionner un axe" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {axes.map((axis) => (
-                            <SelectItem key={axis.id} value={axis.id}>
-                              {axis.name}
-                              {axis.description && (
-                                <span className="text-muted-foreground ml-1">— {axis.description}</span>
-                              )}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <SearchableSelect
+                        options={axes.map(a => ({ value: a.id, label: a.name, description: a.description }))}
+                        value={selectedAxis}
+                        onChange={setSelectedAxis}
+                        placeholder="Sélectionner un axe"
+                        searchPlaceholder="Rechercher un axe…"
+                      />
+
                       {selectedAxisData?.description && (
                         <p className="text-xs text-muted-foreground">{selectedAxisData.description}</p>
                       )}
@@ -511,18 +522,14 @@ export function CreateParcoursWizard({ open, onOpenChange, onCreated }: CreatePa
                         <User className="w-4 h-4 text-primary" />
                         Chauffeur
                       </Label>
-                      <Select value={selectedDriver} onValueChange={setSelectedDriver}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Sélectionner un chauffeur" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {drivers.map((driver) => (
-                            <SelectItem key={driver.user_id} value={driver.user_id}>
-                              {driver.full_name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <SearchableSelect
+                        options={drivers.map(d => ({ value: d.user_id, label: d.full_name }))}
+                        value={selectedDriver}
+                        onChange={setSelectedDriver}
+                        placeholder="Sélectionner un chauffeur"
+                        searchPlaceholder="Rechercher un chauffeur…"
+                      />
+
                     </CardContent>
                   </Card>
                 </div>
@@ -560,8 +567,22 @@ export function CreateParcoursWizard({ open, onOpenChange, onCreated }: CreatePa
                       </Button>
                     </div>
 
+                    <div className="relative mb-3">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                      <Input
+                        value={pharmacySearch}
+                        onChange={(e) => setPharmacySearch(e.target.value)}
+                        placeholder="Rechercher une pharmacie..."
+                        className="pl-9"
+                      />
+                    </div>
+
                     <div className="space-y-2 max-h-[40vh] overflow-y-auto pr-1">
-                      {axisPharmacies.map((ap, index) => {
+                      {visibleAxisPharmacies.length === 0 && (
+                        <p className="text-sm text-muted-foreground text-center py-6">Aucune pharmacie trouvée</p>
+                      )}
+                      {visibleAxisPharmacies.map(({ ap, index }) => {
+
                         const isSelected = selectedPharmacyIds.has(ap.pharmacy_id);
                         return (
                           <Card
@@ -686,6 +707,11 @@ export function CreateParcoursWizard({ open, onOpenChange, onCreated }: CreatePa
                                         <AlertCircle className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-destructive" />
                                       )}
                                     </div>
+                                    <BarcodeScanButton
+                                      className="h-9 w-9"
+                                      onScan={(code) => updateColis(ap.pharmacy_id, colis.id, 'barcode', code)}
+                                    />
+
                                     <Button
                                       variant="ghost"
                                       size="icon"

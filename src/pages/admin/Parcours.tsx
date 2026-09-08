@@ -433,7 +433,17 @@ export default function AdminParcours() {
     }]);
   };
 
+  // Pharmacies of the edit dialog matching the search (keeps original numbering)
+  const visibleEditPharmacies = editAxisPharmacies
+    .map((ap, i) => ({ ap, i }))
+    .filter(({ ap }) => {
+      const q = editPharmacySearch.trim().toLowerCase();
+      if (!q) return true;
+      return ap.pharmacy_name.toLowerCase().includes(q);
+    });
+
   const filtered = parcoursList.filter(p => {
+
     const q = searchQuery.toLowerCase();
     const matchesSearch = p.name.toLowerCase().includes(q) || p.axis_name.toLowerCase().includes(q) || p.driver_name.toLowerCase().includes(q);
     const matchesStatus = statusFilter === 'all' || p.status === statusFilter;
@@ -675,16 +685,44 @@ export default function AdminParcours() {
                 <Input value={editName} onChange={e => setEditName(e.target.value)} maxLength={100} />
               </div>
 
+              {/* Driver */}
+              <div className="space-y-1.5">
+                <Label className="flex items-center gap-1.5">
+                  <User className="w-3.5 h-3.5 text-primary" />
+                  Chauffeur affecté
+                </Label>
+                <SearchableSelect
+                  options={editDrivers.map(d => ({ value: d.user_id, label: d.full_name }))}
+                  value={editDriverId}
+                  onChange={setEditDriverId}
+                  placeholder="Sélectionner un chauffeur"
+                  searchPlaceholder="Rechercher un chauffeur…"
+                />
+              </div>
+
+
               {/* Pharmacies */}
               <div className="space-y-2">
                 <Label className="flex items-center gap-1.5">
                   <Building2 className="w-3.5 h-3.5 text-primary" />
                   Pharmacies ({editSelectedPharmacyIds.size}/{editAxisPharmacies.length})
                 </Label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    value={editPharmacySearch}
+                    onChange={e => setEditPharmacySearch(e.target.value)}
+                    placeholder="Rechercher une pharmacie..."
+                    className="pl-9 h-9"
+                  />
+                </div>
                 <div className="space-y-1 max-h-[25vh] overflow-y-auto border rounded-lg p-2">
                   {editAxisPharmacies.length === 0 ? (
                     <p className="text-xs text-muted-foreground text-center py-4">Aucune pharmacie sur cet axe</p>
-                  ) : editAxisPharmacies.map((ap, i) => (
+                  ) : visibleEditPharmacies.length === 0 ? (
+                    <p className="text-xs text-muted-foreground text-center py-4">Aucune pharmacie trouvée</p>
+                  ) : visibleEditPharmacies.map(({ ap, i }) => (
+
                     <label
                       key={ap.pharmacy_id}
                       className={cn(
@@ -746,6 +784,13 @@ export default function AdminParcours() {
                             className="h-8 text-xs flex-1"
                             placeholder="Code-barres"
                           />
+                          <BarcodeScanButton
+                            className="h-8 w-8"
+                            onScan={(code) => {
+                              setEditColisList(prev => prev.map(x => x.id === c.id ? { ...x, barcode: code } : x));
+                            }}
+                          />
+
                           <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => {
                             setEditColisList(prev => prev.filter(x => x.id !== c.id));
                           }}>
