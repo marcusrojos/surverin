@@ -487,21 +487,14 @@ export function CreateParcoursWizard({ open, onOpenChange, onCreated }: CreatePa
                         <MapPin className="w-4 h-4 text-primary" />
                         Axe de livraison
                       </Label>
-                      <Select value={selectedAxis} onValueChange={setSelectedAxis}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Sélectionner un axe" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {axes.map((axis) => (
-                            <SelectItem key={axis.id} value={axis.id}>
-                              {axis.name}
-                              {axis.description && (
-                                <span className="text-muted-foreground ml-1">— {axis.description}</span>
-                              )}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <SearchableSelect
+                        options={axes.map(a => ({ value: a.id, label: a.name, description: a.description }))}
+                        value={selectedAxis}
+                        onChange={setSelectedAxis}
+                        placeholder="Sélectionner un axe"
+                        searchPlaceholder="Rechercher un axe…"
+                      />
+
                       {selectedAxisData?.description && (
                         <p className="text-xs text-muted-foreground">{selectedAxisData.description}</p>
                       )}
