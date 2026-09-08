@@ -81,6 +81,8 @@ export function CreateParcoursWizard({ open, onOpenChange, onCreated }: CreatePa
   // Step 2
   const [axisPharmacies, setAxisPharmacies] = useState<AxisPharmacy[]>([]);
   const [selectedPharmacyIds, setSelectedPharmacyIds] = useState<Set<string>>(new Set());
+  const [pharmacySearch, setPharmacySearch] = useState('');
+
 
   // Step 3
   const [pharmacyPackages, setPharmacyPackages] = useState<PharmacyPackages>({});
