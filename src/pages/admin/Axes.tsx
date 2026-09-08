@@ -44,6 +44,8 @@ export default function AdminAxes() {
   const [formName, setFormName] = useState('');
   const [formDescription, setFormDescription] = useState('');
   const [selectedPharmacies, setSelectedPharmacies] = useState<string[]>([]);
+  const [pharmacySearch, setPharmacySearch] = useState('');
+
   const { isSuperAdmin, sites, siteFilter, setSiteFilter } = useSiteFilter();
 
   const fetchData = async () => {
