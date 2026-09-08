@@ -433,7 +433,17 @@ export default function AdminParcours() {
     }]);
   };
 
+  // Pharmacies of the edit dialog matching the search (keeps original numbering)
+  const visibleEditPharmacies = editAxisPharmacies
+    .map((ap, i) => ({ ap, i }))
+    .filter(({ ap }) => {
+      const q = editPharmacySearch.trim().toLowerCase();
+      if (!q) return true;
+      return ap.pharmacy_name.toLowerCase().includes(q);
+    });
+
   const filtered = parcoursList.filter(p => {
+
     const q = searchQuery.toLowerCase();
     const matchesSearch = p.name.toLowerCase().includes(q) || p.axis_name.toLowerCase().includes(q) || p.driver_name.toLowerCase().includes(q);
     const matchesStatus = statusFilter === 'all' || p.status === statusFilter;
