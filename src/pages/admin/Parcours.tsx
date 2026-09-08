@@ -746,6 +746,13 @@ export default function AdminParcours() {
                             className="h-8 text-xs flex-1"
                             placeholder="Code-barres"
                           />
+                          <BarcodeScanButton
+                            className="h-8 w-8"
+                            onScan={(code) => {
+                              setEditColisList(prev => prev.map(x => x.id === c.id ? { ...x, barcode: code } : x));
+                            }}
+                          />
+
                           <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => {
                             setEditColisList(prev => prev.filter(x => x.id !== c.id));
                           }}>
