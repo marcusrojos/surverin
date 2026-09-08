@@ -689,6 +689,11 @@ export function CreateParcoursWizard({ open, onOpenChange, onCreated }: CreatePa
                                         <AlertCircle className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-destructive" />
                                       )}
                                     </div>
+                                    <BarcodeScanButton
+                                      className="h-9 w-9"
+                                      onScan={(code) => updateColis(ap.pharmacy_id, colis.id, 'barcode', code)}
+                                    />
+
                                     <Button
                                       variant="ghost"
                                       size="icon"
