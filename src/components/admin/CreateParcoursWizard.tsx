@@ -563,8 +563,22 @@ export function CreateParcoursWizard({ open, onOpenChange, onCreated }: CreatePa
                       </Button>
                     </div>
 
+                    <div className="relative mb-3">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                      <Input
+                        value={pharmacySearch}
+                        onChange={(e) => setPharmacySearch(e.target.value)}
+                        placeholder="Rechercher une pharmacie..."
+                        className="pl-9"
+                      />
+                    </div>
+
                     <div className="space-y-2 max-h-[40vh] overflow-y-auto pr-1">
-                      {axisPharmacies.map((ap, index) => {
+                      {visibleAxisPharmacies.length === 0 && (
+                        <p className="text-sm text-muted-foreground text-center py-6">Aucune pharmacie trouvée</p>
+                      )}
+                      {visibleAxisPharmacies.map(({ ap, index }) => {
+
                         const isSelected = selectedPharmacyIds.has(ap.pharmacy_id);
                         return (
                           <Card
