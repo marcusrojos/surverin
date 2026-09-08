@@ -93,6 +93,8 @@ export function CreateParcoursWizard({ open, onOpenChange, onCreated }: CreatePa
       setSelectedDriver('');
       setAxisPharmacies([]);
       setSelectedPharmacyIds(new Set());
+      setPharmacySearch('');
+
       setPharmacyPackages({});
       fetchData();
     }
