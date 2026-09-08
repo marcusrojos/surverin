@@ -191,6 +191,14 @@ export default function AdminAxes() {
   };
 
   const pharmaMap = new Map(allPharmacies.map(p => [p.id, p]));
+  const visiblePharmacies = allPharmacies.filter(p => {
+    const q = pharmacySearch.trim().toLowerCase();
+    if (!q) return true;
+    return p.name.toLowerCase().includes(q)
+      || p.client_code.toLowerCase().includes(q)
+      || (p.address || '').toLowerCase().includes(q);
+  });
+
   const filteredAxes = axes.filter(a => siteFilter === 'all' || a.site_id === siteFilter);
 
   return (
