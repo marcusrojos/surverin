@@ -400,6 +400,17 @@ export function CreateParcoursWizard({ open, onOpenChange, onCreated }: CreatePa
   // Get selected pharmacies in axis order for step 3
   const selectedPharmaciesOrdered = axisPharmacies.filter(ap => selectedPharmacyIds.has(ap.pharmacy_id));
 
+  // Pharmacies matching the search (keeps the original axis numbering)
+  const visibleAxisPharmacies = axisPharmacies
+    .map((ap, index) => ({ ap, index }))
+    .filter(({ ap }) => {
+      const q = pharmacySearch.trim().toLowerCase();
+      if (!q) return true;
+      return ap.pharmacy.name.toLowerCase().includes(q)
+        || (ap.pharmacy.address || '').toLowerCase().includes(q);
+    });
+
+
   const totalColis = Object.values(pharmacyPackages).flat().length;
 
   const stepLabels = [
