@@ -514,18 +514,14 @@ export function CreateParcoursWizard({ open, onOpenChange, onCreated }: CreatePa
                         <User className="w-4 h-4 text-primary" />
                         Chauffeur
                       </Label>
-                      <Select value={selectedDriver} onValueChange={setSelectedDriver}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Sélectionner un chauffeur" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {drivers.map((driver) => (
-                            <SelectItem key={driver.user_id} value={driver.user_id}>
-                              {driver.full_name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <SearchableSelect
+                        options={drivers.map(d => ({ value: d.user_id, label: d.full_name }))}
+                        value={selectedDriver}
+                        onChange={setSelectedDriver}
+                        placeholder="Sélectionner un chauffeur"
+                        searchPlaceholder="Rechercher un chauffeur…"
+                      />
+
                     </CardContent>
                   </Card>
                 </div>
