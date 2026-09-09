@@ -21,8 +21,10 @@ import {
 } from '@/components/ui/alert-dialog';
 import {
   Route, Loader2, Search, Eye, Pencil, Trash2, ShieldCheck, Package, MapPin, Barcode,
-  AlertTriangle, CheckCircle2, XCircle, Plus, Building2,
+  AlertTriangle, CheckCircle2, XCircle, Plus, Building2, User,
 } from 'lucide-react';
+import { SearchableSelect } from '@/components/ui/searchable-select';
+import { BarcodeScanButton } from '@/components/ui/barcode-scan-button';
 import { supabase } from '@/integrations/supabase/client';
 import { useSiteFilter, SiteFilterSelect } from '@/components/admin/SiteFilter';
 import { useAuth } from '@/lib/auth';
@@ -429,6 +431,7 @@ export default function AdminParcours() {
       barcode: '',
       type: 'carton',
       parcours_pharmacy_id: ppId,
+      pharmacy_id: pharmacyId,
       pharmacy_name: pharm?.pharmacy_name || 'Inconnu',
     }]);
   };
