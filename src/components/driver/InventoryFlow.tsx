@@ -370,10 +370,16 @@ export function InventoryFlow({
                       maxLength={100}
                     />
                   </div>
-                  <Button onClick={handleScan} disabled={!barcodeInput.trim()} className="h-12 px-4">
+                  <BarcodeScanButton
+                    onScan={(code) => handleScan(code)}
+                    className="h-12 w-12 shrink-0"
+                    continuous
+                  />
+                  <Button onClick={() => handleScan()} disabled={!barcodeInput.trim()} className="h-12 px-4">
                     <Plus className="w-4 h-4" />
                   </Button>
                 </div>
+
 
                 {/* Quick stats */}
                 <div className="grid grid-cols-3 gap-2">
