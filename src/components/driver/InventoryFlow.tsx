@@ -28,6 +28,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { fetchAndCacheParcoursDeliveries } from '@/services/parcoursDeliveriesCache';
+import { BarcodeScanButton } from '@/components/ui/barcode-scan-button';
+
 
 interface ExpectedColis {
   id: string;
@@ -152,9 +154,10 @@ export function InventoryFlow({
     return { matched, missing, extra };
   }, [expectedColis, scannedItems]);
 
-  const handleScan = () => {
-    const barcode = barcodeInput.trim();
+  const handleScan = (code?: string) => {
+    const barcode = (code ?? barcodeInput).trim();
     if (!barcode) return;
+
 
     // Check if already scanned
     if (scannedItems.some(s => s.barcode.toLowerCase() === barcode.toLowerCase())) {
@@ -367,10 +370,16 @@ export function InventoryFlow({
                       maxLength={100}
                     />
                   </div>
-                  <Button onClick={handleScan} disabled={!barcodeInput.trim()} className="h-12 px-4">
+                  <BarcodeScanButton
+                    onScan={(code) => handleScan(code)}
+                    className="h-12 w-12 shrink-0"
+                    continuous
+                  />
+                  <Button onClick={() => handleScan()} disabled={!barcodeInput.trim()} className="h-12 px-4">
                     <Plus className="w-4 h-4" />
                   </Button>
                 </div>
+
 
                 {/* Quick stats */}
                 <div className="grid grid-cols-3 gap-2">

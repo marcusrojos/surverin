@@ -306,9 +306,24 @@ export default function AdminParcours() {
     if (!editParcours || !editName.trim()) return;
     setEditSaving(true);
     try {
-      // 1. Update name
-      const { error } = await supabase.from('parcours').update({ name: editName.trim() } as any).eq('id', editParcours.id);
+      // 1. Update name + assigned driver
+      const driverChanged = !!editDriverId && editDriverId !== editParcours.driver_id;
+      const { error } = await supabase
+        .from('parcours')
+        .update({ name: editName.trim(), ...(editDriverId ? { driver_id: editDriverId } : {}) } as any)
+        .eq('id', editParcours.id);
       if (error) throw error;
+
+      // 1b. Reassign pending deliveries of this parcours to the new driver
+      if (driverChanged) {
+        const { error: delErr } = await supabase
+          .from('deliveries')
+          .update({ driver_id: editDriverId } as any)
+          .eq('parcours_id', editParcours.id)
+          .eq('status', 'en_attente');
+        if (delErr) throw delErr;
+      }
+
 
       // 2. Handle pharmacy changes
       const addedPharmIds = [...editSelectedPharmacyIds].filter(id => !editCurrentPharmacyIds.has(id));
