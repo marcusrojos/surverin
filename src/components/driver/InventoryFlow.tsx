@@ -154,9 +154,10 @@ export function InventoryFlow({
     return { matched, missing, extra };
   }, [expectedColis, scannedItems]);
 
-  const handleScan = () => {
-    const barcode = barcodeInput.trim();
+  const handleScan = (code?: string) => {
+    const barcode = (code ?? barcodeInput).trim();
     if (!barcode) return;
+
 
     // Check if already scanned
     if (scannedItems.some(s => s.barcode.toLowerCase() === barcode.toLowerCase())) {
