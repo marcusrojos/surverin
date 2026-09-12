@@ -5,6 +5,7 @@ import { InventoryReport } from '@/components/admin/InventoryReport';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { BarcodeScanButton } from '@/components/ui/barcode-scan-button';
 import { Label } from '@/components/ui/label';
 import {
   Dialog,
