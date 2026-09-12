@@ -5,6 +5,7 @@ import { InventoryReport } from '@/components/admin/InventoryReport';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { BarcodeScanButton } from '@/components/ui/barcode-scan-button';
 import { Label } from '@/components/ui/label';
 import {
   Dialog,
@@ -347,14 +348,17 @@ export default function DeliveriesPage() {
           <TabsContent value="bons" className="space-y-4">
         {/* Filters */}
         <div className="flex flex-col gap-4">
-          <div className="relative w-full">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              placeholder="Rechercher par référence, pharmacie ou code-barres colis..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10"
-            />
+          <div className="flex w-full gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                placeholder="Rechercher par référence, pharmacie ou code-barres colis..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+            <BarcodeScanButton onScan={(code) => setSearchQuery(code)} />
           </div>
           {isSuperAdmin && (
             <SiteFilterSelect value={siteFilter} onChange={setSiteFilter} sites={sites} />
