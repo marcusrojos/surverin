@@ -17,7 +17,7 @@ interface BarcodeScanButtonProps {
 }
 
 const FORMATS = [
-  'code_128', 'code_39', 'ean_13', 'ean_8', 'upc_a', 'upc_e',
+  'code_128', 'code_39', 'code_93', 'ean_13', 'ean_8', 'upc_a', 'upc_e',
   'itf', 'codabar', 'qr_code', 'data_matrix', 'pdf417',
 ];
 
@@ -81,17 +81,37 @@ export function BarcodeScanButton({
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: { ideal: 'environment' },
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
         },
         audio: false,
       });
       streamRef.current = stream;
+      const videoTrack = stream.getVideoTracks()[0];
+      if (videoTrack) {
+        const track = videoTrack as MediaStreamTrack & {
+          getCapabilities?: () => MediaTrackCapabilities & { focusMode?: string[]; zoom?: { min: number; max: number } };
+          applyConstraints: (constraints: MediaTrackConstraints & { advanced?: Array<Record<string, unknown>> }) => Promise<void>;
+        };
+        try {
+          const capabilities = track.getCapabilities?.();
+          const advanced: Record<string, unknown> = {};
+          if (capabilities?.focusMode?.includes('continuous')) advanced.focusMode = 'continuous';
+          if (capabilities?.zoom && capabilities.zoom.max > capabilities.zoom.min) {
+            advanced.zoom = Math.min(capabilities.zoom.max, Math.max(capabilities.zoom.min, 1.5));
+          }
+          if (Object.keys(advanced).length > 0) await track.applyConstraints({ advanced: [advanced] });
+        } catch { /* autofocus and zoom are optional */ }
+      }
       const video = videoRef.current;
       if (!video) return;
       video.srcObject = stream;
       video.setAttribute('playsinline', 'true');
-      await video.play().catch(() => undefined);
+      await new Promise<void>((resolve) => {
+        if (video.readyState >= 1) resolve();
+        else video.addEventListener('loadedmetadata', () => resolve(), { once: true });
+      });
+      await video.play();
 
       const Detector = (window as any).BarcodeDetector;
       if (Detector) {
@@ -123,13 +143,18 @@ export function BarcodeScanButton({
         ]);
         const hints = new Map();
         hints.set(DecodeHintType.POSSIBLE_FORMATS, [
-          BarcodeFormat.CODE_128, BarcodeFormat.CODE_39, BarcodeFormat.EAN_13,
+          BarcodeFormat.CODE_128, BarcodeFormat.CODE_39, BarcodeFormat.CODE_93, BarcodeFormat.EAN_13,
           BarcodeFormat.EAN_8, BarcodeFormat.UPC_A, BarcodeFormat.UPC_E,
-          BarcodeFormat.ITF, BarcodeFormat.CODABAR, BarcodeFormat.QR_CODE,
+          BarcodeFormat.ITF, BarcodeFormat.ITF_14, BarcodeFormat.CODABAR, BarcodeFormat.RSS_14,
+          BarcodeFormat.RSS_EXPANDED, BarcodeFormat.QR_CODE,
           BarcodeFormat.DATA_MATRIX, BarcodeFormat.PDF_417,
         ]);
-        hints.set(DecodeHintType.TRY_HARDER, false);
-        const reader = new BrowserMultiFormatReader(hints, { delayBetweenScanAttempts: 80 });
+        hints.set(DecodeHintType.TRY_HARDER, true);
+        hints.set(DecodeHintType.ALSO_INVERTED, true);
+        const reader = new BrowserMultiFormatReader(hints, {
+          delayBetweenScanAttempts: 120,
+          delayBetweenScanSuccess: 500,
+        });
         const controls = await reader.decodeFromVideoElement(video, (result) => {
           if (result) handleResult(result.getText());
         });
