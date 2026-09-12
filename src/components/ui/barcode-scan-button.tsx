@@ -89,9 +89,9 @@ export function BarcodeScanButton({
       streamRef.current = stream;
       const videoTrack = stream.getVideoTracks()[0];
       if (videoTrack) {
-        const track = videoTrack as MediaStreamTrack & {
-          getCapabilities?: () => MediaTrackCapabilities & { focusMode?: string[]; zoom?: { min: number; max: number } };
-          applyConstraints: (constraints: MediaTrackConstraints & { advanced?: Array<Record<string, unknown>> }) => Promise<void>;
+        const track = videoTrack as unknown as {
+          getCapabilities?: () => { focusMode?: string[]; zoom?: { min: number; max: number } };
+          applyConstraints: (constraints: { advanced?: Array<Record<string, unknown>> }) => Promise<void>;
         };
         try {
           const capabilities = track.getCapabilities?.();
@@ -145,12 +145,11 @@ export function BarcodeScanButton({
         hints.set(DecodeHintType.POSSIBLE_FORMATS, [
           BarcodeFormat.CODE_128, BarcodeFormat.CODE_39, BarcodeFormat.CODE_93, BarcodeFormat.EAN_13,
           BarcodeFormat.EAN_8, BarcodeFormat.UPC_A, BarcodeFormat.UPC_E,
-          BarcodeFormat.ITF, BarcodeFormat.ITF_14, BarcodeFormat.CODABAR, BarcodeFormat.RSS_14,
+          BarcodeFormat.ITF, BarcodeFormat.CODABAR, BarcodeFormat.RSS_14,
           BarcodeFormat.RSS_EXPANDED, BarcodeFormat.QR_CODE,
           BarcodeFormat.DATA_MATRIX, BarcodeFormat.PDF_417,
         ]);
         hints.set(DecodeHintType.TRY_HARDER, true);
-        hints.set(DecodeHintType.ALSO_INVERTED, true);
         const reader = new BrowserMultiFormatReader(hints, {
           delayBetweenScanAttempts: 120,
           delayBetweenScanSuccess: 500,
