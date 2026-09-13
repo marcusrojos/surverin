@@ -2,7 +2,9 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/lib/auth';
 import { apiMonitor } from '@/lib/api-monitor';
+
 import { Package, Building2, Users, Truck, Clock, CheckCircle, TrendingUp, MapPin, CalendarDays, BarChart3 } from 'lucide-react';
 import { format, subDays, startOfDay, isToday, isYesterday } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -42,9 +44,13 @@ interface DailyData {
 const CACHE_KEY = 'dpci_admin_dashboard';
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
-function getCachedData() {
+function cacheKeyFor(scopeKey: string) {
+  return `${CACHE_KEY}_${scopeKey}`;
+}
+
+function getCachedData(scopeKey: string) {
   try {
-    const raw = localStorage.getItem(CACHE_KEY);
+    const raw = localStorage.getItem(cacheKeyFor(scopeKey));
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (Date.now() - parsed.timestamp > CACHE_TTL) return null;
@@ -52,11 +58,12 @@ function getCachedData() {
   } catch { return null; }
 }
 
-function setCachedData(data: any) {
+function setCachedData(scopeKey: string, data: any) {
   try {
-    localStorage.setItem(CACHE_KEY, JSON.stringify({ data, timestamp: Date.now() }));
+    localStorage.setItem(cacheKeyFor(scopeKey), JSON.stringify({ data, timestamp: Date.now() }));
   } catch {}
 }
+
 
 export default function AdminDashboard() {
   const [stats, setStats] = useState<Stats>({
@@ -68,12 +75,16 @@ export default function AdminDashboard() {
   const [dailyData, setDailyData] = useState<DailyData[]>([]);
   const [topPharmacies, setTopPharmacies] = useState<{ name: string; count: number }[]>([]);
   const [loading, setLoading] = useState(true);
-  const fetchedRef = useRef(false);
+  const fetchedRef = useRef<string | null>(null);
+
+  const { role, siteId, siteName } = useAuth();
+  const isSuperAdmin = role === 'super_admin';
+  const scopeKey = isSuperAdmin ? 'all' : (siteId || 'none');
 
   const fetchStats = useCallback(async (forceRefresh = false) => {
     // Use cache if available and not forcing refresh
     if (!forceRefresh) {
-      const cached = getCachedData();
+      const cached = getCachedData(scopeKey);
       if (cached) {
         setStats(cached.stats);
         setRecentDeliveries(cached.recentDeliveries);
@@ -84,58 +95,75 @@ export default function AdminDashboard() {
       }
     }
 
+    // Restrict everything to the admin's own site (super admins see all sites)
+    const restrictToSite = !isSuperAdmin && !!siteId;
+    const scoped = (q: any) => (restrictToSite ? q.eq('site_id', siteId) : q);
+
     try {
-      // Use count queries instead of fetching all rows
       const todayStart = startOfDay(new Date()).toISOString();
       const sevenDaysAgo = subDays(new Date(), 7).toISOString();
 
       const [
         totalRes, pendingRes, deliveredRes,
-        pharmaciesRes, pharmaciesGpsRes,
-        driversRes, usersRes,
+        pharmaciesListRes,
         todayCreatedRes, todayDeliveredRes,
         recentRes, last7daysRes, profilesRes,
-        bacsBalanceRes,
       ] = await Promise.all([
-        supabase.from('deliveries').select('id', { count: 'exact', head: true }),
-        supabase.from('deliveries').select('id', { count: 'exact', head: true }).eq('status', 'en_attente'),
-        supabase.from('deliveries').select('id', { count: 'exact', head: true }).eq('status', 'livre'),
-        supabase.from('pharmacies').select('id', { count: 'exact', head: true }),
-        supabase.from('pharmacies').select('id', { count: 'exact', head: true }).not('latitude', 'is', null),
-        supabase.from('user_roles').select('id', { count: 'exact', head: true }).eq('role', 'livreur'),
-        supabase.from('user_roles').select('id', { count: 'exact', head: true }),
-        supabase.from('deliveries').select('id', { count: 'exact', head: true }).gte('created_at', todayStart),
-        supabase.from('deliveries').select('id', { count: 'exact', head: true }).eq('status', 'livre').gte('delivered_at', todayStart),
-        supabase.from('deliveries').select('id, reference, status, created_at, delivered_at, pharmacy_id, driver_id').order('created_at', { ascending: false }).limit(5),
-        supabase.from('deliveries').select('created_at, delivered_at, status, pharmacy_id').gte('created_at', sevenDaysAgo),
-        supabase.from('profiles').select('user_id, full_name'),
-        supabase.from('pharmacy_bacs_balance').select('pending_bacs'),
+        scoped(supabase.from('deliveries').select('id', { count: 'exact', head: true })),
+        scoped(supabase.from('deliveries').select('id', { count: 'exact', head: true }).eq('status', 'en_attente')),
+        scoped(supabase.from('deliveries').select('id', { count: 'exact', head: true }).eq('status', 'livre')),
+        scoped(supabase.from('pharmacies').select('id, name, latitude')),
+        scoped(supabase.from('deliveries').select('id', { count: 'exact', head: true }).gte('created_at', todayStart)),
+        scoped(supabase.from('deliveries').select('id', { count: 'exact', head: true }).eq('status', 'livre').gte('delivered_at', todayStart)),
+        scoped(supabase.from('deliveries').select('id, reference, status, created_at, delivered_at, pharmacy_id, driver_id').order('created_at', { ascending: false }).limit(5)),
+        scoped(supabase.from('deliveries').select('created_at, delivered_at, status, pharmacy_id').gte('created_at', sevenDaysAgo)),
+        scoped(supabase.from('profiles').select('user_id, full_name').eq('is_active', true)),
       ]);
 
       apiMonitor.record('/rest/v1/deliveries', 'GET', 200);
 
+      const pharmacyRows = (pharmaciesListRes.data || []) as any[];
+      const pharmacyIds = pharmacyRows.map((p) => p.id);
+      const profileRows = (profilesRes.data || []) as any[];
+      const profileIds = profileRows.map((p) => p.user_id);
+
+      // Roles + bacs are scoped through the site's users / pharmacies
+      const [rolesRes, bacsBalanceRes] = await Promise.all([
+        profileIds.length
+          ? supabase.from('user_roles').select('user_id, role').in('user_id', profileIds)
+          : Promise.resolve({ data: [] as any[] }),
+        pharmacyIds.length
+          ? supabase.from('pharmacy_bacs_balance').select('pending_bacs, pharmacy_id').in('pharmacy_id', pharmacyIds)
+          : Promise.resolve({ data: [] as any[] }),
+      ]);
+
+      const roleRows = ((rolesRes as any).data || []) as any[];
+      const driversCount = roleRows.filter((r) => r.role === 'livreur').length;
+      const usersCount = roleRows.filter((r) => r.role === 'admin' || r.role === 'super_admin' || r.role === 'livreur').length;
+
       const total = totalRes.count || 0;
       const pendingCount = pendingRes.count || 0;
       const deliveredCount = deliveredRes.count || 0;
-      const pharmaciesCount = pharmaciesRes.count || 0;
-      const pharmaciesGpsCount = pharmaciesGpsRes.count || 0;
-      const driversCount = driversRes.count || 0;
-      const usersCount = usersRes.count || 0;
+      const pharmaciesCount = pharmacyRows.length;
+      const pharmaciesGpsCount = pharmacyRows.filter((p) => p.latitude !== null && p.latitude !== undefined).length;
       const todayCreated = todayCreatedRes.count || 0;
       const todayDelivered = todayDeliveredRes.count || 0;
       const deliveryRate = total > 0 ? Math.round((deliveredCount / total) * 100) : 0;
 
       // Bacs stats
-      const bacsData = bacsBalanceRes.data || [];
+      const bacsData = ((bacsBalanceRes as any).data || []) as any[];
       const totalBacsPending = bacsData.reduce((sum: number, b: any) => sum + (b.pending_bacs || 0), 0);
 
-      // Sum bacs_recovered from all delivered deliveries
-      const { data: bacsRecoveredData } = await supabase
-        .from('deliveries')
-        .select('bacs_recovered')
-        .eq('status', 'livre')
-        .gt('bacs_recovered', 0);
+      // Sum bacs_recovered from delivered deliveries of the same scope
+      const { data: bacsRecoveredData } = await scoped(
+        supabase
+          .from('deliveries')
+          .select('bacs_recovered')
+          .eq('status', 'livre')
+          .gt('bacs_recovered', 0)
+      );
       const totalBacsRecovered = (bacsRecoveredData || []).reduce((sum: number, d: any) => sum + (d.bacs_recovered || 0), 0);
+
 
       const newStats: Stats = {
         totalDeliveries: total,
@@ -153,15 +181,11 @@ export default function AdminDashboard() {
       };
       setStats(newStats);
 
-      // Recent deliveries - need pharmacy names
-      const recentDels = recentRes.data || [];
-      const recentPharmIds = [...new Set(recentDels.map(d => d.pharmacy_id))];
-      let pharMap = new Map<string, string>();
-      if (recentPharmIds.length > 0) {
-        const { data: pharData } = await supabase.from('pharmacies').select('id, name').in('id', recentPharmIds);
-        pharMap = new Map((pharData || []).map(p => [p.id, p.name]));
-      }
-      const profileMap = new Map((profilesRes.data || []).map(p => [p.user_id, p.full_name]));
+      // Recent deliveries - pharmacy names come from the scoped pharmacy list
+      const recentDels = (recentRes.data || []) as any[];
+      const pharMap = new Map<string, string>(pharmacyRows.map((p) => [p.id, p.name]));
+      const profileMap = new Map(profileRows.map((p) => [p.user_id, p.full_name]));
+
 
       const recent: RecentDelivery[] = recentDels.map(d => ({
         id: d.id,
@@ -175,7 +199,7 @@ export default function AdminDashboard() {
       setRecentDeliveries(recent);
 
       // Daily chart from last 7 days data only
-      const last7 = last7daysRes.data || [];
+      const last7 = (last7daysRes.data || []) as any[];
       const days: DailyData[] = [];
       for (let i = 6; i >= 0; i--) {
         const date = subDays(new Date(), i);
@@ -187,24 +211,12 @@ export default function AdminDashboard() {
       }
       setDailyData(days);
 
-      // Top pharmacies from last 7 days
+      // Top pharmacies from last 7 days (same scope)
       const pharmaCounts = new Map<string, number>();
       last7.forEach(d => {
         const name = pharMap.get(d.pharmacy_id) || 'Inconnue';
         pharmaCounts.set(name, (pharmaCounts.get(name) || 0) + 1);
       });
-      // If we need more pharmacy names, fetch them
-      const missingPharmIds = [...new Set(last7.map(d => d.pharmacy_id).filter(id => !pharMap.has(id)))];
-      if (missingPharmIds.length > 0) {
-        const { data: morePhar } = await supabase.from('pharmacies').select('id, name').in('id', missingPharmIds);
-        (morePhar || []).forEach(p => pharMap.set(p.id, p.name));
-        // Rebuild counts
-        pharmaCounts.clear();
-        last7.forEach(d => {
-          const name = pharMap.get(d.pharmacy_id) || 'Inconnue';
-          pharmaCounts.set(name, (pharmaCounts.get(name) || 0) + 1);
-        });
-      }
 
       const sorted = Array.from(pharmaCounts.entries())
         .sort((a, b) => b[1] - a[1])
@@ -213,10 +225,10 @@ export default function AdminDashboard() {
       setTopPharmacies(sorted);
 
       // Cache results
-      setCachedData({ stats: newStats, recentDeliveries: recent, dailyData: days, topPharmacies: sorted });
+      setCachedData(scopeKey, { stats: newStats, recentDeliveries: recent, dailyData: days, topPharmacies: sorted });
     } catch {
       // Use cached data as fallback
-      const cached = getCachedData();
+      const cached = getCachedData(scopeKey);
       if (cached) {
         setStats(cached.stats);
         setRecentDeliveries(cached.recentDeliveries);
@@ -226,14 +238,16 @@ export default function AdminDashboard() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [scopeKey, siteId, isSuperAdmin]);
 
   useEffect(() => {
-    if (!fetchedRef.current) {
-      fetchedRef.current = true;
-      fetchStats();
-    }
-  }, [fetchStats]);
+    // Wait until the site of a regular admin is known so figures stay consistent
+    if (!isSuperAdmin && !siteId) return;
+    if (fetchedRef.current === scopeKey) return;
+    fetchedRef.current = scopeKey;
+    fetchStats();
+  }, [fetchStats, scopeKey, siteId, isSuperAdmin]);
+
 
   const summaryCards = [
     { label: 'Total livraisons', value: stats.totalDeliveries, icon: Package, color: 'text-primary' },
@@ -259,7 +273,12 @@ export default function AdminDashboard() {
       <div className="space-y-6">
         <div>
           <h1 className="text-2xl font-bold">Tableau de bord</h1>
-          <p className="text-muted-foreground">Vue d'ensemble de l'activité</p>
+          <p className="text-muted-foreground">
+            {isSuperAdmin
+              ? "Vue d'ensemble de l'activité — tous les sites"
+              : `Vue d'ensemble de l'activité — site ${siteName || '—'}`}
+          </p>
+
         </div>
 
         {/* KPI Cards */}
