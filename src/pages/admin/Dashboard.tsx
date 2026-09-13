@@ -42,9 +42,13 @@ interface DailyData {
 const CACHE_KEY = 'dpci_admin_dashboard';
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
-function getCachedData() {
+function cacheKeyFor(scopeKey: string) {
+  return `${CACHE_KEY}_${scopeKey}`;
+}
+
+function getCachedData(scopeKey: string) {
   try {
-    const raw = localStorage.getItem(CACHE_KEY);
+    const raw = localStorage.getItem(cacheKeyFor(scopeKey));
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (Date.now() - parsed.timestamp > CACHE_TTL) return null;
@@ -52,11 +56,12 @@ function getCachedData() {
   } catch { return null; }
 }
 
-function setCachedData(data: any) {
+function setCachedData(scopeKey: string, data: any) {
   try {
-    localStorage.setItem(CACHE_KEY, JSON.stringify({ data, timestamp: Date.now() }));
+    localStorage.setItem(cacheKeyFor(scopeKey), JSON.stringify({ data, timestamp: Date.now() }));
   } catch {}
 }
+
 
 export default function AdminDashboard() {
   const [stats, setStats] = useState<Stats>({
