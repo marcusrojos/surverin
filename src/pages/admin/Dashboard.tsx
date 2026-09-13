@@ -273,7 +273,12 @@ export default function AdminDashboard() {
       <div className="space-y-6">
         <div>
           <h1 className="text-2xl font-bold">Tableau de bord</h1>
-          <p className="text-muted-foreground">Vue d'ensemble de l'activité</p>
+          <p className="text-muted-foreground">
+            {isSuperAdmin
+              ? "Vue d'ensemble de l'activité — tous les sites"
+              : `Vue d'ensemble de l'activité — site ${siteName || '—'}`}
+          </p>
+
         </div>
 
         {/* KPI Cards */}
