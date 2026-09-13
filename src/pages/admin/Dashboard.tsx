@@ -179,15 +179,11 @@ export default function AdminDashboard() {
       };
       setStats(newStats);
 
-      // Recent deliveries - need pharmacy names
-      const recentDels = recentRes.data || [];
-      const recentPharmIds = [...new Set(recentDels.map(d => d.pharmacy_id))];
-      let pharMap = new Map<string, string>();
-      if (recentPharmIds.length > 0) {
-        const { data: pharData } = await supabase.from('pharmacies').select('id, name').in('id', recentPharmIds);
-        pharMap = new Map((pharData || []).map(p => [p.id, p.name]));
-      }
-      const profileMap = new Map((profilesRes.data || []).map(p => [p.user_id, p.full_name]));
+      // Recent deliveries - pharmacy names come from the scoped pharmacy list
+      const recentDels = (recentRes.data || []) as any[];
+      const pharMap = new Map<string, string>(pharmacyRows.map((p) => [p.id, p.name]));
+      const profileMap = new Map(profileRows.map((p) => [p.user_id, p.full_name]));
+
 
       const recent: RecentDelivery[] = recentDels.map(d => ({
         id: d.id,
