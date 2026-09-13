@@ -2,7 +2,9 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/lib/auth';
 import { apiMonitor } from '@/lib/api-monitor';
+
 import { Package, Building2, Users, Truck, Clock, CheckCircle, TrendingUp, MapPin, CalendarDays, BarChart3 } from 'lucide-react';
 import { format, subDays, startOfDay, isToday, isYesterday } from 'date-fns';
 import { fr } from 'date-fns/locale';
