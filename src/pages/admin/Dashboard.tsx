@@ -197,7 +197,7 @@ export default function AdminDashboard() {
       setRecentDeliveries(recent);
 
       // Daily chart from last 7 days data only
-      const last7 = last7daysRes.data || [];
+      const last7 = (last7daysRes.data || []) as any[];
       const days: DailyData[] = [];
       for (let i = 6; i >= 0; i--) {
         const date = subDays(new Date(), i);
@@ -209,24 +209,12 @@ export default function AdminDashboard() {
       }
       setDailyData(days);
 
-      // Top pharmacies from last 7 days
+      // Top pharmacies from last 7 days (same scope)
       const pharmaCounts = new Map<string, number>();
       last7.forEach(d => {
         const name = pharMap.get(d.pharmacy_id) || 'Inconnue';
         pharmaCounts.set(name, (pharmaCounts.get(name) || 0) + 1);
       });
-      // If we need more pharmacy names, fetch them
-      const missingPharmIds = [...new Set(last7.map(d => d.pharmacy_id).filter(id => !pharMap.has(id)))];
-      if (missingPharmIds.length > 0) {
-        const { data: morePhar } = await supabase.from('pharmacies').select('id, name').in('id', missingPharmIds);
-        (morePhar || []).forEach(p => pharMap.set(p.id, p.name));
-        // Rebuild counts
-        pharmaCounts.clear();
-        last7.forEach(d => {
-          const name = pharMap.get(d.pharmacy_id) || 'Inconnue';
-          pharmaCounts.set(name, (pharmaCounts.get(name) || 0) + 1);
-        });
-      }
 
       const sorted = Array.from(pharmaCounts.entries())
         .sort((a, b) => b[1] - a[1])
@@ -235,10 +223,10 @@ export default function AdminDashboard() {
       setTopPharmacies(sorted);
 
       // Cache results
-      setCachedData({ stats: newStats, recentDeliveries: recent, dailyData: days, topPharmacies: sorted });
+      setCachedData(scopeKey, { stats: newStats, recentDeliveries: recent, dailyData: days, topPharmacies: sorted });
     } catch {
       // Use cached data as fallback
-      const cached = getCachedData();
+      const cached = getCachedData(scopeKey);
       if (cached) {
         setStats(cached.stats);
         setRecentDeliveries(cached.recentDeliveries);
@@ -248,14 +236,16 @@ export default function AdminDashboard() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [scopeKey, siteId, isSuperAdmin]);
 
   useEffect(() => {
-    if (!fetchedRef.current) {
-      fetchedRef.current = true;
-      fetchStats();
-    }
-  }, [fetchStats]);
+    // Wait until the site of a regular admin is known so figures stay consistent
+    if (!isSuperAdmin && !siteId) return;
+    if (fetchedRef.current === scopeKey) return;
+    fetchedRef.current = scopeKey;
+    fetchStats();
+  }, [fetchStats, scopeKey, siteId, isSuperAdmin]);
+
 
   const summaryCards = [
     { label: 'Total livraisons', value: stats.totalDeliveries, icon: Package, color: 'text-primary' },
