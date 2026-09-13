@@ -73,7 +73,7 @@ export default function AdminDashboard() {
   const [dailyData, setDailyData] = useState<DailyData[]>([]);
   const [topPharmacies, setTopPharmacies] = useState<{ name: string; count: number }[]>([]);
   const [loading, setLoading] = useState(true);
-  const fetchedRef = useRef(false);
+  const fetchedRef = useRef<string | null>(null);
 
   const { role, siteId, siteName } = useAuth();
   const isSuperAdmin = role === 'super_admin';
