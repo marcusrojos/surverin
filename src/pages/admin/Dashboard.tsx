@@ -75,10 +75,14 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const fetchedRef = useRef(false);
 
+  const { role, siteId, siteName } = useAuth();
+  const isSuperAdmin = role === 'super_admin';
+  const scopeKey = isSuperAdmin ? 'all' : (siteId || 'none');
+
   const fetchStats = useCallback(async (forceRefresh = false) => {
     // Use cache if available and not forcing refresh
     if (!forceRefresh) {
-      const cached = getCachedData();
+      const cached = getCachedData(scopeKey);
       if (cached) {
         setStats(cached.stats);
         setRecentDeliveries(cached.recentDeliveries);
@@ -89,58 +93,75 @@ export default function AdminDashboard() {
       }
     }
 
+    // Restrict everything to the admin's own site (super admins see all sites)
+    const restrictToSite = !isSuperAdmin && !!siteId;
+    const scoped = (q: any) => (restrictToSite ? q.eq('site_id', siteId) : q);
+
     try {
-      // Use count queries instead of fetching all rows
       const todayStart = startOfDay(new Date()).toISOString();
       const sevenDaysAgo = subDays(new Date(), 7).toISOString();
 
       const [
         totalRes, pendingRes, deliveredRes,
-        pharmaciesRes, pharmaciesGpsRes,
-        driversRes, usersRes,
+        pharmaciesListRes,
         todayCreatedRes, todayDeliveredRes,
         recentRes, last7daysRes, profilesRes,
-        bacsBalanceRes,
       ] = await Promise.all([
-        supabase.from('deliveries').select('id', { count: 'exact', head: true }),
-        supabase.from('deliveries').select('id', { count: 'exact', head: true }).eq('status', 'en_attente'),
-        supabase.from('deliveries').select('id', { count: 'exact', head: true }).eq('status', 'livre'),
-        supabase.from('pharmacies').select('id', { count: 'exact', head: true }),
-        supabase.from('pharmacies').select('id', { count: 'exact', head: true }).not('latitude', 'is', null),
-        supabase.from('user_roles').select('id', { count: 'exact', head: true }).eq('role', 'livreur'),
-        supabase.from('user_roles').select('id', { count: 'exact', head: true }),
-        supabase.from('deliveries').select('id', { count: 'exact', head: true }).gte('created_at', todayStart),
-        supabase.from('deliveries').select('id', { count: 'exact', head: true }).eq('status', 'livre').gte('delivered_at', todayStart),
-        supabase.from('deliveries').select('id, reference, status, created_at, delivered_at, pharmacy_id, driver_id').order('created_at', { ascending: false }).limit(5),
-        supabase.from('deliveries').select('created_at, delivered_at, status, pharmacy_id').gte('created_at', sevenDaysAgo),
-        supabase.from('profiles').select('user_id, full_name'),
-        supabase.from('pharmacy_bacs_balance').select('pending_bacs'),
+        scoped(supabase.from('deliveries').select('id', { count: 'exact', head: true })),
+        scoped(supabase.from('deliveries').select('id', { count: 'exact', head: true }).eq('status', 'en_attente')),
+        scoped(supabase.from('deliveries').select('id', { count: 'exact', head: true }).eq('status', 'livre')),
+        scoped(supabase.from('pharmacies').select('id, name, latitude')),
+        scoped(supabase.from('deliveries').select('id', { count: 'exact', head: true }).gte('created_at', todayStart)),
+        scoped(supabase.from('deliveries').select('id', { count: 'exact', head: true }).eq('status', 'livre').gte('delivered_at', todayStart)),
+        scoped(supabase.from('deliveries').select('id, reference, status, created_at, delivered_at, pharmacy_id, driver_id').order('created_at', { ascending: false }).limit(5)),
+        scoped(supabase.from('deliveries').select('created_at, delivered_at, status, pharmacy_id').gte('created_at', sevenDaysAgo)),
+        scoped(supabase.from('profiles').select('user_id, full_name').eq('is_active', true)),
       ]);
 
       apiMonitor.record('/rest/v1/deliveries', 'GET', 200);
 
+      const pharmacyRows = (pharmaciesListRes.data || []) as any[];
+      const pharmacyIds = pharmacyRows.map((p) => p.id);
+      const profileRows = (profilesRes.data || []) as any[];
+      const profileIds = profileRows.map((p) => p.user_id);
+
+      // Roles + bacs are scoped through the site's users / pharmacies
+      const [rolesRes, bacsBalanceRes] = await Promise.all([
+        profileIds.length
+          ? supabase.from('user_roles').select('user_id, role').in('user_id', profileIds)
+          : Promise.resolve({ data: [] as any[] }),
+        pharmacyIds.length
+          ? supabase.from('pharmacy_bacs_balance').select('pending_bacs, pharmacy_id').in('pharmacy_id', pharmacyIds)
+          : Promise.resolve({ data: [] as any[] }),
+      ]);
+
+      const roleRows = ((rolesRes as any).data || []) as any[];
+      const driversCount = roleRows.filter((r) => r.role === 'livreur').length;
+      const usersCount = roleRows.filter((r) => r.role === 'admin' || r.role === 'super_admin' || r.role === 'livreur').length;
+
       const total = totalRes.count || 0;
       const pendingCount = pendingRes.count || 0;
       const deliveredCount = deliveredRes.count || 0;
-      const pharmaciesCount = pharmaciesRes.count || 0;
-      const pharmaciesGpsCount = pharmaciesGpsRes.count || 0;
-      const driversCount = driversRes.count || 0;
-      const usersCount = usersRes.count || 0;
+      const pharmaciesCount = pharmacyRows.length;
+      const pharmaciesGpsCount = pharmacyRows.filter((p) => p.latitude !== null && p.latitude !== undefined).length;
       const todayCreated = todayCreatedRes.count || 0;
       const todayDelivered = todayDeliveredRes.count || 0;
       const deliveryRate = total > 0 ? Math.round((deliveredCount / total) * 100) : 0;
 
       // Bacs stats
-      const bacsData = bacsBalanceRes.data || [];
+      const bacsData = ((bacsBalanceRes as any).data || []) as any[];
       const totalBacsPending = bacsData.reduce((sum: number, b: any) => sum + (b.pending_bacs || 0), 0);
 
-      // Sum bacs_recovered from all delivered deliveries
-      const { data: bacsRecoveredData } = await supabase
-        .from('deliveries')
-        .select('bacs_recovered')
-        .eq('status', 'livre')
-        .gt('bacs_recovered', 0);
+      // Sum bacs_recovered from delivered deliveries of the same scope
+      const { data: bacsRecoveredData } = await scoped(
+        supabase
+          .from('deliveries')
+          .select('bacs_recovered')
+          .eq('status', 'livre')
+          .gt('bacs_recovered', 0)
+      );
       const totalBacsRecovered = (bacsRecoveredData || []).reduce((sum: number, d: any) => sum + (d.bacs_recovered || 0), 0);
+
 
       const newStats: Stats = {
         totalDeliveries: total,
