@@ -133,6 +133,29 @@ export function ParcoursDeliveries({
     fetchData();
   }, [fetchData]);
 
+  // Live refresh: route packages / pharmacies / deliveries changed by an admin
+  useEffect(() => {
+    if (!parcoursId) return;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const schedule = () => {
+      if (!navigator.onLine) return;
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => { fetchData(); }, 800);
+    };
+
+    const channel = supabase
+      .channel(`parcours-live-${parcoursId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'parcours_pharmacies', filter: `parcours_id=eq.${parcoursId}` }, schedule)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'parcours_colis', filter: `parcours_id=eq.${parcoursId}` }, schedule)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'deliveries', filter: `parcours_id=eq.${parcoursId}` }, schedule)
+      .subscribe();
+
+    return () => {
+      if (timer) clearTimeout(timer);
+      supabase.removeChannel(channel);
+    };
+  }, [parcoursId, fetchData]);
+
   useEffect(() => {
     if (pendingDeliveries.length === 0) return;
     setPharmacyDeliveries(prev => {
