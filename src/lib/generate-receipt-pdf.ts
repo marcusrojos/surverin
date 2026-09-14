@@ -278,10 +278,11 @@ export async function generateReceiptPDF(data: ReceiptData) {
   //                  DRIVER
   // ══════════════════════════════════════════════
 
-  if (data.driverName || data.driverEmail) {
+  {
     drawSectionTitle('LIVREUR');
-    if (data.driverName) addField('Nom :', data.driverName);
+    addField('Nom :', data.driverName || 'Non assigné');
     if (data.driverEmail) addField('Email :', data.driverEmail);
+    if (data.driverPhone) addField('Téléphone :', data.driverPhone);
     if (!data.isOffline && data.driverLatitude && data.driverLongitude) {
       addField('Position GPS :', `${data.driverLatitude.toFixed(6)}, ${data.driverLongitude.toFixed(6)}`);
     }
