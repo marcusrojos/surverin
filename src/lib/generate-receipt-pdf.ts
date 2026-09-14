@@ -45,7 +45,11 @@ interface ReceiptData {
   createdAt: string;
   driverName?: string | null;
   driverEmail?: string;
+  driverPhone?: string | null;
   verificationCode?: string | null;
+  siteName?: string | null;
+  parcoursName?: string | null;
+  status?: string | null;
   nb_cartons?: number;
   nb_sachets?: number;
   nb_barques?: number;
