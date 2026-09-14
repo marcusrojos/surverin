@@ -189,12 +189,17 @@ export default function DeliveriesPage() {
 
       const { data: fetchedProfiles } = await supabase
         .from('profiles')
-        .select('user_id, full_name, is_active');
+        .select('user_id, full_name, email, is_active');
+
+      const { data: parcoursData } = await supabase
+        .from('parcours')
+        .select('id, name');
 
       const mappedDeliveries = (deliveriesData || []).map(d => ({
         ...d,
         pharmacy: pharmaciesData?.find(p => p.id === d.pharmacy_id) || null,
         driver: fetchedProfiles?.find(p => p.user_id === d.driver_id) || null,
+        parcours_name: parcoursData?.find(p => p.id === (d as any).parcours_id)?.name || null,
       }));
 
       setDeliveries(mappedDeliveries as Delivery[]);
