@@ -249,8 +249,10 @@ export async function generateReceiptPDF(data: ReceiptData) {
   addField('Identifiant :', data.reference, false);
   addField('Date de création :', formatDateFR(data.createdAt));
   addField('Date de livraison :', formatDateFR(data.deliveredAt));
-  addField('Statut :', 'LIVRÉ ✓', true);
+  addField('Statut :', data.status === 'en_attente' ? 'EN ATTENTE' : 'LIVRÉ ✓', true);
   addField('Mode :', data.isOffline ? 'Hors ligne (offline)' : 'En ligne (online)', true);
+  if (data.siteName) addField('Site :', data.siteName);
+  if (data.parcoursName) addField('Parcours :', data.parcoursName);
 
   if (data.isOffline) {
     addInfoBox('⚠ Livraison validée hors connexion – position GPS non vérifiée', 'warning');
