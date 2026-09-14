@@ -88,8 +88,13 @@ interface Delivery {
   driver_longitude: number | null;
   recipient_signature: string | null;
   packages: any;
+  bacs_to_recover?: number | null;
+  bacs_recovered?: number | null;
+  parcours_id?: string | null;
+  site_id?: string | null;
   pharmacy: { name: string } | null;
-  driver: { full_name: string } | null;
+  driver: { full_name: string; email?: string | null } | null;
+  parcours_name?: string | null;
 }
 
 const generateVerificationCode = (): string => {
