@@ -383,7 +383,73 @@ export default function AdminParcours() {
         if (colisError) throw colisError;
       }
 
-      toast.success('Parcours modifié avec succès');
+      // 4. Keep deliveries in sync with the updated pharmacies / colis
+      const ppIdToPharmId = new Map<string, string>();
+      freshPharmIdMap.forEach((ppId, pharmId) => ppIdToPharmId.set(ppId as string, pharmId as string));
+
+      const countsByPharmacy = new Map<string, { cartons: number; sachets: number; bacs: number; packages: { barcode: string; type: string }[] }>();
+      colisRows.forEach(c => {
+        const pharmId = ppIdToPharmId.get(c.parcours_pharmacy_id);
+        if (!pharmId) return;
+        const entry = countsByPharmacy.get(pharmId) || { cartons: 0, sachets: 0, bacs: 0, packages: [] };
+        if (c.type === 'carton') entry.cartons++;
+        else if (c.type === 'sachet') entry.sachets++;
+        else entry.bacs++;
+        entry.packages.push({ barcode: c.barcode, type: c.type });
+        countsByPharmacy.set(pharmId, entry);
+      });
+
+      const { data: existingDeliveries } = await supabase
+        .from('deliveries')
+        .select('id, pharmacy_id, status')
+        .eq('parcours_id', editParcours.id);
+      const existingByPharmacy = new Map((existingDeliveries || []).map((d: any) => [d.pharmacy_id, d]));
+
+      // Remove pending deliveries of pharmacies no longer in the parcours
+      const staleIds = (existingDeliveries || [])
+        .filter((d: any) => !editSelectedPharmacyIds.has(d.pharmacy_id) && d.status === 'en_attente')
+        .map((d: any) => d.id);
+      if (staleIds.length > 0) {
+        await supabase.from('deliveries').delete().in('id', staleIds);
+      }
+
+      // Update pending deliveries and create the missing ones
+      const newDeliveryRows: any[] = [];
+      for (const pharmId of editSelectedPharmacyIds) {
+        const counts = countsByPharmacy.get(pharmId) || { cartons: 0, sachets: 0, bacs: 0, packages: [] };
+        const existing: any = existingByPharmacy.get(pharmId);
+        if (existing) {
+          if (existing.status === 'en_attente') {
+            await supabase.from('deliveries').update({
+              nb_cartons: counts.cartons,
+              nb_sachets: counts.sachets,
+              nb_barques: counts.bacs,
+              packages: counts.packages,
+              ...(editDriverId ? { driver_id: editDriverId } : {}),
+            } as any).eq('id', existing.id);
+          }
+        } else {
+          const pharmName = editAxisPharmacies.find(ap => ap.pharmacy_id === pharmId)?.pharmacy_name || 'Pharmacie';
+          newDeliveryRows.push({
+            parcours_id: editParcours.id,
+            pharmacy_id: pharmId,
+            driver_id: editDriverId || editParcours.driver_id,
+            reference: `${editName.trim()}-${pharmName}`.substring(0, 50),
+            nb_cartons: counts.cartons,
+            nb_sachets: counts.sachets,
+            nb_barques: counts.bacs,
+            packages: counts.packages,
+            status: 'en_attente' as const,
+            site_id: editParcours.site_id,
+          });
+        }
+      }
+      if (newDeliveryRows.length > 0) {
+        const { error: newDelErr } = await supabase.from('deliveries').insert(newDeliveryRows as any);
+        if (newDelErr) throw newDelErr;
+      }
+
+      toast.success('Parcours modifié — livraisons mises à jour');
       setEditParcours(null);
       fetchParcours();
     } catch (err: any) { toast.error(err?.message || 'Erreur lors de la modification'); }

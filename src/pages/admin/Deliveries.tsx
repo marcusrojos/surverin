@@ -134,6 +134,27 @@ export default function DeliveriesPage() {
     fetchData();
   }, []);
 
+  // Live refresh when routes, packages or deliveries change
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const schedule = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => { fetchData(); }, 600);
+    };
+
+    const channel = supabase
+      .channel('admin-deliveries-live')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'deliveries' }, schedule)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'parcours_pharmacies' }, schedule)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'parcours_colis' }, schedule)
+      .subscribe();
+
+    return () => {
+      if (timer) clearTimeout(timer);
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
   const fetchData = async () => {
     try {
       const { data: deliveriesData, error: deliveriesError } = await supabase
