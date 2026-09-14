@@ -45,7 +45,11 @@ interface ReceiptData {
   createdAt: string;
   driverName?: string | null;
   driverEmail?: string;
+  driverPhone?: string | null;
   verificationCode?: string | null;
+  siteName?: string | null;
+  parcoursName?: string | null;
+  status?: string | null;
   nb_cartons?: number;
   nb_sachets?: number;
   nb_barques?: number;
@@ -245,8 +249,10 @@ export async function generateReceiptPDF(data: ReceiptData) {
   addField('Identifiant :', data.reference, false);
   addField('Date de création :', formatDateFR(data.createdAt));
   addField('Date de livraison :', formatDateFR(data.deliveredAt));
-  addField('Statut :', 'LIVRÉ ✓', true);
+  addField('Statut :', data.status === 'en_attente' ? 'EN ATTENTE' : 'LIVRÉ ✓', true);
   addField('Mode :', data.isOffline ? 'Hors ligne (offline)' : 'En ligne (online)', true);
+  if (data.siteName) addField('Site :', data.siteName);
+  if (data.parcoursName) addField('Parcours :', data.parcoursName);
 
   if (data.isOffline) {
     addInfoBox('⚠ Livraison validée hors connexion – position GPS non vérifiée', 'warning');
@@ -272,10 +278,11 @@ export async function generateReceiptPDF(data: ReceiptData) {
   //                  DRIVER
   // ══════════════════════════════════════════════
 
-  if (data.driverName || data.driverEmail) {
+  {
     drawSectionTitle('LIVREUR');
-    if (data.driverName) addField('Nom :', data.driverName);
+    addField('Nom :', data.driverName || 'Non assigné');
     if (data.driverEmail) addField('Email :', data.driverEmail);
+    if (data.driverPhone) addField('Téléphone :', data.driverPhone);
     if (!data.isOffline && data.driverLatitude && data.driverLongitude) {
       addField('Position GPS :', `${data.driverLatitude.toFixed(6)}, ${data.driverLongitude.toFixed(6)}`);
     }

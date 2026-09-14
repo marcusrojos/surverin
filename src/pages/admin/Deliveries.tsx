@@ -88,8 +88,13 @@ interface Delivery {
   driver_longitude: number | null;
   recipient_signature: string | null;
   packages: any;
+  bacs_to_recover?: number | null;
+  bacs_recovered?: number | null;
+  parcours_id?: string | null;
+  site_id?: string | null;
   pharmacy: { name: string } | null;
-  driver: { full_name: string } | null;
+  driver: { full_name: string; email?: string | null } | null;
+  parcours_name?: string | null;
 }
 
 const generateVerificationCode = (): string => {
@@ -184,12 +189,17 @@ export default function DeliveriesPage() {
 
       const { data: fetchedProfiles } = await supabase
         .from('profiles')
-        .select('user_id, full_name, is_active');
+        .select('user_id, full_name, email, is_active');
+
+      const { data: parcoursData } = await supabase
+        .from('parcours')
+        .select('id, name');
 
       const mappedDeliveries = (deliveriesData || []).map(d => ({
         ...d,
         pharmacy: pharmaciesData?.find(p => p.id === d.pharmacy_id) || null,
         driver: fetchedProfiles?.find(p => p.user_id === d.driver_id) || null,
+        parcours_name: parcoursData?.find(p => p.id === (d as any).parcours_id)?.name || null,
       }));
 
       setDeliveries(mappedDeliveries as Delivery[]);
