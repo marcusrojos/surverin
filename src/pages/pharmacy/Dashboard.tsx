@@ -13,10 +13,17 @@ import { toast } from 'sonner';
 
 type Delivery = Database['public']['Tables']['deliveries']['Row'];
 type Pharmacy = Database['public']['Tables']['pharmacies']['Row'];
+type DeliveryExtras = {
+  pharmacy?: Pharmacy;
+  driver_name?: string | null;
+  driver_email?: string | null;
+  parcours_name?: string | null;
+  site_name?: string | null;
+};
 
 export default function PharmacyDashboard() {
   const { user } = useAuth();
-  const [deliveries, setDeliveries] = useState<(Delivery & { pharmacy?: Pharmacy })[]>([]);
+  const [deliveries, setDeliveries] = useState<(Delivery & DeliveryExtras)[]>([]);
   const [pharmacy, setPharmacy] = useState<Pharmacy | null>(null);
   const [loading, setLoading] = useState(true);
 
