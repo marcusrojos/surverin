@@ -65,7 +65,7 @@ export default function PharmacyDashboard() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const handleReceipt = async (d: Delivery & { pharmacy?: Pharmacy }) => {
+  const handleReceipt = async (d: Delivery & DeliveryExtras) => {
     if (!d.pharmacy) return;
     try {
     // If delivery has a photo-based PDF (offline), download it directly
@@ -85,6 +85,15 @@ export default function PharmacyDashboard() {
       recipientSignature: d.recipient_signature,
       deliveredAt: d.delivered_at || d.updated_at,
       createdAt: d.created_at,
+      driverName: d.driver_name || null,
+      driverEmail: d.driver_email || undefined,
+      siteName: d.site_name || null,
+      parcoursName: d.parcours_name || null,
+      status: d.status,
+      bacs_to_recover: d.bacs_to_recover ?? 0,
+      bacs_recovered: d.bacs_recovered ?? 0,
+      pharmacyPhone: d.pharmacy.phone,
+      pharmacyEmail: d.pharmacy.email,
       verificationCode: d.verification_code,
       nb_cartons: d.nb_cartons,
       nb_sachets: d.nb_sachets,
