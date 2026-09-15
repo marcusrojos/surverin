@@ -27,7 +27,31 @@ export default function PharmacyDashboard() {
 
     if (pharData) {
       const { data: delData } = await supabase.from('deliveries').select('*').eq('pharmacy_id', pharData.id).order('created_at', { ascending: false });
-      setDeliveries((delData || []).map(d => ({ ...d, pharmacy: pharData })));
+      const rows = delData || [];
+
+      const driverIds = [...new Set(rows.map(d => d.driver_id).filter(Boolean))] as string[];
+      const parcoursIds = [...new Set(rows.map(d => d.parcours_id).filter(Boolean))] as string[];
+
+      const [{ data: driverProfiles }, { data: parcoursRows }, { data: siteRows }] = await Promise.all([
+        driverIds.length
+          ? supabase.from('profiles').select('user_id, full_name, email').in('user_id', driverIds)
+          : Promise.resolve({ data: [] as any[] }),
+        parcoursIds.length
+          ? supabase.from('parcours').select('id, name').in('id', parcoursIds)
+          : Promise.resolve({ data: [] as any[] }),
+        pharData.site_id
+          ? supabase.from('sites').select('id, name').eq('id', pharData.site_id)
+          : Promise.resolve({ data: [] as any[] }),
+      ]);
+
+      setDeliveries(rows.map(d => ({
+        ...d,
+        pharmacy: pharData,
+        driver_name: driverProfiles?.find(p => p.user_id === d.driver_id)?.full_name || null,
+        driver_email: driverProfiles?.find(p => p.user_id === d.driver_id)?.email || null,
+        parcours_name: parcoursRows?.find(p => p.id === d.parcours_id)?.name || null,
+        site_name: siteRows?.[0]?.name || null,
+      })));
     }
     setLoading(false);
   }, [user]);
