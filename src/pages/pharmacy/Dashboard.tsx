@@ -13,10 +13,17 @@ import { toast } from 'sonner';
 
 type Delivery = Database['public']['Tables']['deliveries']['Row'];
 type Pharmacy = Database['public']['Tables']['pharmacies']['Row'];
+type DeliveryExtras = {
+  pharmacy?: Pharmacy;
+  driver_name?: string | null;
+  driver_email?: string | null;
+  parcours_name?: string | null;
+  site_name?: string | null;
+};
 
 export default function PharmacyDashboard() {
   const { user } = useAuth();
-  const [deliveries, setDeliveries] = useState<(Delivery & { pharmacy?: Pharmacy })[]>([]);
+  const [deliveries, setDeliveries] = useState<(Delivery & DeliveryExtras)[]>([]);
   const [pharmacy, setPharmacy] = useState<Pharmacy | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -27,14 +34,38 @@ export default function PharmacyDashboard() {
 
     if (pharData) {
       const { data: delData } = await supabase.from('deliveries').select('*').eq('pharmacy_id', pharData.id).order('created_at', { ascending: false });
-      setDeliveries((delData || []).map(d => ({ ...d, pharmacy: pharData })));
+      const rows = delData || [];
+
+      const driverIds = [...new Set(rows.map(d => d.driver_id).filter(Boolean))] as string[];
+      const parcoursIds = [...new Set(rows.map(d => d.parcours_id).filter(Boolean))] as string[];
+
+      const [{ data: driverProfiles }, { data: parcoursRows }, { data: siteRows }] = await Promise.all([
+        driverIds.length
+          ? supabase.from('profiles').select('user_id, full_name, email').in('user_id', driverIds)
+          : Promise.resolve({ data: [] as any[] }),
+        parcoursIds.length
+          ? supabase.from('parcours').select('id, name').in('id', parcoursIds)
+          : Promise.resolve({ data: [] as any[] }),
+        pharData.site_id
+          ? supabase.from('sites').select('id, name').eq('id', pharData.site_id)
+          : Promise.resolve({ data: [] as any[] }),
+      ]);
+
+      setDeliveries(rows.map(d => ({
+        ...d,
+        pharmacy: pharData,
+        driver_name: driverProfiles?.find(p => p.user_id === d.driver_id)?.full_name || null,
+        driver_email: driverProfiles?.find(p => p.user_id === d.driver_id)?.email || null,
+        parcours_name: parcoursRows?.find(p => p.id === d.parcours_id)?.name || null,
+        site_name: siteRows?.[0]?.name || null,
+      })));
     }
     setLoading(false);
   }, [user]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const handleReceipt = async (d: Delivery & { pharmacy?: Pharmacy }) => {
+  const handleReceipt = async (d: Delivery & DeliveryExtras) => {
     if (!d.pharmacy) return;
     try {
     // If delivery has a photo-based PDF (offline), download it directly
@@ -54,6 +85,15 @@ export default function PharmacyDashboard() {
       recipientSignature: d.recipient_signature,
       deliveredAt: d.delivered_at || d.updated_at,
       createdAt: d.created_at,
+      driverName: d.driver_name || null,
+      driverEmail: d.driver_email || undefined,
+      siteName: d.site_name || null,
+      parcoursName: d.parcours_name || null,
+      status: d.status,
+      bacs_to_recover: d.bacs_to_recover ?? 0,
+      bacs_recovered: d.bacs_recovered ?? 0,
+      pharmacyPhone: d.pharmacy.phone,
+      pharmacyEmail: d.pharmacy.email,
       verificationCode: d.verification_code,
       nb_cartons: d.nb_cartons,
       nb_sachets: d.nb_sachets,

@@ -95,6 +95,7 @@ interface Delivery {
   pharmacy: { name: string } | null;
   driver: { full_name: string; email?: string | null } | null;
   parcours_name?: string | null;
+  site_name?: string | null;
 }
 
 const generateVerificationCode = (): string => {
@@ -195,11 +196,16 @@ export default function DeliveriesPage() {
         .from('parcours')
         .select('id, name');
 
+      const { data: sitesData } = await supabase
+        .from('sites')
+        .select('id, name');
+
       const mappedDeliveries = (deliveriesData || []).map(d => ({
         ...d,
         pharmacy: pharmaciesData?.find(p => p.id === d.pharmacy_id) || null,
         driver: fetchedProfiles?.find(p => p.user_id === d.driver_id) || null,
         parcours_name: parcoursData?.find(p => p.id === (d as any).parcours_id)?.name || null,
+        site_name: sitesData?.find(s => s.id === (d as any).site_id)?.name || null,
       }));
 
       setDeliveries(mappedDeliveries as Delivery[]);
@@ -513,6 +519,12 @@ export default function DeliveriesPage() {
                                   deliveredAt: delivery.delivered_at || delivery.created_at,
                                   createdAt: delivery.created_at,
                                   driverName: delivery.driver?.full_name || null,
+                                  driverEmail: delivery.driver?.email || undefined,
+                                  siteName: delivery.site_name || null,
+                                  parcoursName: delivery.parcours_name || null,
+                                  status: delivery.status,
+                                  bacs_to_recover: (delivery as any).bacs_to_recover ?? 0,
+                                  bacs_recovered: (delivery as any).bacs_recovered ?? 0,
                                   verificationCode: delivery.verification_code || null,
                                   nb_cartons: delivery.nb_cartons,
                                   nb_sachets: delivery.nb_sachets,
