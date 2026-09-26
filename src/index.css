@@ -239,3 +239,14 @@
     }
   }
 }
+
+/* Barcode scanner - hide WebView content so camera is visible */
+body.barcode-scanner-active {
+  visibility: hidden;
+  background: transparent;
+}
+
+body.barcode-scanner-active * {
+  visibility: hidden;
+}
+

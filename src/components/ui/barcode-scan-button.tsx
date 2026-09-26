@@ -1,11 +1,14 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from '@/components/ui/dialog';
-import { ScanLine, Loader2, CameraOff, RefreshCw } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { ScanLine, Keyboard } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { BarcodeScanner, BarcodeFormat } from '@capacitor-mlkit/barcode-scanning';
+import { Capacitor } from '@capacitor/core';
 
 interface BarcodeScanButtonProps {
   onScan: (code: string) => void;
@@ -16,15 +19,10 @@ interface BarcodeScanButtonProps {
   continuous?: boolean;
 }
 
-const FORMATS = [
-  'code_128', 'code_39', 'code_93', 'ean_13', 'ean_8', 'upc_a', 'upc_e',
-  'itf', 'codabar', 'qr_code', 'data_matrix', 'pdf417',
-];
-
 /**
- * Reusable camera barcode scanner.
- * Uses the native BarcodeDetector API when available (fast, hardware accelerated),
- * and falls back to ZXing for browsers/webviews without it.
+ * Reusable barcode scanner.
+ * On mobile/Android devices (such as Sunmi), uses native Google ML Kit via @capacitor-mlkit/barcode-scanning.
+ * On desktop/web fallback, provides a manual input dialog.
  */
 export function BarcodeScanButton({
   onScan,
@@ -33,154 +31,79 @@ export function BarcodeScanButton({
   label,
   continuous = false,
 }: BarcodeScanButtonProps) {
-  const [open, setOpen] = useState(false);
-  const [starting, setStarting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [lastCode, setLastCode] = useState<string | null>(null);
+  const [manualOpen, setManualOpen] = useState(false);
+  const [manualCode, setManualCode] = useState('');
 
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const rafRef = useRef<number | null>(null);
-  const zxingControlsRef = useRef<{ stop: () => void } | null>(null);
-  const stoppedRef = useRef(false);
-  const lastValueRef = useRef<{ code: string; at: number }>({ code: '', at: 0 });
-
-  const stopAll = useCallback(() => {
-    stoppedRef.current = true;
-    if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
-    try { zxingControlsRef.current?.stop(); } catch { /* ignore */ }
-    zxingControlsRef.current = null;
-    streamRef.current?.getTracks().forEach(t => t.stop());
-    streamRef.current = null;
-    if (videoRef.current) videoRef.current.srcObject = null;
-  }, []);
-
-  const handleResult = useCallback((raw: string) => {
-    const code = raw.trim();
-    if (!code) return;
-    const now = Date.now();
-    // Debounce identical reads (avoids duplicate submissions from rapid frames)
-    if (lastValueRef.current.code === code && now - lastValueRef.current.at < 1500) return;
-    lastValueRef.current = { code, at: now };
-
-    setLastCode(code);
-    try { navigator.vibrate?.(60); } catch { /* ignore */ }
-    onScan(code);
-
-    if (!continuous) {
-      stopAll();
-      setOpen(false);
-    }
-  }, [continuous, onScan, stopAll]);
-
-  const start = useCallback(async () => {
-    setError(null);
-    setStarting(true);
-    stoppedRef.current = false;
+  const handleNativeScan = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: { ideal: 'environment' },
-          width: { ideal: 1920 },
-          height: { ideal: 1080 },
-        },
-        audio: false,
-      });
-      streamRef.current = stream;
-      const videoTrack = stream.getVideoTracks()[0];
-      if (videoTrack) {
-        const track = videoTrack as unknown as {
-          getCapabilities?: () => { focusMode?: string[]; zoom?: { min: number; max: number } };
-          applyConstraints: (constraints: { advanced?: Array<Record<string, unknown>> }) => Promise<void>;
-        };
-        try {
-          const capabilities = track.getCapabilities?.();
-          const advanced: Record<string, unknown> = {};
-          if (capabilities?.focusMode?.includes('continuous')) advanced.focusMode = 'continuous';
-          if (capabilities?.zoom && capabilities.zoom.max > capabilities.zoom.min) {
-            advanced.zoom = Math.min(capabilities.zoom.max, Math.max(capabilities.zoom.min, 1.5));
-          }
-          if (Object.keys(advanced).length > 0) await track.applyConstraints({ advanced: [advanced] });
-        } catch { /* autofocus and zoom are optional */ }
+      // Check native platform
+      if (!Capacitor.isNativePlatform()) {
+        setManualOpen(true);
+        return;
       }
-      const video = videoRef.current;
-      if (!video) return;
-      video.srcObject = stream;
-      video.setAttribute('playsinline', 'true');
-      await new Promise<void>((resolve) => {
-        if (video.readyState >= 1) resolve();
-        else video.addEventListener('loadedmetadata', () => resolve(), { once: true });
-      });
-      await video.play();
 
-      const Detector = (window as any).BarcodeDetector;
-      if (Detector) {
-        let supported: string[] = FORMATS;
-        try {
-          const avail: string[] = await Detector.getSupportedFormats();
-          supported = FORMATS.filter(f => avail.includes(f));
-        } catch { /* keep defaults */ }
-        const detector = new Detector(supported.length ? { formats: supported } : undefined);
+      // Request camera permissions
+      const permission = await BarcodeScanner.requestPermissions();
+      if (permission.camera !== 'granted') {
+        toast.error('Permission caméra refusée');
+        return;
+      }
 
-        const loop = async () => {
-          if (stoppedRef.current) return;
-          try {
-            if (video.readyState >= 2) {
-              const codes = await detector.detect(video);
-              if (codes && codes.length > 0 && codes[0].rawValue) {
-                handleResult(String(codes[0].rawValue));
-              }
+      // Hide webview elements so camera preview is visible behind
+      document.querySelector('body')?.classList.add('barcode-scanner-active');
+
+      const listener = await BarcodeScanner.addListener(
+        'barcodesScanned',
+        async (result) => {
+          const barcode = result.barcodes?.[0]?.displayValue || result.barcodes?.[0]?.rawValue;
+          if (barcode) {
+            const trimmed = barcode.trim();
+            if (trimmed) {
+              try { navigator.vibrate?.(60); } catch { /* ignore */ }
+              onScan(trimmed);
+              toast.success(`Code scanné : ${trimmed}`);
             }
-          } catch { /* transient frame errors are ignored */ }
-          if (!stoppedRef.current) rafRef.current = requestAnimationFrame(() => { void loop(); });
-        };
-        void loop();
-      } else {
-        // ZXing fallback
-        const [{ BrowserMultiFormatReader }, { DecodeHintType, BarcodeFormat }] = await Promise.all([
-          import('@zxing/browser'),
-          import('@zxing/library'),
-        ]);
-        const hints = new Map();
-        hints.set(DecodeHintType.POSSIBLE_FORMATS, [
-          BarcodeFormat.CODE_128, BarcodeFormat.CODE_39, BarcodeFormat.CODE_93, BarcodeFormat.EAN_13,
-          BarcodeFormat.EAN_8, BarcodeFormat.UPC_A, BarcodeFormat.UPC_E,
-          BarcodeFormat.ITF, BarcodeFormat.CODABAR, BarcodeFormat.RSS_14,
-          BarcodeFormat.RSS_EXPANDED, BarcodeFormat.QR_CODE,
-          BarcodeFormat.DATA_MATRIX, BarcodeFormat.PDF_417,
-        ]);
-        hints.set(DecodeHintType.TRY_HARDER, true);
-        const reader = new BrowserMultiFormatReader(hints, {
-          delayBetweenScanAttempts: 120,
-          delayBetweenScanSuccess: 500,
-        });
-        const controls = await reader.decodeFromVideoElement(video, (result) => {
-          if (result) handleResult(result.getText());
-        });
-        zxingControlsRef.current = controls as any;
-      }
-    } catch (e: any) {
-      const msg = e?.name === 'NotAllowedError'
-        ? "Accès à la caméra refusé. Autorisez la caméra puis réessayez."
-        : e?.name === 'NotFoundError'
-          ? "Aucune caméra détectée sur cet appareil."
-          : "Impossible de démarrer la caméra.";
-      setError(msg);
-    } finally {
-      setStarting(false);
-    }
-  }, [handleResult]);
 
-  useEffect(() => {
-    if (open) {
-      setLastCode(null);
-      lastValueRef.current = { code: '', at: 0 };
-      void start();
-    } else {
-      stopAll();
+            if (!continuous) {
+              await listener.remove();
+              document.querySelector('body')?.classList.remove('barcode-scanner-active');
+              await BarcodeScanner.stopScan();
+            }
+          }
+        }
+      );
+
+      await BarcodeScanner.startScan({
+        formats: [
+          BarcodeFormat.Code128,
+          BarcodeFormat.Code39,
+          BarcodeFormat.Code93,
+          BarcodeFormat.Ean13,
+          BarcodeFormat.Ean8,
+          BarcodeFormat.UpcA,
+          BarcodeFormat.UpcE,
+          BarcodeFormat.Itf,
+          BarcodeFormat.Codabar,
+          BarcodeFormat.QrCode,
+          BarcodeFormat.DataMatrix,
+          BarcodeFormat.Pdf417,
+        ],
+      });
+    } catch (error: any) {
+      document.querySelector('body')?.classList.remove('barcode-scanner-active');
+      await BarcodeScanner.stopScan().catch(() => {});
+      toast.error(error?.message || "Erreur lors du scan caméra");
     }
-    return () => { stopAll(); };
-  }, [open, start, stopAll]);
+  };
+
+  const handleManualSubmit = (e?: React.FormEvent) => {
+    e?.preventDefault();
+    const code = manualCode.trim();
+    if (!code) return;
+    onScan(code);
+    setManualCode('');
+    setManualOpen(false);
+  };
 
   return (
     <>
@@ -189,58 +112,42 @@ export function BarcodeScanButton({
         variant="outline"
         size={size}
         className={cn(size === 'icon' && 'shrink-0', className)}
-        onClick={() => setOpen(true)}
-        title="Scanner avec la caméra"
+        onClick={() => void handleNativeScan()}
+        title="Scanner le code-barres"
       >
         <ScanLine className={cn('w-4 h-4', label && 'mr-1.5')} />
         {label}
       </Button>
 
-      <Dialog open={open} onOpenChange={(o) => { if (!o) { stopAll(); } setOpen(o); }}>
-        <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
+      {/* Fallback dialog for desktop/web */}
+      <Dialog open={manualOpen} onOpenChange={setManualOpen}>
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <ScanLine className="w-5 h-5 text-primary" />
-              Scanner un code-barres
+              <Keyboard className="w-5 h-5 text-primary" />
+              Saisie du code-barres
             </DialogTitle>
             <DialogDescription>
-              Placez le code-barres dans le cadre. La lecture est automatique.
+              Le scan par caméra native est actif sur l'application mobile (terminal Sunmi). Sur PC, saisissez le code manuellement ou utilisez une douchette.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-3">
-            <div className="relative rounded-xl overflow-hidden bg-black aspect-[4/3]">
-              <video ref={videoRef} className="w-full h-full object-cover" muted playsInline />
-              {/* Aiming frame */}
-              <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-                <div className="w-[80%] h-[40%] border-2 border-primary/80 rounded-lg shadow-[0_0_0_9999px_rgba(0,0,0,0.35)]" />
-              </div>
-              {starting && (
-                <div className="absolute inset-0 flex items-center justify-center bg-black/60">
-                  <Loader2 className="w-8 h-8 animate-spin text-white" />
-                </div>
-              )}
-              {error && (
-                <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/80 text-white p-4 text-center">
-                  <CameraOff className="w-8 h-8" />
-                  <p className="text-sm">{error}</p>
-                  <Button size="sm" variant="secondary" onClick={() => void start()}>
-                    <RefreshCw className="w-4 h-4 mr-1.5" /> Réessayer
-                  </Button>
-                </div>
-              )}
+          <form onSubmit={handleManualSubmit} className="space-y-4 pt-2">
+            <Input
+              autoFocus
+              placeholder="Ex: 3400930000000"
+              value={manualCode}
+              onChange={(e) => setManualCode(e.target.value)}
+            />
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setManualOpen(false)}>
+                Annuler
+              </Button>
+              <Button type="submit" disabled={!manualCode.trim()}>
+                Valider
+              </Button>
             </div>
-
-            {continuous && lastCode && (
-              <p className="text-xs text-center text-muted-foreground">
-                Dernier code : <span className="font-mono text-foreground">{lastCode}</span>
-              </p>
-            )}
-
-            <Button variant="outline" className="w-full" onClick={() => { stopAll(); setOpen(false); }}>
-              {continuous ? 'Terminer' : 'Annuler'}
-            </Button>
-          </div>
+          </form>
         </DialogContent>
       </Dialog>
     </>
