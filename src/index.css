@@ -240,13 +240,32 @@
   }
 }
 
-/* Barcode scanner - hide WebView content so camera is visible */
+/* ── Scanner de codes-barres (plugin natif ML Kit) ──────────────────────────
+   Le plugin insère la prévisualisation caméra DERRIÈRE la WebView et rend le
+   fond de celle-ci transparent (BarcodeScanner.java). On masque donc toute
+   l'interface SAUF la superposition de scan : la caméra reste visible autour
+   du cadre de visée, comme un viseur et non comme un plein écran brut.
+   ────────────────────────────────────────────────────────────────────────── */
 body.barcode-scanner-active {
   visibility: hidden;
   background: transparent;
 }
 
-body.barcode-scanner-active * {
-  visibility: hidden;
+body.barcode-scanner-active .scanner-overlay,
+body.barcode-scanner-active .scanner-overlay * {
+  visibility: visible;
+}
+
+/* Tient compte des encoches / barres système des terminaux (Sunmi, Zebra) */
+.scanner-overlay {
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+}
+
+/* Assombrit tout l'écran sauf l'intérieur du cadre de visée */
+.scanner-mask-frame {
+  box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.72);
 }
 
